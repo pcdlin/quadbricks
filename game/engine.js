@@ -896,12 +896,19 @@ class Engine {
         return Math.min(1.3, 0.4 + 0.6 * this.options.effectScale);
     }
 
+    // Light colour of colour index `index` in the block style, for drop trails and flashes
+    tileLight(index) {
+        const set = TILESETS[this.options.tileset];
+        return set.trail ? set.trail(index) : PIECE_COLORS[index].light;
+    }
+
     // A drop trail streak in a column, from y0 down to y1 (the blocks), fading in towards them;
     // drawn only down to yEnd while it grows, at `alpha` while it fades
-    drawTrail(col, y0, y1, color, yEnd = y1, alpha = 1) {
+    drawTrail(col, y0, y1, index, yEnd = y1, alpha = 1) {
         const r = this.r;
+        const color = parseColor(this.tileLight(index));
         r.globalAlpha = DROP_TRAIL_ALPHA * this.softEffectScale() * alpha;
-        r.shape(this.cellX(col), y0, CELL, yEnd - y0, { fill: [color + "00", color], fillY: [y0, y1] });
+        r.shape(this.cellX(col), y0, CELL, yEnd - y0, { fill: [[color[0], color[1], color[2], 0], color], fillY: [y0, y1] });
         r.globalAlpha = 1;
     }
 
@@ -918,7 +925,7 @@ class Engine {
                 r.globalAlpha = t;
                 this.drawBlock(cell.type, x, y, CELL, "active");
                 r.globalAlpha = 0.4 * t * t;
-                r.shape(x + 1, y + 1, CELL - 2, CELL - 2, { radius: CELL * 0.14, fill: PIECE_COLORS[cell.type].light });
+                r.shape(x + 1, y + 1, CELL - 2, CELL - 2, { radius: CELL * 0.14, fill: this.tileLight(cell.type) });
                 r.globalAlpha = 1;
             }
         }
@@ -939,7 +946,7 @@ class Engine {
             const top = Math.max(cell.row - cell.dist, this.wellTop);
             if (cell.dist <= 0 || cell.row <= top) continue;
             const y1 = this.cellY(cell.row), y0 = this.cellY(top);
-            this.drawTrail(cell.col, y0, y1, PIECE_COLORS[cell.type].light, y0 + (y1 - y0) * grown, alpha);
+            this.drawTrail(cell.col, y0, y1, cell.type, y0 + (y1 - y0) * grown, alpha);
         }
     }
 
@@ -962,7 +969,7 @@ class Engine {
                 const cell = game.getCell(i, j);
                 if (!cell || game.getCellAlpha(i, j) <= 0) continue;
                 if (i > firstRow && game.getCell(i - 1, j) && game.getDropDistance(i - 1) === dist) continue; // not the run's top
-                this.drawTrail(j, y0, y1, PIECE_COLORS[game.palette[cell]].light, y1, alpha);
+                this.drawTrail(j, y0, y1, game.palette[cell], y1, alpha);
             }
         }
     }

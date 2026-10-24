@@ -388,7 +388,9 @@ add new globals there.
 - Lock-delay fade on the falling piece; hard-drop flash in the piece's own colour, not white.
 - Options → Visuals → Drop trail (`options.trail`, on by default; shown only with effects on): a
   streak per column behind a hard-dropped piece, down to that column's top block, and behind the
-  stack falling during a line clear delay.
+  stack falling during a line clear delay. Trails and the hard-drop flash take the piece's light
+  colour, or the block style's `trail(index)` for styles that don't colour blocks by piece (Mono,
+  Holo, 1989; `Engine.tileLight()`).
 - Options → Visuals → Stack border (`options.border`, off by default): a TGM-style light line
   (`STACK_BORDER_*`, `drawStackBorder()`) along every side of the settled stack that faces an empty
   cell, drawn on the block's own edge (never outside the stack, continuous round inner corners);

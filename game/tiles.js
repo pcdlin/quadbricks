@@ -1,7 +1,9 @@
 // Block styles. Each draws one block into a sprite canvas that is already scaled and
 // offset by pad(style): draw(g, col, size, style, index), where col is the colour entry
 // ({base, light, dark}), index the palette index (1..7) and style "active" (falling
-// piece), "locked" (settled stack) or "ghost" (landing preview).
+// piece), "locked" (settled stack) or "ghost" (landing preview). Styles that don't colour
+// blocks by col give trail(index), the CSS colour of their drop trail and hard-drop flash
+// (else col.light).
 
 // Original tile images from the C++ game (gfx/), by palette index
 const TILE_IMAGE_NAMES = [null, "cyan", "purple", "orange", "blue", "green", "red", "yellow"];
@@ -26,6 +28,7 @@ function loadTileImages() {
 
 // Game Boy screen shades, darkest to lightest
 const GB_SHADES = ["#0f380f", "#306230", "#8bac0f", "#c8dc9a"]; // lightest lifted for contrast
+const MONO_INK = "244,236,220"; // Mono's warm gallery white
 
 const TILESETS = {
     // Translucent, luminous glass cells that bloom into the backdrop (Tetris Effect look)
@@ -328,8 +331,9 @@ const TILESETS = {
     mono: {
         name: "Mono",
         pad: (style) => style === "active" ? 10 : 0,
+        trail: () => `rgb(${MONO_INK})`,
         draw(g, col, size, style) {
-            const ink = "244,236,220";
+            const ink = MONO_INK;
             const inset = 1.5, w = size - inset * 2, r = size * 0.1;
             const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
             if (style === "ghost") {
@@ -372,6 +376,7 @@ const TILESETS = {
         name: "Holo",
         sheen: true,
         pad: (style) => style === "active" ? 10 : 0,
+        trail: (index) => `hsl(220,6%,${58 + index * 3}%)`, // the settled block's grey
         draw(g, col, size, style, index) {
             const inset = 1.5, w = size - inset * 2, r = size * 0.1;
             const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
@@ -421,6 +426,8 @@ const TILESETS = {
     gameboy: {
         name: "1989",
         pad: () => 0,
+        // the block's main shade; dark-bodied blocks take the light one, so the trail shows
+        trail: (index) => GB_SHADES[index === 4 || index === 7 ? 3 : 2],
         draw(g, col, size, style, index) {
             const [darkest, dark, light, lightest] = GB_SHADES;
             const p = size / 8;
