@@ -386,6 +386,9 @@ add new globals there.
 - Piece colours stay the sampled originals (Classic uses Sega colours by design).
 - Line clears: no artificial delay outside TGM3; confetti (moderately prominent) plus a row flash.
 - Lock-delay fade on the falling piece; hard-drop flash in the piece's own colour, not white.
+- Options → Visuals → Drop trail (`options.trail`, on by default; shown only with effects on): a
+  streak per column behind a hard-dropped piece, down to that column's top block, and behind the
+  stack falling during a line clear delay.
 - Options → Visuals → Stack border (`options.border`, off by default): a TGM-style light line
   (`STACK_BORDER_*`, `drawStackBorder()`) along every side of the settled stack that faces an empty
   cell, drawn on the block's own edge (never outside the stack, continuous round inner corners);
@@ -406,7 +409,7 @@ add new globals there.
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound}, tileset, effects, backdrop, rings, tilt, shake, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound}, tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - Every access is wrapped in try/catch; the game must work with storage unavailable.
 

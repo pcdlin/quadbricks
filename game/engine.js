@@ -72,6 +72,7 @@ const VISUAL_ITEMS = [
     { id: "rings", name: "Clear rings", accent: tetZ },
     { id: "tilt", name: "3D tilt", accent: tetI },
     { id: "shake", name: "Drop shake", accent: tetS },
+    { id: "trail", name: "Drop trail", accent: tetT },
     { id: "border", name: "Stack border", accent: tetZ },
 ];
 // Guideline handling; help: the name spelled out and what it does, shown under the list for the selection
@@ -196,8 +197,8 @@ const FLASH_LIFE = 16; // frames a cleared row glows
 const STACK_BORDER_W = 3; // TGM-style stack border: width of the line, drawn on the blocks' edges
 const STACK_BORDER_COLOR = "rgba(222,222,232,0.9)";
 const DROP_TRAIL_GROW = 4; // frames the hard-drop trail takes to reach down to the piece
-const DROP_TRAIL_FADE = 10; // frames a drop trail then takes to fade out, all at once
-const DROP_TRAIL_ALPHA = 0.35; // peak opacity of the trail
+const DROP_TRAIL_FADE = 8; // frames a drop trail then takes to fade out, all at once
+const DROP_TRAIL_ALPHA = 0.38; // peak opacity of the trail
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 const TILT_MAX = [2.8, 4.8]; // playing field tilt in degrees about the x and y axes, at Normal
 const TILT_SPEED = 0.75; // pace of the tilt drift (1 = waves of 0.15-0.7 rad/s)
@@ -900,7 +901,7 @@ class Engine {
     drawTrail(col, y0, y1, color, yEnd = y1, alpha = 1) {
         const r = this.r;
         r.globalAlpha = DROP_TRAIL_ALPHA * this.softEffectScale() * alpha;
-        r.shape(this.cellX(col) + CELL * 0.2, y0, CELL * 0.6, yEnd - y0, { fill: [color + "00", color], fillY: [y0, y1] });
+        r.shape(this.cellX(col), y0, CELL, yEnd - y0, { fill: [color + "00", color], fillY: [y0, y1] });
         r.globalAlpha = 1;
     }
 
@@ -909,7 +910,7 @@ class Engine {
     drawDropFlashes() {
         const r = this.r;
         for (const f of this.dropFlashes) {
-            this.drawDropTrail(f);
+            if (this.options.trail) this.drawDropTrail(f);
             const t = Math.max(0, f.life / DROP_FLASH_LIFE);
             for (const cell of f.cells) {
                 if (cell.row < this.wellTop || cell.cleared) continue; // hidden rows; cleared: nothing left to light up
@@ -1636,7 +1637,7 @@ class Engine {
         }
 
         // Draw Field
-        if (this.options.effects) this.drawLineDropTrails(firstRow);
+        if (this.options.effects && this.options.trail) this.drawLineDropTrails(firstRow);
         for (let i = firstRow; i < HEIGHT; i++) {
             const y = this.cellY(i + game.getDropOffset(i)); // rows fall into place during a line clear
             for (let j = 0; j < WIDTH; j++) {
