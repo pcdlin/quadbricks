@@ -1,6 +1,6 @@
 // Shared definitions for the rule sets (rules.js) and the engine, taken from
 // the original C++ game: field size, piece ids, input bitmap and
-// the SRS piece shapes.
+// the SRS piece shapes; plus a few small helpers both use.
 
 // ----------------------------------------------------------
 // GLOBALS

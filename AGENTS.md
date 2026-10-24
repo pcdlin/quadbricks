@@ -30,7 +30,7 @@ when WebGL is unavailable).
 
 | Path | What it is |
 |---|---|
-| `game/game.js` | Shared definitions only: field size (`WIDTH` 10, `HEIGHT` 22, first visible row `VISIBLE_TOP` 2), piece ids (`tetI`=1 … `tetO`=7), input bitmap bits, SRS `shapes`. |
+| `game/game.js` | Shared definitions only: field size (`WIDTH` 10, `HEIGHT` 22, first visible row `VISIBLE_TOP` 2), piece ids (`tetI`=1 … `tetO`=7), input bitmap bits, SRS `shapes`; `shapeCells()` (a shape table's blocks as offsets) and `clamp()`. |
 | `game/rules.js` | `RuleGame`: the rule sets (Guideline, TGM3 World/Classic, TAP, GB) and their variants. All game logic lives here. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
@@ -80,8 +80,10 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
 - Visuals and Guideline handling are setting screens (`SETTING_ITEMS`: `VISUAL_ITEMS`, `HANDLING_ITEMS`),
-  changed with ← → (Enter steps forward). Add a setting to one of those lists, a case in
-  `changeOption()` and one in `optionValue()` (the card's value text).
+  changed with ← → (Enter steps forward). Add a setting to one of those lists, its default in the
+  `Options` constructor and its values in `OPTION_CHOICES` or its id in `OPTION_TOGGLES`
+  (`options.js`: loading, saving and `Options.step()` follow from those), and, unless it is on/off, a
+  case in `optionValue()` (the card's value text). `changeOption()` needs a case only for side effects.
 - Guideline handling (`HANDLING_ITEMS`, applies to the Guideline modes only): DAS 1–20 F, ARR 0–5 F
   (0 shown as Instant), SDF 5×/10×/20×/40×/Instant (`SDF_STEPS`), DCD 0–20 F (0 = Off), ghost piece,
   hard drop guard, then a "Reset to defaults" card (`action: true`: Enter resets via
@@ -114,7 +116,8 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   `getDropDistance(row)`/`getDropOffset(row)`/`getDropLandedFor(row)` (during a line clear delay the
   stack falls into the cleared rows at `LINE_DROP_SPEED` rows per frame, faster if the delay is shorter,
   with a trail, `drawLineDropTrails()`; the field itself collapses when the delay ends).
-- `shapes` and `palette` (piece type → colour index) per rule set; `nextCount` (TAP and GB: 1, so the
+- `shapes`, `pieceCells` (`shapeCells(shapes)`: `[type][rotation]` → `[row, col]` offsets, what the
+  rules and the engine iterate) and `palette` (piece type → colour index) per rule set; `nextCount` (TAP and GB: 1, so the
   engine draws no list under the first next piece); `hasHold` (no HOLD box when false);
   `firstDrawnRow` (0: the two rows above the well are drawn; GB: 4); `wellTop` (first row of the
   well: `VISIBLE_TOP`, GB 4 for its 18 rows), which sizes the board (`Engine.layoutBoard()`).
