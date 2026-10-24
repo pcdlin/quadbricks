@@ -49,6 +49,9 @@ const COUNTDOWN_STEPS = 3, COUNTDOWN_STEP_FRAMES = 30;
 // Rows per frame the stack falls into cleared rows during a line clear delay (presentation)
 const LINE_DROP_SPEED = 0.5;
 
+// Clear messages by number of lines
+const CLEAR_NAMES = ["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"];
+
 // ----------------------------------------------------------
 // SRS kick data: tests 2-5 per transition, (x right, y up)
 
@@ -76,13 +79,18 @@ const KICKS_I_ARIKA = {
     "L->0": [[-2, 0], [+1, 0], [-2, +1], [+1, -2]], "0->L": [[+2, 0], [-1, 0], [-1, +2], [+2, -1]],
 };
 
+// Shape tables written as strings ("." empty), per piece type I..O and rotation state; type 0
+// is the empty dummy of game.js
+function parseShapes(pieces) {
+    return [shapes[0], ...pieces.map(states => states.map(rows => rows.map(r => [...r].map(ch => ch === "." ? 0 : 1))))];
+}
+
 // ----------------------------------------------------------
 // Arika Rotation System (Classic rule)
 
 // Piece shapes per rotation state (spawn, CW, 180, CCW). All but I sit at the bottom of
 // their 3x3 box; L, J and T spawn with the flat side up; I, S and Z toggle between two states.
-const ARS_SHAPES = [
-    shapes[0],
+const ARS_SHAPES = parseShapes([
     [["....", "IIII", "....", "...."], ["..I.", "..I.", "..I.", "..I."], ["....", "IIII", "....", "...."], ["..I.", "..I.", "..I.", "..I."]],
     [["....", "TTT.", ".T..", "...."], [".T..", "TT..", ".T..", "...."], ["....", ".T..", "TTT.", "...."], [".T..", ".TT.", ".T..", "...."]],
     [["....", "LLL.", "L...", "...."], ["LL..", ".L..", ".L..", "...."], ["....", "..L.", "LLL.", "...."], [".L..", ".L..", ".LL.", "...."]],
@@ -90,7 +98,7 @@ const ARS_SHAPES = [
     [["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."], ["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."]],
     [["....", "ZZ..", ".ZZ.", "...."], ["..Z.", ".ZZ.", ".Z..", "...."], ["....", "ZZ..", ".ZZ.", "...."], ["..Z.", ".ZZ.", ".Z..", "...."]],
     [["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."]],
-].map((states, t) => t === 0 ? states : states.map(rows => rows.map(r => [...r].map(ch => ch === "." ? 0 : 1))));
+]);
 
 const ARS_SPAWN_ROW = 1; // pieces appear in rows 19-20
 const ARS_I_FLOOR_KICKS = 1, ARS_T_FLOOR_KICKS = 2; // TGM3 limits per piece
@@ -232,10 +240,8 @@ const TAP_DEATH_DELAYS = [
     [500, 6, 6, 8, 15, 4],
 ];
 // Grade point combo multipliers by combo (1..10) for 1, 2 and 3 lines; Tetrises are always x1
-const TAP_GRADE_COMBO = [
-    [1, 1, 1], [1.2, 1.4, 1.5], [1.2, 1.5, 1.8], [1.4, 1.6, 2.0], [1.4, 1.7, 2.2],
-    [1.4, 1.8, 2.3], [1.4, 1.9, 2.4], [1.5, 2.0, 2.5], [1.5, 2.1, 2.6], [2.0, 2.5, 3.0],
-];
+// (TGM3's multipliers, which it applies to 2, 3 and 4 lines)
+const TAP_GRADE_COMBO = TGM_GRADE_COMBO;
 const TAP_MAX_GRADE = 17; // S9: the highest grade from grade points
 // Staff roll: fading in Master (blocks gone 4 s after locking), the invisible M-roll for players
 // who qualified, blocks staying visible in Death
@@ -258,8 +264,7 @@ const TAP_DEATH_M_LEVEL = 500, TAP_DEATH_M_FRAMES = 205 * 60;
 // Left-handed Nintendo Rotation System, as drawn on tetris.wiki: T, L and J spawn flat side up and
 // turn about the centre of their 3x3 box; S and Z have two states with the vertical one on the left;
 // the I lies in the third row and stands in the second column. No kicks.
-const GB_SHAPES = [
-    shapes[0],
+const GB_SHAPES = parseShapes([
     [["....", "....", "IIII", "...."], [".I..", ".I..", ".I..", ".I.."], ["....", "....", "IIII", "...."], [".I..", ".I..", ".I..", ".I.."]],
     [["....", "TTT.", ".T..", "...."], [".T..", "TT..", ".T..", "...."], [".T..", "TTT.", "....", "...."], [".T..", ".TT.", ".T..", "...."]],
     [["....", "LLL.", "L...", "...."], ["LL..", ".L..", ".L..", "...."], ["..L.", "LLL.", "....", "...."], [".L..", ".L..", ".LL.", "...."]],
@@ -267,7 +272,7 @@ const GB_SHAPES = [
     [["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."], ["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."]],
     [["....", "ZZ..", ".ZZ.", "...."], [".Z..", "ZZ..", "Z...", "...."], ["....", "ZZ..", ".ZZ.", "...."], [".Z..", "ZZ..", "Z...", "...."]],
     [["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."]],
-].map((states, t) => t === 0 ? states : states.map(rows => rows.map(r => [...r].map(ch => ch === "." ? 0 : 1))));
+]);
 
 const GB_WELL_TOP = HEIGHT - 18; // the Game Boy's well is 18 rows high: rows 4-21, nothing above
 const GB_SPAWN_ROW = GB_WELL_TOP; // the box at the top: the highest block in the second row
@@ -296,13 +301,12 @@ function tableLookup(table, level) {
 // a short history of recent pieces, and a piece that is in it is rolled again, a limited number
 // of times. Both draw from the arcade's linear congruential generator.
 
-const TI_PIECES = [tetI, tetZ, tetS, tetJ, tetL, tetO, tetT]; // arcade order: I Z S J L O T
-const TGM_Z = 1, TGM_S = 2, TGM_O = 5; // indices into TI_PIECES
-
-// The arcade generator (the ANSI C rand() recurrence): 15 bits per call
-class TgmRandomizer {
-    constructor(seed) {
+// The arcade generator (the ANSI C rand() recurrence): 15 bits per call. Subclasses deal indices
+// into their pieces table (nextIndex()); next() turns them into piece types.
+class LcgRandomizer {
+    constructor(seed, pieces) {
         this.seed = seed >>> 0;
+        this.pieces = pieces;
     }
 
     rand(n) {
@@ -310,15 +314,24 @@ class TgmRandomizer {
         return ((this.seed >>> 10) & 0x7fff) % n;
     }
 
+    next() {
+        return this.pieces[this.nextIndex()];
+    }
+}
+
+const TI_PIECES = [tetI, tetZ, tetS, tetJ, tetL, tetO, tetT]; // arcade order: I Z S J L O T
+const TGM_Z = 1, TGM_S = 2, TGM_O = 5; // indices into TI_PIECES
+
+class TgmRandomizer extends LcgRandomizer {
+    constructor(seed) {
+        super(seed, TI_PIECES);
+    }
+
     // The first piece of a game is never S, Z or O (it would force an overhang)
     rollFirst() {
         let piece;
         do piece = this.rand(7); while (piece === TGM_S || piece === TGM_Z || piece === TGM_O);
         return piece;
-    }
-
-    next() {
-        return TI_PIECES[this.nextIndex()];
     }
 }
 
@@ -420,30 +433,21 @@ class TapRandomizer extends TgmRandomizer {
 const GB_PIECES = [tetL, tetJ, tetI, tetO, tetZ, tetS, tetT];
 const GB_ROLLS = 3;
 
-class GbRandomizer {
+class GbRandomizer extends LcgRandomizer {
     constructor(seed) {
-        this.seed = seed >>> 0;
+        super(seed, GB_PIECES);
         this.history = []; // the previous piece, then the one before it (indices into GB_PIECES)
-    }
-
-    rand() {
-        this.seed = (Math.imul(this.seed, 1103515245) + 12345) >>> 0;
-        return (this.seed >>> 10) & 0x7fff;
     }
 
     nextIndex() {
         const [prev, before] = this.history;
         let piece;
         for (let roll = 0; roll < GB_ROLLS; roll++) {
-            piece = this.rand() % 7;
+            piece = this.rand(7);
             if (this.history.length < 2 || (piece | prev | before) !== prev) break;
         }
         this.history = [piece, prev];
         return piece;
-    }
-
-    next() {
-        return GB_PIECES[this.nextIndex()];
     }
 }
 
@@ -464,6 +468,7 @@ class RuleGame {
         this.hasHold = !this.tap && !this.gb;
         this.handling = { ...GUIDELINE_HANDLING, ...(this.tgm || this.gb ? {} : handling) };
         this.shapes = this.ars ? ARS_SHAPES : this.gb ? GB_SHAPES : shapes;
+        this.pieceCells = shapeCells(this.shapes); // [type][rotation] -> [row, col] offsets
         this.palette = this.ars ? ARS_PALETTE : DEFAULT_PALETTE;
         // First row of the well (the engine sizes the board to it), and the first row the engine
         // draws: the two rows above the well too, except for GB, whose pieces never leave the well
@@ -474,9 +479,9 @@ class RuleGame {
         this.field = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) this.field.push(new Array(WIDTH).fill(0));
 
-        this.startLevel = this.gb ? Math.max(0, Math.min(GB_START_LEVELS - 1, startLevel)) : 0;
+        this.startLevel = this.gb ? clamp(startLevel, 0, GB_START_LEVELS - 1) : 0;
         this.level = this.gb ? this.startLevel : this.tgm ? 0 : 1;
-        this.height = this.gb && variant === "btype" ? Math.max(0, Math.min(GB_B_HEIGHTS - 1, height)) : 0;
+        this.height = this.gb && variant === "btype" ? clamp(height, 0, GB_B_HEIGHTS - 1) : 0;
         this.lines = 0;
         this.score = 0;
         this.frames = 0;
@@ -500,6 +505,7 @@ class RuleGame {
         this.rollPoints = 0; // roll grade points, hundredths of a grade
         this.rollCleared = false; // survived the whole roll
         this.rollLength = this.tap ? TAP_ROLL_FRAMES : TGM_ROLL_FRAMES;
+        this.rollHide = this.tap ? TAP_ROLL_HIDE : TGM_ROLL_HIDE; // frames until locked blocks hide, by roll
         this.lockTime = null; // per cell, rollFrames when it locked (during the roll)
         // TAP
         this.sectionTimes = []; // frames each finished section took
@@ -604,9 +610,9 @@ class RuleGame {
     getCellAlpha(row, col) {
         if (!this.roll || this.gameover || row < FIELD_TOP || row >= HEIGHT) return 1;
         const age = this.rollFrames - this.lockTime[row - FIELD_TOP][col];
-        const hide = (this.tap ? TAP_ROLL_HIDE : TGM_ROLL_HIDE)[this.roll];
+        const hide = this.rollHide[this.roll];
         if (this.roll === "invisible") return age < hide ? 1 : 0;
-        return Math.max(0, Math.min(1, (hide - age) / TGM_ROLL_FADE_FRAMES));
+        return clamp((hide - age) / TGM_ROLL_FADE_FRAMES, 0, 1);
     }
 
     setCell(row, col, val) {
@@ -643,33 +649,24 @@ class RuleGame {
         return since >= 0 ? since : -1;
     }
 
-    takeClearedCells() {
-        const cells = this.clearedCells;
-        this.clearedCells = [];
-        return cells;
+    // Event queues the engine drains every frame
+    takeClearedCells() { return this.drain("clearedCells"); }
+    takeHardDropCells() { return this.drain("hardDropCells"); }
+    takeBumps() { return this.drain("bumps"); } // directions (-1 left, 1 right) pushed against the border
+    takeSounds() { return this.drain("sounds"); }
+
+    drain(queue) {
+        const events = this[queue];
+        this[queue] = [];
+        return events;
     }
 
-    takeHardDropCells() {
-        const cells = this.hardDropCells;
-        this.hardDropCells = [];
-        return cells;
-    }
-
-    // Directions (-1 left, 1 right) in which the piece was pushed against the border
-    takeBumps() {
-        const bumps = this.bumps;
-        this.bumps = [];
-        return bumps;
-    }
-
-    takeSounds() {
-        const sounds = this.sounds;
-        this.sounds = [];
-        return sounds;
+    scoreText() {
+        return this.score.toLocaleString("en-US");
     }
 
     getStats() {
-        const score = this.score.toLocaleString("en-US");
+        const score = this.scoreText();
         // Rule set and mode; TGM3's standard mode is named after its rule (World or Classic),
         // Guideline's standard mode is endless
         const rule = this.ars ? "CLASSIC" : "WORLD";
@@ -796,17 +793,20 @@ class RuleGame {
         }
     }
 
+    // A block can't go to (r, c): outside the well, above the highest row for pieces, or taken
+    blocked(r, c) {
+        return c < 0 || c >= WIDTH || r >= HEIGHT || r < this.pieceTop || this.field[r - FIELD_TOP][c] !== 0;
+    }
+
     movePossible(row, col, rotation, type = this.curPiece_type) {
-        const shape = this.shapes[type][rotation];
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-                if (!shape[i][j]) continue;
-                const r = row + i, c = col + j;
-                if (c < 0 || c >= WIDTH || r >= HEIGHT || r < this.pieceTop) return false;
-                if (this.field[r - FIELD_TOP][c]) return false;
-            }
-        }
+        for (const [i, j] of this.pieceCells[type][rotation]) if (this.blocked(row + i, col + j)) return false;
         return true;
+    }
+
+    // The current piece's blocks on the field
+    curPieceCells() {
+        const { curPiece_type: type, curPiece_row: row, curPiece_col: col } = this;
+        return this.pieceCells[type][this.curPiece_rotation].map(([i, j]) => ({ row: row + i, col: col + j, type }));
     }
 
     canFall() {
@@ -897,7 +897,7 @@ class RuleGame {
             return;
         }
         if (this.variant === "ultra" && this.frames >= GUIDELINE_ULTRA_FRAMES) {
-            this.endGame("TIME UP", `SCORE ${this.score.toLocaleString("en-US")}`);
+            this.endGame("TIME UP", `SCORE ${this.scoreText()}`);
             return;
         }
 
@@ -1002,9 +1002,7 @@ class RuleGame {
     }
 
     startAre(length) {
-        this.phase = "are";
-        this.phaseCounter = 0;
-        this.phaseLength = length;
+        this.setPhase("are", length);
         if (length <= 0) this.spawn(this.nextFromQueue(), false);
     }
 
@@ -1174,16 +1172,9 @@ class RuleGame {
     arsWallKickAllowed(type, from, to) {
         if (type !== tetL && type !== tetJ && type !== tetT) return true;
         if (from !== 0 && from !== 2) return true;
-        const shape = this.shapes[type][to];
-        for (let i = 0; i < 3; i++) {
-            for (let j = 0; j < 3; j++) {
-                if (!shape[i][j]) continue;
-                const r = this.curPiece_row + i, c = this.curPiece_col + j;
-                const blocked = c < 0 || c >= WIDTH || r >= HEIGHT || r < FIELD_TOP || this.field[r - FIELD_TOP][c] !== 0;
-                if (blocked) return j !== 1;
-            }
-        }
-        return true;
+        // L, J and T fit their box's top three rows and columns; the cells come in reading order
+        const hit = this.pieceCells[type][to].find(([i, j]) => this.blocked(this.curPiece_row + i, this.curPiece_col + j));
+        return !hit || hit[1] !== 1;
     }
 
     rotate(dir) {
@@ -1241,15 +1232,7 @@ class RuleGame {
 
     // Would shifting by dir push a block through the left or right border?
     hitsWall(dir) {
-        const shape = this.shapes[this.curPiece_type][this.curPiece_rotation];
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-                if (!shape[i][j]) continue;
-                const c = this.curPiece_col + j + dir;
-                if (c < 0 || c >= WIDTH) return true;
-            }
-        }
-        return false;
+        return this.curPieceCells().some(({ col }) => col + dir < 0 || col + dir >= WIDTH);
     }
 
     applyGravity() {
@@ -1300,31 +1283,31 @@ class RuleGame {
         this.curPiece_lockDelay = this.canFall() ? 0 : this.gravityAcc; // lock fade
     }
 
-    // Classic: drop to the floor without locking; the lock delay then runs as usual
-    sonicDrop() {
+    // Moves the piece down as far as it goes and returns the rows it fell; eachRow: every row
+    // counts as a fall (onFall), for a piece that stays in play
+    dropToFloor(eachRow) {
         let distance = 0;
         while (this.canFall()) {
             this.curPiece_row++;
             distance++;
-            this.onFall();
+            if (eachRow) this.onFall();
         }
+        return distance;
+    }
+
+    // Classic: drop to the floor without locking; the lock delay then runs as usual
+    sonicDrop() {
+        const distance = this.dropToFloor(true);
         this.sonicMax = Math.max(this.sonicMax, distance);
-        if (distance > 0) this.sounds.push("sonic");
-        if (this.tap && this.variant !== "death" && distance > 0) { // TAP shows the drop trail for the sonic drop too (not Death)
-            const shape = this.shapes[this.curPiece_type][this.curPiece_rotation];
-            for (let i = 0; i < 4; i++)
-                for (let j = 0; j < 4; j++)
-                    if (shape[i][j])
-                        this.hardDropCells.push({ row: this.curPiece_row + i, col: this.curPiece_col + j, type: this.curPiece_type, dist: distance, cleared: false });
+        if (distance === 0) return;
+        this.sounds.push("sonic");
+        if (this.tap && this.variant !== "death") { // TAP shows the drop trail for the sonic drop too (not Death)
+            for (const cell of this.curPieceCells()) this.hardDropCells.push({ ...cell, dist: distance, cleared: false });
         }
     }
 
     hardDrop() {
-        let distance = 0;
-        while (this.canFall()) {
-            this.curPiece_row++;
-            distance++;
-        }
+        const distance = this.dropToFloor(false);
         if (distance > 0) this.lastRotation = false;
         this.hardDropDistance = distance;
         if (this.tgm) this.sonicMax = Math.max(this.sonicMax, distance);
@@ -1350,12 +1333,7 @@ class RuleGame {
         const tspin = !this.tgm && !this.gb && type === tetT && this.lastRotation ? this.detectTSpin() : null;
         this.sounds.push(fromHardDrop ? "harddrop" : "lock");
 
-        const cells = [];
-        const shape = this.shapes[type][this.curPiece_rotation];
-        for (let i = 0; i < 4; i++)
-            for (let j = 0; j < 4; j++)
-                if (shape[i][j]) cells.push({ row: this.curPiece_row + i, col: this.curPiece_col + j, type });
-
+        const cells = this.curPieceCells();
         let allAbove = true;
         for (const cell of cells) {
             if (cell.row >= VISIBLE_TOP) allAbove = false;
@@ -1410,11 +1388,16 @@ class RuleGame {
             this.collapse(rows);
             this.afterClear();
         } else {
-            this.phase = "lineclear";
-            this.phaseCounter = 0;
-            this.phaseLength = this.lineClearDelay;
+            this.setPhase("lineclear", this.lineClearDelay);
             this.pendingRows = rows;
         }
+    }
+
+    // Timed phases (are, lineclear, rollstart) count phaseCounter up to phaseLength
+    setPhase(phase, length) {
+        this.phase = phase;
+        this.phaseCounter = 0;
+        this.phaseLength = length;
     }
 
     // Remove emptied rows and let everything above fall (naive gravity)
@@ -1441,10 +1424,8 @@ class RuleGame {
 
     // Level 999: the field is emptied row by row from the bottom, then the roll begins
     startRollStart() {
-        this.phase = "rollstart";
-        this.phaseCounter = 0;
         // as in NullpoMino: a line clear delay, a row every few frames, two frames more
-        this.phaseLength = this.lineClearDelay + HEIGHT * TGM_ROLL_ROW_FRAMES + 2;
+        this.setPhase("rollstart", this.lineClearDelay + HEIGHT * TGM_ROLL_ROW_FRAMES + 2);
         if (this.tap) {
             this.nextRoll = this.variant === "death" ? "visible" : this.mrollEarned() ? "invisible" : "fading";
             return;
@@ -1570,36 +1551,18 @@ class RuleGame {
         }
     }
 
-    // Score = (ceil((level + lines) / 4) + soft + 2 x sonic) x lines x combo x bravo
-    //         + ceil(level after / 2) + speed x 7
+    // A clear of n lines (TAP, after scoreTgm). Score = (ceil((level + lines) / 4) + soft + 2 x sonic)
+    // x lines x combo x bravo + ceil(level after / 2) + speed x 7
     scoreTap(n) {
-        if (this.roll) { // the roll counts lines only (for the orange-line GM)
-            if (n > 0) {
-                this.lines += n;
-                this.rollLines += n;
-                this.addAction(["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"][n], "clear", n);
-                if (this.chain > 0) this.addAction(this.chain + " COMBO", "combo", this.chain);
-            }
-            return;
-        }
-        if (n === 0) {
-            this.combo = 1;
-            this.gradeCombo = 0;
-            return;
-        }
-        this.combo = this.combo + 2 * n - 2;
-        if (n >= 2) this.gradeCombo++;
         const death = this.variant === "death";
         const levelBefore = this.level;
         const levelAfter = Math.min(TGM_MAX_LEVEL, levelBefore + n); // one level per line
-        const speed = Math.max(0, this.lockDelayMax - Math.max(1, this.activeTime));
-        const soft = this.softFrames + (this.manualLock ? 1 : 0); // locking by hand adds 1
+        const { soft, speed } = this.tgmPieceBonus();
         const bravo = this.fieldEmpty() ? 4 : 1;
         this.score += (Math.ceil((levelBefore + n) / 4) + soft + 2 * this.sonicMax) * n * this.combo * bravo
             + Math.ceil(levelAfter / 2) + speed * 7;
         this.lines += n;
-        this.addAction(["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"][n], "clear", n);
-        if (this.chain > 0) this.addAction(this.chain + " COMBO", "combo", this.chain);
+        this.addClearActions(n);
         if (bravo > 1) this.addAction("BRAVO", "pc");
 
         if (n === 4) this.sectionTetrises++;
@@ -1640,12 +1603,12 @@ class RuleGame {
         if (n > 0) {
             this.score += GB_LINE_SCORES[n] * (this.level + 1);
             this.lines += n;
-            this.addAction(["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"][n], "clear", n);
+            this.addAction(CLEAR_NAMES[n], "clear", n);
         }
         this.score = Math.min(this.score, GB_MAX_SCORE);
         if (n === 0) return;
         if (this.variant === "btype") {
-            if (this.lines >= GB_B_LINES) this.endGame("COMPLETE", `${GB_B_LINES} LINES — SCORE ${this.score.toLocaleString("en-US")}`);
+            if (this.lines >= GB_B_LINES) this.endGame("COMPLETE", `${GB_B_LINES} LINES — SCORE ${this.scoreText()}`);
             return;
         }
         const level = Math.min(GB_MAX_LEVEL, Math.max(this.startLevel, Math.floor(this.lines / GB_LINES_PER_LEVEL)));
@@ -1657,20 +1620,19 @@ class RuleGame {
 
     scoreGuideline(n, tspin) {
         const L = this.level;
-        const names = ["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"];
         let base, difficult;
         if (tspin === "full") {
             base = [400, 800, 1200, 1600][n];
             difficult = n > 0;
-            this.addAction("T-SPIN" + (n ? " " + names[n] : ""), "tspin", n);
+            this.addAction("T-SPIN" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
         } else if (tspin === "mini") {
             base = [100, 200, 400][n];
             difficult = n > 0;
-            this.addAction("T-SPIN MINI" + (n ? " " + names[n] : ""), "tspin", n);
+            this.addAction("T-SPIN MINI" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
         } else {
             base = [0, 100, 300, 500, 800][n];
             difficult = n === 4;
-            if (n > 0) this.addAction(names[n], "clear", n);
+            if (n > 0) this.addAction(CLEAR_NAMES[n], "clear", n);
         }
 
         const b2bBefore = this.b2b;
@@ -1776,15 +1738,16 @@ class RuleGame {
         }
     }
 
+    // TGM3 and TAP: a piece locked, clearing n lines. In the staff roll clears only count lines and
+    // earn roll grade (TGM3) or count towards the orange line (TAP); otherwise the combos are kept
+    // here and the rule set scores the clear (scoreTi, scoreTap)
     scoreTgm(n) {
-        if (this.tap) return this.scoreTap(n);
-        if (this.roll) { // staff roll: clears earn roll grade points only
-            if (n > 0) {
-                this.lines += n;
-                this.rollPoints += TGM_ROLL_POINTS[this.roll][n];
-                this.addAction(["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"][n], "clear", n);
-                if (this.chain > 0) this.addAction(this.chain + " COMBO", "combo", this.chain);
-            }
+        if (this.roll) {
+            if (n === 0) return;
+            this.lines += n;
+            if (this.tap) this.rollLines += n;
+            else this.rollPoints += TGM_ROLL_POINTS[this.roll][n];
+            this.addClearActions(n);
             return;
         }
         if (n === 0) {
@@ -1794,16 +1757,36 @@ class RuleGame {
         }
         this.combo = this.combo + 2 * n - 2;
         if (n >= 2) this.gradeCombo++;
+        if (this.tap) this.scoreTap(n);
+        else this.scoreTi(n);
+    }
+
+    // The clear's name, then the chain length if it continues one (named by chain length: TGM's
+    // combo is a score multiplier, already above 1 for doubles)
+    addClearActions(n) {
+        this.addAction(CLEAR_NAMES[n], "clear", n);
+        if (this.chain > 0) this.addAction(this.chain + " COMBO", "combo", this.chain);
+    }
+
+    // Per-piece score terms: frames of soft drop (locking by hand adds 1) and the speed bonus,
+    // the lock delay left unused
+    tgmPieceBonus() {
+        return {
+            soft: this.softFrames + (this.manualLock ? 1 : 0),
+            speed: Math.max(0, this.lockDelayMax - Math.max(1, this.activeTime)),
+        };
+    }
+
+    // A clear of n lines (TGM3, after scoreTgm). Score = (ceil((level + lines) / 4) + soft + sonic)
+    // x lines x combo + ceil(level after / 2) + speed
+    scoreTi(n) {
         const levelBefore = this.level;
         const levelAfter = Math.min(TGM_MAX_LEVEL, levelBefore + TGM_LEVEL_FOR_LINES[n]);
-        const speed = Math.max(0, this.lockDelayMax - Math.max(1, this.activeTime));
-        const soft = this.softFrames + (this.manualLock ? 1 : 0); // locking by hand adds 1
+        const { soft, speed } = this.tgmPieceBonus();
         this.score += (Math.ceil((levelBefore + n) / 4) + soft + this.sonicMax) * n * this.combo
             + Math.ceil(levelAfter / 2) + speed;
         this.lines += n;
-        this.addAction(["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"][n], "clear", n);
-        // named by chain length: TGM's combo is a score multiplier, already above 1 for doubles
-        if (this.chain > 0) this.addAction(this.chain + " COMBO", "combo", this.chain);
+        this.addClearActions(n);
 
         this.scoreGrade(n, levelBefore);
         this.level = levelAfter;

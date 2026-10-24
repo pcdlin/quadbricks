@@ -82,3 +82,17 @@ const shapes = [
         [[0,1,1,0],[0,1,1,0],[0,0,0,0],[0,0,0,0]]
     ]
 ];
+
+// A shape table's filled cells as [row, col] offsets in its 4x4 box, in reading order, by piece
+// type and rotation (shapes[type][rotation] -> cells[type][rotation])
+function shapeCells(table) {
+    return table.map(states => states.map(rows => {
+        const cells = [];
+        rows.forEach((row, i) => row.forEach((v, j) => { if (v) cells.push([i, j]); }));
+        return cells;
+    }));
+}
+
+function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+}
