@@ -225,7 +225,7 @@ const TILESETS = {
     // Dark glass cells with glowing coloured outlines
     neon: {
         name: "Neon",
-        pad: (style) => style === "ghost" ? 0 : 8,
+        pad: (style) => style === "active" ? 20 : style === "ghost" ? 0 : 10,
         draw(g, col, size, style) {
             const inset = 2.5;
             const w = size - inset * 2;
@@ -233,8 +233,8 @@ const TILESETS = {
             g.beginPath();
             g.roundRect(inset, inset, w, w, r);
             if (style === "ghost") {
-                g.strokeStyle = col.base + "77";
-                g.lineWidth = 1;
+                g.strokeStyle = col.base + "aa";
+                g.lineWidth = 2.5;
                 g.stroke();
                 return;
             }
@@ -242,10 +242,10 @@ const TILESETS = {
             g.fillStyle = col.dark + (active ? "88" : "55");
             g.fill();
             g.shadowColor = col.light;
-            g.shadowBlur = active ? 14 : 6;
+            g.shadowBlur = active ? 22 : 10;
             g.strokeStyle = active ? col.light : col.base;
             g.lineWidth = active ? 2 : 1.5;
-            g.stroke();
+            for (let i = active ? 3 : 2; i > 0; i--) g.stroke(); // each pass adds to the glow
             g.shadowBlur = 0;
         },
     },
