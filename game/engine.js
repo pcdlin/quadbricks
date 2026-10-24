@@ -269,8 +269,9 @@ class Engine {
         // a font that arrives late replaces text rendered with the fallback
         if (document.fonts) document.fonts.addEventListener("loadingdone", () => this.clearTextCache());
 
+        this.touch = new TouchControls(this);
         this.resize();
-        window.addEventListener("resize", () => this.resize());
+        window.addEventListener("resize", () => { this.resize(); this.touch.mode = null; });
         window.addEventListener("keydown", (e) => this.onKey(e, true));
         window.addEventListener("keyup", (e) => this.onKey(e, false));
         // keys let go in another window never send keyup here
@@ -286,7 +287,8 @@ class Engine {
     // The Options scale shrinks the view only; the backdrop always covers the window at the fit size.
     resize() {
         const winW = window.innerWidth, winH = window.innerHeight;
-        const fit = Math.min(winW / VIEW_W, winH / VIEW_H);
+        const inset = this.touch ? this.touch.height() : 0; // touch buttons below the view
+        const fit = Math.min(winW / VIEW_W, (winH - inset) / VIEW_H);
         const dpr = window.devicePixelRatio || 1;
         this.canvas.style.width = winW + "px";
         this.canvas.style.height = winH + "px";
@@ -294,10 +296,10 @@ class Engine {
         this.canvas.height = Math.round(winH * dpr);
         this.pixelScale = fit * this.options.scale * dpr;
         this.offX = (this.canvas.width - VIEW_W * this.pixelScale) / 2;
-        this.offY = (this.canvas.height - VIEW_H * this.pixelScale) / 2;
+        this.offY = (this.canvas.height - inset * dpr - VIEW_H * this.pixelScale) / 2;
         this.bgScale = fit * dpr;
         this.bgOffX = (this.canvas.width - VIEW_W * this.bgScale) / 2;
-        this.bgOffY = (this.canvas.height - VIEW_H * this.bgScale) / 2;
+        this.bgOffY = (this.canvas.height - inset * dpr - VIEW_H * this.bgScale) / 2;
         // sprites and text are rendered at device resolution: redo them at the new scale
         for (const atlas of this.blockCache.values()) this.r.releaseTexture(atlas.tex);
         this.blockCache.clear();
@@ -392,6 +394,7 @@ class Engine {
         this.extraWait = (this.extraWait + 1) % 3;
         this.uiFrame++;
         this.updateAmbient();
+        this.touch.update();
 
         switch (this.GAMESTATE) {
             case STATE_GAME:

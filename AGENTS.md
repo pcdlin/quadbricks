@@ -22,7 +22,7 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 
 There is no build step, bundler or package.json. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
-`game.js → rules.js → sound.js → tiles.js → options.js → renderer.js → backdrop.js → engine.js`,
+`game.js → rules.js → sound.js → tiles.js → options.js → renderer.js → backdrop.js → touch.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
 
@@ -37,6 +37,7 @@ when WebGL is unavailable).
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings) and the clear ripples' refraction pass. |
 | `game/tiles.js` | Block styles (`TILESETS`): Radiant (default, glassy glow), Glossy, Flat, Neon, Faceted, Pixel, Mono and Game Boy (monochrome; Game Boy gives each piece its own pattern), Original. Loads the Original PNGs. |
 | `game/options.js` | `Options`: key bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
+| `game/touch.js` | `TouchControls`: on-screen buttons in a bar below the view on touch devices (or `?touch=1`); they feed `Engine.onKey()` with the same key codes, and `Engine.resize()` leaves the bar's height free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for `rules.js` (~220 checks). |
