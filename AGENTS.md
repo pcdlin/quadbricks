@@ -93,7 +93,8 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   game is paused apply at once (`applyHandling()` → `RuleGame.setHandling()`).
 - The Visuals screen lists Block style first, then Scale, then the rest (`VISUAL_ITEMS`). The Block
   style card (`preview: true`) is taller (`menuRowHeight()`) and shows the style's preview in it
-  (`drawTilesetPreview()`: the seven colours as active, locked and ghost blocks in one row). The list is
+  (`drawTilesetPreview()`: one active, one locked and one ghost block in different colours,
+  `PREVIEW_BLOCKS`, at their size in the well). The list is
   `VISUALS_LIST_H` high and scrolls in logical units (eased in `updateMenuScroll()`, clipped with
   `GLRenderer.clip()`) to keep the selection in view, with a scrollbar beside it.
 

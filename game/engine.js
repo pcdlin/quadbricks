@@ -107,11 +107,13 @@ const LEVEL_CHOICES = Object.fromEntries(LEVEL_ITEMS.map(item => [item.id, item.
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
 const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
-const PREVIEW_SIZE = 14, PREVIEW_GAP = 2, PREVIEW_GROUP_GAP = 14; // block style preview inside its card
-const PREVIEW_H = 28; // what the preview adds to its card's height
+// Block style preview inside its card: a block per style, in colour indices (cyan, orange, purple)
+const PREVIEW_BLOCKS = [["active", 1], ["locked", 3], ["ghost", 2]];
+const PREVIEW_GAP = 10;
+const PREVIEW_PAD = 12; // what the preview adds to its card's height besides its blocks
 // A menu card's height (cards with preview are taller), and a list's from its first card's top to its last's bottom
 function menuRowHeight(item, rowH) {
-    return item.preview ? rowH + PREVIEW_H : rowH;
+    return item.preview ? rowH + CELL + PREVIEW_PAD : rowH;
 }
 function menuListHeight(items, rowH, gap) {
     return items.reduce((h, item) => h + menuRowHeight(item, rowH) + gap, 0) - (items.length ? gap : 0);
@@ -1457,16 +1459,10 @@ class Engine {
         this.text(hint, cx, hintY, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
     }
 
-    // The seven colours as a falling piece, settled stack and ghost in the chosen block style,
-    // side by side in one row centred on cx
-    drawTilesetPreview(cx, top) {
-        const size = PREVIEW_SIZE, gap = PREVIEW_GAP, groupW = 7 * size + 6 * gap;
-        const x0 = cx - (3 * groupW + 2 * PREVIEW_GROUP_GAP) / 2;
-        ["active", "locked", "ghost"].forEach((style, group) => {
-            for (let t = 1; t <= 7; t++) {
-                this.drawBlock(t, x0 + group * (groupW + PREVIEW_GROUP_GAP) + (t - 1) * (size + gap), top, size, style);
-            }
-        });
+    // One block each as a falling piece, settled stack and ghost in the chosen block style, at
+    // their size in the well and each in its own colour (PREVIEW_BLOCKS), in a row from x
+    drawTilesetPreview(x, top) {
+        PREVIEW_BLOCKS.forEach(([style, color], n) => this.drawBlock(color, x + n * (CELL + PREVIEW_GAP), top, CELL, style));
     }
 
     // A menu card; the selected one is lighter, with an accent bar on its left edge
@@ -1542,7 +1538,7 @@ class Engine {
         items.forEach((item, n) => {
             const selected = n === selectedIndex;
             this.card(x, y, listW, menuRowHeight(item, rowH), 10, selected, PIECE_COLORS[item.accent].base, 5);
-            if (item.preview) this.drawTilesetPreview(VIEW_W / 2, y + rowH);
+            if (item.preview) this.drawTilesetPreview(x + 92, y + rowH - 2); // under the name and value
 
             this.drawPieceCentered(item.accent, x + 50, y + rowH / 2, 13, selected ? "active" : "locked");
             this.text(item.name.toUpperCase(), x + 92, y + rowH / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
