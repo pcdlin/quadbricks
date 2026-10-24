@@ -95,11 +95,13 @@ function touchWords(s) {
         .replace(/ESC  BACK/g, "BACK").replace(/ENTER/g, "OK").replace(/ESC/g, "BACK");
 }
 
-// Start step 3 (GB): the starting level, and B-Type's height (levelItems())
+// Start step 3 (GB): the starting level, and B-Type's height (levelItems()). choice: the mode's
+// property with the number of values, also the Engine map that remembers the choice per mode
 const LEVEL_ITEMS = [
-    { id: "startLevel", name: "Level", accent: tetT },
-    { id: "startHeight", name: "Height", accent: tetZ },
+    { id: "startLevel", name: "Level", accent: tetT, choice: "startLevels" },
+    { id: "startHeight", name: "Height", accent: tetZ, choice: "startHeights" },
 ];
+const LEVEL_CHOICES = Object.fromEntries(LEVEL_ITEMS.map(item => [item.id, item.choice]));
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
 const VISUALS_VISIBLE = 6; // cards shown at once; the list scrolls to keep the selection in view
 
@@ -347,12 +349,6 @@ class Engine {
     clearTextCache() {
         for (const t of this.textCache.values()) this.r.releaseTexture(t.tex);
         this.textCache.clear();
-    }
-
-    // Options → Scale: resize the view, keeping the backdrop as it is
-    changeScale(dir, wrap = true) {
-        this.options.cycleScale(dir, wrap);
-        this.resize();
     }
 
     onKey(e, down) {
@@ -721,31 +717,15 @@ class Engine {
     // Visuals and Guideline handling screens: step a setting (dir -1 or 1; toggles ignore it).
     // wrap false (key held): stop at the first or last value; toggles don't flip
     changeOption(id, dir, wrap = true) {
-        const o = this.options;
-        switch (id) {
-            case "effects": o.cycleEffects(dir, wrap); break;
-            case "backdrop": if (wrap) o.toggleBackdrop(); break;
-            case "rings": o.cycleRings(dir, wrap); break;
-            case "tilt": o.cycleTilt(dir, wrap); break;
-            case "shake": if (wrap) o.toggleShake(); break;
-            case "scale": this.changeScale(dir, wrap); break;
-            case "tileset": o.cycleTileset(dir, wrap); break;
-            case "das": case "arr": case "dcd": o.stepFrames(id, dir, wrap); this.applyHandling(); break;
-            case "sdf": o.cycleSdf(dir, wrap); this.applyHandling(); break;
-            case "ghost": if (wrap) { o.toggleGhost(); this.applyHandling(); } break;
-            case "dropGuard": if (wrap) { o.toggleDropGuard(); this.applyHandling(); } break;
-            case "resetHandling": o.resetHandling(); this.applyHandling(); break;
-            case "startLevel": {
-                const key = this.chosenModeKey();
-                this.startLevels[key] = stepIndex(this.startLevels[key] || 0, dir, this.chosenMode().startLevels, wrap);
-                break;
-            }
-            case "startHeight": {
-                const key = this.chosenModeKey();
-                this.startHeights[key] = stepIndex(this.startHeights[key] || 0, dir, this.chosenMode().startHeights, wrap);
-                break;
-            }
+        const choice = LEVEL_CHOICES[id];
+        if (choice) {
+            this[choice][this.chosenModeKey()] = stepIndex(this.chosenValue(choice), dir, this.chosenMode()[choice], wrap);
+            return;
         }
+        if (id === "resetHandling") this.options.resetHandling();
+        else this.options.step(id, dir, wrap);
+        if (id === "scale") this.resize(); // the view's size; the backdrop stays as it is
+        if (HANDLING_ITEMS.some(item => item.id === id)) this.applyHandling();
     }
 
     // Handling changed during a (paused) Guideline game applies at once
@@ -756,22 +736,18 @@ class Engine {
     // A setting's current value as shown on its card
     optionValue(id) {
         const o = this.options;
+        if (LEVEL_CHOICES[id]) return String(this.chosenValue(LEVEL_CHOICES[id]));
+        if (OPTION_TOGGLES.includes(id)) return o[id] ? "On" : "Off";
         switch (id) {
             case "effects": return EFFECT_LEVELS[o.effects].name;
-            case "backdrop": return o.backdrop ? "On" : "Off";
             case "rings": return RING_MODES[RING_MODE_IDS.indexOf(o.rings)].name;
             case "tilt": return TILT_LEVELS[o.tilt].name;
-            case "shake": return o.shake ? "On" : "Off";
             case "scale": return Math.round(o.scale * 100) + "%";
             case "tileset": return TILESETS[o.tileset].name;
             case "das": return frameValue(o.das);
             case "arr": return o.arr ? frameValue(o.arr) : "Instant";
             case "dcd": return o.dcd ? frameValue(o.dcd) : "Off";
             case "sdf": return Number.isFinite(o.sdf) ? o.sdf + "×" : "Instant";
-            case "ghost": return o.ghost ? "On" : "Off";
-            case "dropGuard": return o.dropGuard ? "On" : "Off";
-            case "startLevel": return String(this.startLevels[this.chosenModeKey()] || 0);
-            case "startHeight": return String(this.startHeights[this.chosenModeKey()] || 0);
         }
     }
 
@@ -789,6 +765,12 @@ class Engine {
         return `${this.rulesetpos}.${this.menupos}`;
     }
 
+    // The chosen mode's remembered start level or height (choice "startLevels" or "startHeights"),
+    // 0 for modes without one
+    chosenValue(choice) {
+        return this.chosenMode()[choice] ? this[choice][this.chosenModeKey()] || 0 : 0;
+    }
+
     // The level screen's cards: the level, and the height for modes that have one
     levelItems() {
         return this.chosenMode().startHeights ? LEVEL_ITEMS : LEVEL_ITEMS.slice(0, 1);
@@ -796,9 +778,8 @@ class Engine {
 
     // Activation of menu item
     menuAction() {
-        const { mode, variant, startLevels, startHeights } = this.chosenMode();
-        const key = this.chosenModeKey();
-        this.initGame(mode, variant, startLevels ? this.startLevels[key] || 0 : 0, startHeights ? this.startHeights[key] || 0 : 0);
+        const { mode, variant } = this.chosenMode();
+        this.initGame(mode, variant, this.chosenValue("startLevels"), this.chosenValue("startHeights"));
         this.GAMESTATE = STATE_GAME;
     }
 

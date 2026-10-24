@@ -75,32 +75,41 @@ const RING_MODES = [
 const RING_MODE_IDS = RING_MODES.map(m => m.id);
 
 // Guideline handling (Options → Guideline), passed to RuleGame; defaults in GUIDELINE_HANDLING.
-// Frame ranges [min, max] for DAS, ARR and DCD; soft drop factors (Infinity: instant)
-const HANDLING_RANGES = { das: [1, 20], arr: [0, 5], dcd: [0, 20] };
+// Frames for DAS, ARR and DCD; soft drop factors (Infinity: instant)
+const frameRange = (min, max) => Array.from({ length: max - min + 1 }, (_, i) => min + i);
 const SDF_STEPS = [5, 10, 20, 40, Infinity];
+const HANDLING_IDS = ["das", "arr", "sdf", "dcd", "ghost", "dropGuard"];
+
+// Settings stepped through a list of values (Options → Visuals and Guideline), and on/off settings
+const OPTION_CHOICES = {
+    tileset: TILESET_IDS,
+    effects: EFFECT_LEVELS.map((_, i) => i), // 0 off, then an index into EFFECT_LEVELS
+    rings: RING_MODE_IDS,
+    tilt: TILT_LEVELS.map((_, i) => i),
+    scale: SCALE_STEPS,
+    das: frameRange(1, 20),
+    arr: frameRange(0, 5),
+    dcd: frameRange(0, 20),
+    sdf: SDF_STEPS,
+};
+const OPTION_TOGGLES = ["backdrop", "shake", "ghost", "dropGuard"];
 
 // Index i stepped by dir through n values: wraps around, or stops at the ends (held keys)
 function stepIndex(i, dir, n, wrap = true) {
-    return wrap ? (i + dir + n) % n : Math.max(0, Math.min(n - 1, i + dir));
+    return wrap ? (i + dir + n) % n : clamp(i + dir, 0, n - 1);
 }
 
 class Options {
     constructor() {
         this.keys = { ...DEFAULT_KEYS };
         this.tileset = TILESET_IDS[0];
-        this.effects = DEFAULT_EFFECTS; // level: 0 off, then index into EFFECT_LEVELS
+        this.effects = DEFAULT_EFFECTS;
         this.backdrop = true; // animated backdrop: colour wash and drifting lights
         this.rings = "ripple"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
         this.tilt = DEFAULT_TILT; // playing field tilt: index into TILT_LEVELS
         this.shake = true; // playing field shakes on hard drops
         this.scale = SCALE_STEPS[0];
-        // Guideline handling: frames for das, arr and dcd, sdf from SDF_STEPS (see GUIDELINE_HANDLING)
-        this.das = GUIDELINE_HANDLING.das;
-        this.arr = GUIDELINE_HANDLING.arr;
-        this.dcd = GUIDELINE_HANDLING.dcd;
-        this.sdf = GUIDELINE_HANDLING.sdf;
-        this.ghost = GUIDELINE_HANDLING.ghost;
-        this.dropGuard = GUIDELINE_HANDLING.dropGuard;
+        Object.assign(this, GUIDELINE_HANDLING);
         try {
             const saved = JSON.parse(localStorage.getItem(OPTIONS_STORAGE_KEY) || "{}");
             if (saved.keys) {
@@ -108,30 +117,25 @@ class Options {
                     if (typeof saved.keys[id] === "string") this.keys[id] = saved.keys[id];
                 }
             }
-            if (TILESET_IDS.includes(saved.tileset)) this.tileset = saved.tileset;
-            if (typeof saved.effects === "boolean") this.effects = saved.effects ? DEFAULT_EFFECTS : 0;
-            else if (Number.isInteger(saved.effects) && saved.effects >= 0 && saved.effects < EFFECT_LEVELS.length) this.effects = saved.effects;
-            if (typeof saved.backdrop === "boolean") this.backdrop = saved.backdrop;
-            if (RING_MODE_IDS.includes(saved.rings)) this.rings = saved.rings;
-            else if (typeof saved.rings === "boolean" || Number.isInteger(saved.rings)) // older versions: on/off or a level
-                this.rings = saved.rings ? "rings" : "off";
-            if (Number.isInteger(saved.tilt) && saved.tilt >= 0 && saved.tilt < TILT_LEVELS.length) this.tilt = saved.tilt;
-            if (typeof saved.shake === "boolean") this.shake = saved.shake;
-            if (SCALE_STEPS.includes(saved.scale)) this.scale = saved.scale;
-            for (const [id, [min, max]] of Object.entries(HANDLING_RANGES)) {
-                if (Number.isInteger(saved[id]) && saved[id] >= min && saved[id] <= max) this[id] = saved[id];
+            if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
+            for (const [id, values] of Object.entries(OPTION_CHOICES)) {
+                if (values.includes(saved[id])) this[id] = saved[id];
             }
-            const sdf = saved.sdf === null ? Infinity : saved.sdf; // JSON has no Infinity
-            if (SDF_STEPS.includes(sdf)) this.sdf = sdf;
-            if (typeof saved.ghost === "boolean") this.ghost = saved.ghost;
-            if (typeof saved.dropGuard === "boolean") this.dropGuard = saved.dropGuard;
+            for (const id of OPTION_TOGGLES) {
+                if (typeof saved[id] === "boolean") this[id] = saved[id];
+            }
+            // older versions: effects and rings on/off, rings also as a level
+            if (typeof saved.effects === "boolean") this.effects = saved.effects ? DEFAULT_EFFECTS : 0;
+            if (typeof saved.rings === "boolean" || Number.isInteger(saved.rings)) this.rings = saved.rings ? "rings" : "off";
         } catch (e) { /* storage unavailable or corrupt: defaults */ }
     }
 
     save() {
+        const saved = { keys: this.keys };
+        for (const id of [...Object.keys(OPTION_CHOICES), ...OPTION_TOGGLES]) saved[id] = this[id];
+        if (!Number.isFinite(saved.sdf)) saved.sdf = null;
         try {
-            localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify({ keys: this.keys, tileset: this.tileset, effects: this.effects, backdrop: this.backdrop, rings: this.rings, tilt: this.tilt, shake: this.shake, scale: this.scale,
-                das: this.das, arr: this.arr, dcd: this.dcd, sdf: Number.isFinite(this.sdf) ? this.sdf : null, ghost: this.ghost, dropGuard: this.dropGuard }));
+            localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(saved));
         } catch (e) { /* storage unavailable */ }
     }
 
@@ -152,68 +156,24 @@ class Options {
         this.save();
     }
 
-    cycleTileset(dir, wrap = true) {
-        this.tileset = TILESET_IDS[stepIndex(TILESET_IDS.indexOf(this.tileset), dir, TILESET_IDS.length, wrap)];
-        this.save();
-    }
-
-    cycleEffects(dir, wrap = true) {
-        this.effects = stepIndex(this.effects, dir, EFFECT_LEVELS.length, wrap);
-        this.save();
-    }
-
-    cycleRings(dir, wrap = true) {
-        this.rings = RING_MODE_IDS[stepIndex(RING_MODE_IDS.indexOf(this.rings), dir, RING_MODE_IDS.length, wrap)];
-        this.save();
-    }
-
-    toggleBackdrop() {
-        this.backdrop = !this.backdrop;
-        this.save();
-    }
-
-    cycleTilt(dir, wrap = true) {
-        this.tilt = stepIndex(this.tilt, dir, TILT_LEVELS.length, wrap);
+    // A setting from OPTION_CHOICES stepped by dir (-1 or 1); wrap false (key held) stops at the
+    // first or last value. On/off settings flip, but not for a held key
+    step(id, dir, wrap = true) {
+        if (OPTION_TOGGLES.includes(id)) {
+            if (!wrap) return;
+            this[id] = !this[id];
+        } else {
+            const values = OPTION_CHOICES[id];
+            this[id] = values[stepIndex(values.indexOf(this[id]), dir, values.length, wrap)];
+        }
         this.save();
     }
 
     // Multiplier of the playing field's tilt angles (0 when off)
     get tiltAngle() { return TILT_LEVELS[this.tilt].angle; }
 
-    toggleShake() {
-        this.shake = !this.shake;
-        this.save();
-    }
-
     // Strength multiplier of the visual effects (0 when off)
     get effectScale() { return EFFECT_LEVELS[this.effects].scale; }
-
-    cycleScale(dir, wrap = true) {
-        this.scale = SCALE_STEPS[stepIndex(SCALE_STEPS.indexOf(this.scale), dir, SCALE_STEPS.length, wrap)];
-        this.save();
-    }
-
-    // DAS, ARR or DCD: a frame up or down within HANDLING_RANGES
-    stepFrames(id, dir, wrap = true) {
-        const [min, max] = HANDLING_RANGES[id];
-        this[id] = min + stepIndex(this[id] - min, dir, max - min + 1, wrap);
-        this.save();
-    }
-
-    cycleSdf(dir, wrap = true) {
-        this.sdf = SDF_STEPS[stepIndex(SDF_STEPS.indexOf(this.sdf), dir, SDF_STEPS.length, wrap)];
-        this.save();
-    }
-
-    toggleGhost() {
-        this.ghost = !this.ghost;
-        this.save();
-    }
-
-    toggleDropGuard() {
-        this.dropGuard = !this.dropGuard;
-        this.save();
-    }
 
     resetHandling() {
         Object.assign(this, GUIDELINE_HANDLING);
@@ -222,7 +182,7 @@ class Options {
 
     // The Guideline handling for RuleGame
     get handling() {
-        return { das: this.das, arr: this.arr, dcd: this.dcd, sdf: this.sdf, ghost: this.ghost, dropGuard: this.dropGuard };
+        return Object.fromEntries(HANDLING_IDS.map(id => [id, this[id]]));
     }
 
     // Action bound to a key code, or null
