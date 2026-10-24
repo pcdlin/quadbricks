@@ -6,7 +6,9 @@
 
 const STATE_MENU = 0, STATE_GAME = 1;
 
-const VERSION = "0.1"; // shown in the top left corner
+const TOUCH_CROP_TOP = 40, TOUCH_CROP_BOTTOM = 40; // view rows (logical px) that may be covered with touch controls
+
+const VERSION ="0.1"; // shown in the top left corner
 
 // Game keys are bound in options.js; menus always use these (KeyboardEvent.code)
 const MENU_KEYS = ["Escape", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
@@ -288,7 +290,9 @@ class Engine {
     resize() {
         const winW = window.innerWidth, winH = window.innerHeight;
         const inset = this.touch ? this.touch.height() : 0; // touch buttons below the view
-        const fit = Math.min(winW / VIEW_W, (winH - inset) / VIEW_H);
+        // the unused strips above and below the well may sit under the bar, so the view needn't shrink for it
+        const cropTop = inset ? TOUCH_CROP_TOP : 0, viewH = VIEW_H - cropTop - (inset ? TOUCH_CROP_BOTTOM : 0);
+        const fit = Math.min(winW / VIEW_W, (winH - inset) / viewH);
         const dpr = window.devicePixelRatio || 1;
         this.canvas.style.width = winW + "px";
         this.canvas.style.height = winH + "px";
@@ -296,10 +300,10 @@ class Engine {
         this.canvas.height = Math.round(winH * dpr);
         this.pixelScale = fit * this.options.scale * dpr;
         this.offX = (this.canvas.width - VIEW_W * this.pixelScale) / 2;
-        this.offY = (this.canvas.height - inset * dpr - VIEW_H * this.pixelScale) / 2;
+        this.offY = (this.canvas.height - inset * dpr - viewH * this.pixelScale) / 2 - cropTop * this.pixelScale;
         this.bgScale = fit * dpr;
         this.bgOffX = (this.canvas.width - VIEW_W * this.bgScale) / 2;
-        this.bgOffY = (this.canvas.height - inset * dpr - VIEW_H * this.bgScale) / 2;
+        this.bgOffY = (this.canvas.height - inset * dpr - viewH * this.bgScale) / 2 - cropTop * this.bgScale;
         // sprites and text are rendered at device resolution: redo them at the new scale
         for (const atlas of this.blockCache.values()) this.r.releaseTexture(atlas.tex);
         this.blockCache.clear();
