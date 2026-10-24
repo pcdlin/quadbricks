@@ -156,6 +156,9 @@ const PIECE_COLORS = [
     { base: "#e4cf00", light: "#fff082", dark: "#aca000" }, // O yellow
 ];
 
+// Block offsets of the SRS shapes, for pieces drawn outside a game (menu accents)
+const SRS_CELLS = shapeCells(shapes);
+
 // Countdown digits by value: green, yellow, red as on a start light
 const COUNTDOWN_COLORS = [null, PIECE_COLORS[tetS].light, PIECE_COLORS[tetO].light, PIECE_COLORS[tetZ].light];
 
@@ -201,6 +204,14 @@ const MESSAGE_POP_MAX = 1.3; // a new message starts this much bigger
 const MESSAGE_GOLD = "#ffd76a";
 const COMBO_COLORS = [INK, INK, "#fff1a8", MESSAGE_GOLD, "#ffb35c", "#ff8a4c", "#ff5f4a"]; // by chain length
 
+// Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
+const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
+
+// letterSpacing adds trailing space; this shift keeps centred and right-aligned text in place
+function spacingShift(align, spacing) {
+    return align === "center" ? spacing / 2 : align === "right" ? spacing : 0;
+}
+
 // Text on a canvas 2D context (for rendering into textures)
 function fillText2D(g, s, x, y, { size = 16, weight = 700, color = INK, align = "left", spacing = 0, baseline = "middle" } = {}) {
     g.font = `${weight} ${size}px ${FONT}`;
@@ -208,9 +219,7 @@ function fillText2D(g, s, x, y, { size = 16, weight = 700, color = INK, align = 
     g.textBaseline = baseline;
     g.letterSpacing = spacing + "px";
     g.fillStyle = color;
-    // letterSpacing adds trailing space; compensate so centred/right text stays aligned
-    const shift = align === "center" ? spacing / 2 : align === "right" ? spacing : 0;
-    g.fillText(s, x + shift, y);
+    g.fillText(s, x + spacingShift(align, spacing), y);
     g.letterSpacing = "0px";
 }
 
@@ -251,10 +260,7 @@ class Engine {
         this.fpscounter = 0;
         this.nextframe = 0;
         this.extraWait = 0;
-        this.particles = [];
-        this.flashes = [];
-        this.dropFlashes = [];
-        this.rings = [];
+        this.clearEffects();
         this.hue = 232;       // backdrop colour, eased toward hueTarget
         this.hueTarget = 232;
         this.pulse = 0;       // 0..1 kick on line clears, decays
@@ -270,7 +276,6 @@ class Engine {
             { f: 0.15 + Math.random() * 0.2, p: Math.random() * 6.28 },
             { f: 0.4 + Math.random() * 0.3, p: Math.random() * 6.28 },
         ]);
-        this.shake = { x: 0, vx: 0, y: 0, vy: 0 };
         this.boardLayer = null; // render target the field is drawn into when it moves
         this.blockCache = new Map(); // tileset:size -> sprite atlas
         this.glowAtlas = null;
@@ -539,11 +544,25 @@ class Engine {
         this.lastGameArgs = [mode, variant, startLevel, height];
         this.game = new RuleGame(mode, variant, startLevel, height, this.options.handling);
         this.layoutBoard(this.game.wellTop);
+        this.clearEffects();
+    }
+
+    // Confetti, flashes, rings and the field's shake: none left over from another game
+    clearEffects() {
         this.particles = [];
         this.flashes = [];
         this.dropFlashes = [];
         this.rings = [];
         this.shake = { x: 0, vx: 0, y: 0, vy: 0 };
+    }
+
+    // Top-left corner of a field cell in logical units (the well's rows start at wellTop)
+    cellX(col) {
+        return BOARD_X + CELL * col;
+    }
+
+    cellY(row) {
+        return this.boardY + CELL * (row - this.wellTop);
     }
 
     // -----------------------------------
@@ -800,7 +819,7 @@ class Engine {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
             const span = this.options.rings === "ripple" ? RIPPLE_LIFE : RING_LIFE;
             this.rings.push({
-                y: this.boardY + CELL * (mid - this.wellTop + 0.5), life: span, span, power: rows.size,
+                y: this.cellY(mid) + CELL / 2, life: span, span, power: rows.size,
                 chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
             });
             this.hueTarget += HUE_STEP * rows.size / 2;
@@ -809,8 +828,8 @@ class Engine {
     }
 
     explodeCell(cell) {
-        const cx = BOARD_X + CELL * cell.col + CELL / 2;
-        const cy = this.boardY + CELL * (cell.row - this.wellTop) + CELL / 2;
+        const cx = this.cellX(cell.col) + CELL / 2;
+        const cy = this.cellY(cell.row) + CELL / 2;
         const count = Math.max(1, Math.round(CONFETTI_PER_CELL * this.options.effectScale));
         for (let n = 0; n < count; n++) {
             const angle = Math.random() * Math.PI * 2;
@@ -840,12 +859,24 @@ class Engine {
             p.life--;
         }
         this.particles = this.particles.filter(p => p.life > 0 && p.y < VIEW_H + 20);
-        for (const r of this.rings) r.life--;
-        this.rings = this.rings.filter(r => r.life > 0);
-        for (const f of this.flashes) f.life--;
-        this.flashes = this.flashes.filter(f => f.life > 0);
-        for (const f of this.dropFlashes) f.life--;
-        this.dropFlashes = this.dropFlashes.filter(f => f.life > 0);
+        const age = (effects) => effects.filter(e => --e.life > 0);
+        this.rings = age(this.rings);
+        this.flashes = age(this.flashes);
+        this.dropFlashes = age(this.dropFlashes);
+    }
+
+    // Effects strength for the soft, large ones (backdrop wash, trails): never quite off, and
+    // less than proportional at Intense
+    softEffectScale() {
+        return Math.min(1.3, 0.4 + 0.6 * this.options.effectScale);
+    }
+
+    // A drop trail streak in a column, from y0 down to y1 (the blocks), fading in towards them
+    drawTrail(col, y0, y1, color) {
+        const r = this.r;
+        r.globalAlpha = DROP_TRAIL_ALPHA * this.softEffectScale();
+        r.shape(this.cellX(col) + CELL * 0.2, y0, CELL * 0.6, y1 - y0, { fill: [color + "00", color], fillY: [y0, y1] });
+        r.globalAlpha = 1;
     }
 
     // Hard drop feedback: the landed piece lights up with the active highlight
@@ -857,8 +888,7 @@ class Engine {
             const t = Math.max(0, f.life / DROP_FLASH_LIFE);
             for (const cell of f.cells) {
                 if (cell.row < this.wellTop || cell.cleared) continue; // hidden rows; cleared: nothing left to light up
-                const x = BOARD_X + CELL * cell.col;
-                const y = this.boardY + CELL * (cell.row - this.wellTop);
+                const x = this.cellX(cell.col), y = this.cellY(cell.row);
                 r.globalAlpha = t;
                 this.drawBlock(cell.type, x, y, CELL, "active");
                 r.globalAlpha = 0.4 * t * t;
@@ -871,7 +901,6 @@ class Engine {
     // Faint streak per column from where the piece started to where it landed,
     // brightest at the piece and fading upwards as well as over time
     drawDropTrail(f) {
-        const r = this.r;
         const gone = 1 - f.life / (DROP_TRAIL_LIFE + 1); // share of the trail already dissolved
         const cols = new Map(); // col -> topmost landed cell
         for (const cell of f.cells) {
@@ -881,15 +910,9 @@ class Engine {
         for (const cell of cols.values()) {
             const top = Math.max(cell.row - cell.dist, this.wellTop);
             if (cell.dist <= 0 || cell.row <= top) continue;
-            const x = BOARD_X + CELL * cell.col;
-            const y1 = this.boardY + CELL * (cell.row - this.wellTop);
-            const y0 = this.boardY + CELL * (top - this.wellTop);
+            const y1 = this.cellY(cell.row), y0 = this.cellY(top);
             const yStart = y0 + (y1 - y0) * gone; // dissolve front sweeps down toward the piece
-            if (yStart >= y1) continue;
-            const color = PIECE_COLORS[cell.type].light;
-            r.globalAlpha = DROP_TRAIL_ALPHA * Math.min(1.3, 0.4 + 0.6 * this.options.effectScale);
-            r.shape(x + CELL * 0.2, yStart, CELL * 0.6, y1 - yStart, { fill: [color + "00", color], fillY: [yStart, y1] });
-            r.globalAlpha = 1;
+            if (yStart < y1) this.drawTrail(cell.col, yStart, y1, PIECE_COLORS[cell.type].light);
         }
     }
 
@@ -897,7 +920,6 @@ class Engine {
     // started to where it is, dissolving top to bottom once it has landed. One per run of
     // blocks falling together; drawn under the field, so only the gap above them shows.
     drawLineDropTrails(firstRow) {
-        const r = this.r;
         const game = this.game;
         const top = Math.max(firstRow, this.wellTop);
         for (let i = firstRow; i < HEIGHT; i++) {
@@ -906,20 +928,17 @@ class Engine {
             const landed = game.getDropLandedFor(i);
             if (landed >= DROP_TRAIL_LIFE) continue;
             const gone = landed < 0 ? 0 : (landed + 1) / DROP_TRAIL_LIFE;
-            const y1 = this.boardY + CELL * (i + game.getDropOffset(i) - this.wellTop);
-            const y0 = this.boardY + CELL * (Math.max(i, top) - this.wellTop);
+            const y1 = this.cellY(i + game.getDropOffset(i));
+            const y0 = this.cellY(Math.max(i, top));
             const yStart = y0 + (y1 - y0) * gone;
             if (yStart >= y1) continue;
             for (let j = 0; j < WIDTH; j++) {
                 const cell = game.getCell(i, j);
                 if (!cell || game.getCellAlpha(i, j) <= 0) continue;
                 if (i > firstRow && game.getCell(i - 1, j) && game.getDropDistance(i - 1) === dist) continue; // not the run's top
-                const color = PIECE_COLORS[game.palette[cell]].light;
-                r.globalAlpha = DROP_TRAIL_ALPHA * Math.min(1.3, 0.4 + 0.6 * this.options.effectScale);
-                r.shape(BOARD_X + CELL * j + CELL * 0.2, yStart, CELL * 0.6, y1 - yStart, { fill: [color + "00", color], fillY: [yStart, y1] });
+                this.drawTrail(j, yStart, y1, PIECE_COLORS[game.palette[cell]].light);
             }
         }
-        r.globalAlpha = 1;
     }
 
     // Soft light motes, added together so overlapping bursts bloom
@@ -981,7 +1000,7 @@ class Engine {
     ambientShapes() {
         const t = this.uiFrame / 60;
         const h = this.hue;
-        const swell = (0.16 + 0.22 * this.pulse) * Math.min(1.3, 0.4 + 0.6 * this.options.effectScale);
+        const swell = (0.16 + 0.22 * this.pulse) * this.softEffectScale();
         const blobs = [
             [VIEW_W * (0.25 + 0.1 * Math.sin(t * 0.21)), VIEW_H * (0.35 + 0.08 * Math.cos(t * 0.17)), 0, 520],
             [VIEW_W * (0.78 + 0.08 * Math.cos(t * 0.19)), VIEW_H * (0.65 + 0.1 * Math.sin(t * 0.23)), 70, 560],
@@ -1034,7 +1053,7 @@ class Engine {
     drawFlashes() {
         for (const f of this.flashes) {
             const t = f.life / FLASH_LIFE;
-            const y = this.boardY + CELL * (f.row - this.wellTop);
+            const y = this.cellY(f.row);
             this.r.rect(BOARD_X, y + CELL / 2 - (CELL / 2) * t, BOARD_W, CELL * t,
                 [1, 250 / 255, 235 / 255, Math.min(1, 0.3 * this.options.effectScale) * t * t]);
         }
@@ -1060,9 +1079,7 @@ class Engine {
             r.releaseTexture(this.textCache.get(oldest).tex);
             this.textCache.delete(oldest);
         }
-        // letterSpacing adds trailing space; compensate so centred/right text stays aligned
-        const shift = align === "center" ? spacing / 2 : align === "right" ? spacing : 0;
-        const left = x + shift - t.width * (align === "center" ? 0.5 : align === "right" ? 1 : 0);
+        const left = x + spacingShift(align, spacing) - t.width * (align === "center" ? 0.5 : align === "right" ? 1 : 0);
         r.save();
         r.globalAlpha *= ca;
         r.image(t.tex, left - t.pad, y - t.half, t.tex.w / res, t.tex.h / res);
@@ -1167,20 +1184,13 @@ class Engine {
     // Draw a piece (rotation 0) centred on cx/cy, with a game's shapes and colours if given
     drawPieceCentered(type, cx, cy, size, style = "locked", game = null) {
         if (!type) return;
-        const shape = (game ? game.shapes : shapes)[type][0];
+        const cells = (game ? game.pieceCells : SRS_CELLS)[type][0];
         const color = game ? game.palette[type] : type;
-        let minR = 4, maxR = -1, minC = 4, maxC = -1;
-        for (let i = 0; i < 4; i++)
-            for (let j = 0; j < 4; j++)
-                if (shape[i][j]) {
-                    minR = Math.min(minR, i); maxR = Math.max(maxR, i);
-                    minC = Math.min(minC, j); maxC = Math.max(maxC, j);
-                }
-        const ox = cx - ((maxC - minC + 1) * size) / 2;
-        const oy = cy - ((maxR - minR + 1) * size) / 2;
-        for (let i = minR; i <= maxR; i++)
-            for (let j = minC; j <= maxC; j++)
-                if (shape[i][j]) this.drawBlock(color, ox + (j - minC) * size, oy + (i - minR) * size, size, style);
+        const rows = cells.map(([i]) => i), cols = cells.map(([, j]) => j);
+        const minR = Math.min(...rows), minC = Math.min(...cols);
+        const ox = cx - ((Math.max(...cols) - minC + 1) * size) / 2;
+        const oy = cy - ((Math.max(...rows) - minR + 1) * size) / 2;
+        for (const [i, j] of cells) this.drawBlock(color, ox + (j - minC) * size, oy + (i - minR) * size, size, style);
     }
 
     // Night gallery backdrop: deep gradient, soft spotlight, receding floor grid
@@ -1399,20 +1409,30 @@ class Engine {
         });
     }
 
+    // A menu card; the selected one is lighter, with an accent bar on its left edge
+    card(x, y, w, h, radius, selected, accent, barW) {
+        const r = this.r;
+        r.shape(x, y, w, h, {
+            radius, lineWidth: 1,
+            fill: selected ? "rgba(244,236,220,0.10)" : "rgba(10,13,32,0.55)",
+            stroke: selected ? "rgba(244,236,220,0.35)" : "rgba(244,236,220,0.08)",
+        });
+        if (selected) r.shape(x, y, barW, h, { radius: [radius, 0, 0, radius], fill: accent });
+    }
+
+    // INK pulsing between 40% and full opacity (a waiting prompt, the selection marker)
+    pulseInk(period) {
+        return inkAlpha(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(this.uiFrame / period)));
+    }
+
     // Rows of action name and key; Enter on a row waits for the new key
     drawKeyBindings(top) {
-        const r = this.r;
         const listW = 420, rowH = 31, x = VIEW_W / 2 - listW / 2;
         const rows = [...KEY_ACTIONS.map(a => ({ name: a.name, key: this.options.keys[a.id], id: a.id })), { name: "Reset to defaults" }];
         rows.forEach((row, n) => {
             const y = top + n * (rowH + 2);
             const selected = n === this.controlspos;
-            r.shape(x, y, listW, rowH, {
-                radius: 8, lineWidth: 1,
-                fill: selected ? "rgba(244,236,220,0.10)" : "rgba(10,13,32,0.55)",
-                stroke: selected ? "rgba(244,236,220,0.35)" : "rgba(244,236,220,0.08)",
-            });
-            if (selected) r.shape(x, y, 4, rowH, { radius: [8, 0, 0, 8], fill: PIECE_COLORS[tetS].base });
+            this.card(x, y, listW, rowH, 8, selected, PIECE_COLORS[tetS].base, 4);
 
             const cy = y + rowH / 2;
             if (!row.id) { // reset row
@@ -1421,8 +1441,7 @@ class Engine {
             }
             this.text(row.name.toUpperCase(), x + 20, cy + 1, { size: 13, weight: 800, color: selected ? INK : INK_DIM, spacing: 2 });
             if (this.capturing === row.id) {
-                const pulse = 0.5 + 0.5 * Math.sin(this.uiFrame / 6);
-                this.text("PRESS A KEY", x + listW - 18, cy + 1, { size: 11, weight: 800, color: inkAlpha(0.4 + 0.6 * pulse), align: "right", spacing: 3 });
+                this.text("PRESS A KEY", x + listW - 18, cy + 1, { size: 11, weight: 800, color: this.pulseInk(6), align: "right", spacing: 3 });
             } else {
                 const label = keyLabel(row.key);
                 this.keycap(label, x + listW - 18 - this.keycapWidth(label), cy);
@@ -1452,29 +1471,16 @@ class Engine {
     // Cards with an accent piece, name and description; the selected one is highlighted.
     // scroll: cards scrolled out above the top (fractional while easing)
     drawMenuList(items, selectedIndex, top, rowH = 64, gap = 10, scroll = 0) {
-        const r = this.r;
-        const cx = VIEW_W / 2;
-        const listW = 420;
+        const listW = 420, x = VIEW_W / 2 - listW / 2;
         items.forEach((item, n) => {
-            const x = cx - listW / 2;
             const y = top + (n - scroll) * (rowH + gap);
             const selected = n === selectedIndex;
-            const accent = PIECE_COLORS[item.accent].base;
-
-            r.shape(x, y, listW, rowH, {
-                radius: 10, lineWidth: 1,
-                fill: selected ? "rgba(244,236,220,0.10)" : "rgba(10,13,32,0.55)",
-                stroke: selected ? "rgba(244,236,220,0.35)" : "rgba(244,236,220,0.08)",
-            });
-            if (selected) r.shape(x, y, 5, rowH, { radius: [10, 0, 0, 10], fill: accent });
+            this.card(x, y, listW, rowH, 10, selected, PIECE_COLORS[item.accent].base, 5);
 
             this.drawPieceCentered(item.accent, x + 50, y + rowH / 2, 13, selected ? "active" : "locked");
             this.text(item.name.toUpperCase(), x + 92, y + rowH / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
             this.text(item.desc, x + 92, y + rowH / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
-            if (selected) {
-                const pulse = 0.5 + 0.5 * Math.sin(this.uiFrame / 10);
-                this.text("▶", x + listW - 26, y + rowH / 2, { size: 14, color: inkAlpha(0.4 + 0.6 * pulse), align: "center" });
-            }
+            if (selected) this.text("▶", x + listW - 26, y + rowH / 2, { size: 14, color: this.pulseInk(10), align: "center" });
         });
     }
 
@@ -1544,15 +1550,12 @@ class Engine {
         for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL, this.boardY, 1, this.boardH, grid);
         for (let row = 1; row < HEIGHT - this.wellTop; row++) r.rect(BOARD_X, this.boardY + row * CELL, BOARD_W, 1, grid);
 
-        const type = game.getCurPiece_type();
-        const rot = game.getCurPiece_rotation();
-        const shape = game.shapes[type][rot];
+        const cells = game.pieceCells[game.getCurPiece_type()][game.getCurPiece_rotation()];
         const pal = game.palette; // piece type -> colour
-        const color = pal[type];
-        const cellX = (col) => BOARD_X + col * CELL;
-        const cellY = (row) => this.boardY + (row - this.wellTop) * CELL;
+        const color = pal[game.getCurPiece_type()];
         // Also show the two rows above the well, where pieces spawn (not for GB: they spawn inside)
         const firstRow = game.firstDrawnRow;
+        const col = game.getCurPiece_col();
 
         // Pieces and stack are cut off by the well's frame, so the spawn rows show in the margin
         // above the grid up to the border
@@ -1560,24 +1563,20 @@ class Engine {
         r.clip(...frame);
 
         // Draw Shadow
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-                if (shape[i][j]) {
-                    if (game.getShadowRow() + i < firstRow) continue;
-                    this.drawBlock(color, cellX(game.getCurPiece_col() + j), cellY(game.getShadowRow() + i), CELL, "ghost");
-                }
-            }
+        for (const [i, j] of cells) {
+            const row = game.getShadowRow() + i;
+            if (row >= firstRow) this.drawBlock(color, this.cellX(col + j), this.cellY(row), CELL, "ghost");
         }
 
         // Draw Field
         if (this.options.effects) this.drawLineDropTrails(firstRow);
         for (let i = firstRow; i < HEIGHT; i++) {
-            const y = cellY(i + game.getDropOffset(i)); // rows fall into place during a line clear
+            const y = this.cellY(i + game.getDropOffset(i)); // rows fall into place during a line clear
             for (let j = 0; j < WIDTH; j++) {
                 const alpha = game.getCellAlpha(i, j); // TGM3 and TAP staff roll: blocks fade or vanish
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
-                this.drawBlock(pal[game.getCell(i, j)], cellX(j), y, CELL, "locked");
+                this.drawBlock(pal[game.getCell(i, j)], this.cellX(j), y, CELL, "locked");
             }
             r.globalAlpha = 1;
         }
@@ -1585,17 +1584,14 @@ class Engine {
         // Draw current Piece: the highlight fades from "active" to "locked" as the
         // lock delay runs out, and comes back whenever a move resets the delay
         const lockLeft = 1 - Math.min(1, game.curPiece_lockDelay / game.lockDelayMax);
-        for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-                if (shape[i][j]) {
-                    if (game.getCurPiece_row() + i < firstRow) continue;
-                    const x = cellX(game.getCurPiece_col() + j), y = cellY(game.getCurPiece_row() + i);
-                    if (lockLeft < 1) this.drawBlock(color, x, y, CELL, "locked");
-                    r.globalAlpha = lockLeft;
-                    this.drawBlock(color, x, y, CELL, "active");
-                    r.globalAlpha = 1;
-                }
-            }
+        for (const [i, j] of cells) {
+            const row = game.getCurPiece_row() + i;
+            if (row < firstRow) continue;
+            const x = this.cellX(col + j), y = this.cellY(row);
+            if (lockLeft < 1) this.drawBlock(color, x, y, CELL, "locked");
+            r.globalAlpha = lockLeft;
+            this.drawBlock(color, x, y, CELL, "active");
+            r.globalAlpha = 1;
         }
         r.restore();
 
@@ -1677,12 +1673,11 @@ class Engine {
             y += s.size * 0.575;
             // dark halo for legibility over the stack, then the coloured glow
             // (shadow blur is in canvas pixels: scale it like the main canvas would)
-            g.shadowColor = "rgba(0,0,0,0.85)";
-            g.shadowBlur = 10 * MESSAGE_POP_MAX;
-            fillText2D(g, a.text, anchor, y, { size: s.size, weight: 900, color: s.color, spacing: s.spacing ?? 2, align });
-            if (s.glow) {
-                g.shadowColor = s.glow;
-                g.shadowBlur = (8 + s.size / 3) * MESSAGE_POP_MAX;
+            const shadows = [["rgba(0,0,0,0.85)", 10]];
+            if (s.glow) shadows.push([s.glow, 8 + s.size / 3]);
+            for (const [color, blur] of shadows) {
+                g.shadowColor = color;
+                g.shadowBlur = blur * MESSAGE_POP_MAX;
                 fillText2D(g, a.text, anchor, y, { size: s.size, weight: 900, color: s.color, spacing: s.spacing ?? 2, align });
             }
             y += s.size * 0.575;
@@ -1718,7 +1713,7 @@ class Engine {
             }
             this.label(name, LEFT_X, y, SIDE_W);
             // numbers (time, score, level, lines) glyph by glyph, words like grades whole
-            if (/^[\d:.,/ ]+$/.test(value)) {
+            if (NUMERIC_TEXT.test(value)) {
                 this.textRun(value, LEFT_X, y + 32, { size: 28, weight: 800, color: INK, spacing: 1 });
             } else { // shrunk to the panel width if needed ("Grand Master")
                 const size = Math.min(28, Math.floor(28 * SIDE_W / this.measureText(value, 28, 800, 1)));
@@ -1779,7 +1774,7 @@ class Engine {
             }
             this.label(name, leftX, y, sideW, 9, 2);
             const opts = { size: fitted(value, 18), weight: 800, color: INK, spacing: 1 };
-            if (/^[\d:.,/ ]+$/.test(value)) this.textRun(value, leftX, y + 20, opts);
+            if (NUMERIC_TEXT.test(value)) this.textRun(value, leftX, y + 20, opts);
             else this.text(value, leftX, y + 20, opts);
             y += 46;
         });
@@ -1809,29 +1804,37 @@ class Engine {
         const fadeIn = Math.min(1, t / 0.15), fadeOut = Math.min(1, (1 - t) / 0.25);
         const band = digit > 1 ? 1 : Math.min(1, (left + 1) / 12);
         const r = this.r;
-        const cy = this.boardY + this.boardH * 0.42, h = 92;
+        const cy = this.bandY();
         const accent = COUNTDOWN_COLORS[digit];
         r.save();
         r.globalAlpha = band;
-        r.rect(BOARD_X - 8, cy - h / 2, BOARD_W + 16, h, "rgba(4,5,14,0.82)");
-        r.rect(BOARD_X - 8, cy - h / 2, BOARD_W + 16, 2, accent);
-        r.rect(BOARD_X - 8, cy + h / 2 - 2, BOARD_W + 16, 2, accent);
+        this.drawBand(cy, 92, accent);
         r.globalAlpha = fadeIn * fadeOut;
         const slide = (1 - fadeIn) * (1 - fadeIn) * -14;
         this.text(String(digit), BOARD_X + BOARD_W / 2, cy + slide, { size: 64, weight: 900, color: accent, align: "center" });
         r.restore();
     }
 
-    // Horizontal banner across the well (GAME OVER and other endings)
-    boardBanner(title, sub, alpha, accent = INK) {
+    // Centre line of the bands across the well, a little above its middle
+    bandY() {
+        return this.boardY + this.boardH * 0.42;
+    }
+
+    // Dark band across the well, h high around cy, with a line of the accent colour at each edge
+    drawBand(cy, h, accent) {
         const r = this.r;
-        const cy = this.boardY + this.boardH * 0.42;
-        const h = sub ? 96 : 70;
-        r.save();
-        r.globalAlpha = alpha;
         r.rect(BOARD_X - 8, cy - h / 2, BOARD_W + 16, h, "rgba(4,5,14,0.82)");
         r.rect(BOARD_X - 8, cy - h / 2, BOARD_W + 16, 2, accent);
         r.rect(BOARD_X - 8, cy + h / 2 - 2, BOARD_W + 16, 2, accent);
+    }
+
+    // Horizontal banner across the well (GAME OVER and other endings)
+    boardBanner(title, sub, alpha, accent = INK) {
+        const r = this.r;
+        const cy = this.bandY();
+        r.save();
+        r.globalAlpha = alpha;
+        this.drawBand(cy, sub ? 96 : 70, accent);
         // long titles ("GRAND MASTER") shrink to the board width
         const size = Math.min(34, Math.floor(34 * (BOARD_W - 16) / this.measureText(title, 34, 900, 8)));
         this.text(title, BOARD_X + BOARD_W / 2, cy - (sub ? 12 : 0), { size, weight: 900, color: accent === INK ? INK : accent, align: "center", spacing: 8 });
