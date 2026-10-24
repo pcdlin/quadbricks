@@ -72,6 +72,7 @@ const VISUAL_ITEMS = [
     { id: "rings", name: "Clear rings", accent: tetZ },
     { id: "tilt", name: "3D tilt", accent: tetI },
     { id: "shake", name: "Drop shake", accent: tetS },
+    { id: "border", name: "Stack border", accent: tetZ },
 ];
 // Guideline handling; help: the name spelled out and what it does, shown under the list for the selection
 const HANDLING_ITEMS = [
@@ -189,6 +190,8 @@ const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
 const RIPPLE_AMP = 1.55; // refraction strength at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
+const STACK_BORDER_W = 2; // TGM-style stack border: width of the line, drawn in the empty cells
+const STACK_BORDER_COLOR = "rgba(236,234,244,0.85)";
 const DROP_TRAIL_GROW = 4; // frames the hard-drop trail takes to reach down to the piece
 const DROP_TRAIL_FADE = 10; // frames a drop trail then takes to fade out, all at once
 const DROP_TRAIL_ALPHA = 0.35; // peak opacity of the trail
@@ -1646,6 +1649,8 @@ class Engine {
             r.globalAlpha = 1;
         }
 
+        if (this.options.border) this.drawStackBorder(firstRow);
+
         // Draw current Piece: the highlight fades from "active" to "locked" as the
         // lock delay runs out, and comes back whenever a move resets the delay
         const lockLeft = 1 - Math.min(1, game.curPiece_lockDelay / game.lockDelayMax);
@@ -1662,6 +1667,35 @@ class Engine {
 
         this.drawDropFlashes();
         this.drawFlashes();
+    }
+
+    // TGM-style border: a light line along every side of the settled stack that faces an empty
+    // cell, drawn in that cell; none along the walls and floor. Rows falling during a line clear
+    // are outlined on their own, and blocks fading in the staff roll take their border with them
+    drawStackBorder(firstRow) {
+        const r = this.r, game = this.game, w = STACK_BORDER_W;
+        // empty beside a block of a row drawn at offset off: inside the well with nothing visible
+        // there (or a block of a row falling apart from it); above the drawn rows counts as empty
+        const open = (i, j, off) => j >= 0 && j < WIDTH && i < HEIGHT &&
+            (i < firstRow || !game.getCell(i, j) || game.getCellAlpha(i, j) <= 0 || game.getDropOffset(i) !== off);
+        for (let i = firstRow; i < HEIGHT; i++) {
+            const off = game.getDropOffset(i), y = this.cellY(i + off);
+            for (let j = 0; j < WIDTH; j++) {
+                if (open(i, j, off)) continue;
+                const x = this.cellX(j);
+                r.globalAlpha = game.getCellAlpha(i, j);
+                // top and bottom lines reach over outer corners, so the line goes round them
+                for (let di = -1; di <= 1; di += 2) {
+                    if (!open(i + di, j, off)) continue;
+                    const left = open(i, j - 1, off) && open(i + di, j - 1, off) ? w : 0;
+                    const right = open(i, j + 1, off) && open(i + di, j + 1, off) ? w : 0;
+                    r.rect(x - left, di < 0 ? y - w : y + CELL, CELL + left + right, w, STACK_BORDER_COLOR);
+                }
+                if (open(i, j - 1, off)) r.rect(x - w, y, w, CELL, STACK_BORDER_COLOR);
+                if (open(i, j + 1, off)) r.rect(x + CELL, y, w, CELL, STACK_BORDER_COLOR);
+            }
+        }
+        r.globalAlpha = 1;
     }
 
     // Style of one clear message line: bigger clears and longer combos get bigger, warmer type

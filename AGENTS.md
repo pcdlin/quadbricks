@@ -124,7 +124,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   `firstDrawnRow` (0: the two rows above the well are drawn; GB: 4); `wellTop` (first row of the
   well: `VISIBLE_TOP`, GB 4 for its 18 rows), which sizes the board (`Engine.layoutBoard()`).
 - Event queues the engine drains every frame: `takeClearedCells()` (confetti),
-  `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
+  `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
   (`{text, kind, value}`, kinds `clear`/`tspin`/`b2b`/`combo`/`pc`) with `actionAge`.
 - `chain`: consecutive clearing pieces, −1 after a miss, then 0, 1, 2…; identical in every
@@ -385,6 +385,10 @@ add new globals there.
 - Piece colours stay the sampled originals (Classic uses Sega colours by design).
 - Line clears: no artificial delay outside TGM3; confetti (moderately prominent) plus a row flash.
 - Lock-delay fade on the falling piece; hard-drop flash in the piece's own colour, not white.
+- Options → Visuals → Stack border (`options.border`, off by default): a TGM-style light line
+  (`STACK_BORDER_*`, `drawStackBorder()`) along every side of the settled stack that faces an empty
+  cell, drawn in that cell and round outer corners; none along the walls and floor. Falling rows during
+  a line clear are outlined on their own; staff roll blocks fade or vanish with their border.
 - Settled blocks have a thin light rim (Glossy style).
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.
@@ -400,7 +404,7 @@ add new globals there.
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound}, tileset, effects, backdrop, rings, tilt, shake, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound}, tileset, effects, backdrop, rings, tilt, shake, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - Every access is wrapped in try/catch; the game must work with storage unavailable.
 
