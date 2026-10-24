@@ -303,8 +303,8 @@ class Engine {
     }
 
     // Fill the window, fit the layout's view centred inside it (beside or above the touch controls)
-    // and render at device resolution. The Options scale shrinks the view only; the backdrop always
-    // covers the window at the fit size.
+    // and render at device resolution. The Options scale shrinks the view in games only (menus stay
+    // at full size); the backdrop always covers the window at the fit size.
     resize() {
         const winW = window.innerWidth, winH = window.innerHeight;
         const fitIn = ([, , w, h], availW, availH) => Math.min(availW / w, availH / h);
@@ -321,7 +321,7 @@ class Engine {
         this.canvas.style.height = winH + "px";
         this.canvas.width = Math.round(winW * dpr);
         this.canvas.height = Math.round(winH * dpr);
-        this.pixelScale = fit * this.options.scale * dpr;
+        this.pixelScale = fit * (this._state === STATE_GAME ? this.options.scale : 1) * dpr;
         this.offX = cx - (vx + vw / 2) * this.pixelScale;
         this.offY = cy - (vy + vh / 2) * this.pixelScale;
         this.bgScale = fit * dpr;
@@ -334,6 +334,14 @@ class Engine {
         if (this.messageCache) this.r.releaseTexture(this.messageCache.tex);
         this.messageCache = null;
         this.backdrop.setBackground(this.renderBackground());
+    }
+
+    // The Options scale applies to the game only: entering or leaving it redoes the view size
+    get GAMESTATE() { return this._state; }
+    set GAMESTATE(s) {
+        const changed = s !== this._state;
+        this._state = s;
+        if (changed && this.pixelScale !== undefined && this.options.scale !== 1) this.resize();
     }
 
     clearTextCache() {
@@ -479,7 +487,9 @@ class Engine {
             this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples);
         }
 
-        // Version and FPS in the view's top corners, kept unobtrusive
+        // Version and FPS in the view's top corners, kept unobtrusive. Drawn at the fit size (the
+        // backdrop's transform) so they stay put whatever the Options scale is.
+        r.setTransform(this.bgScale, this.bgOffX, this.bgOffY);
         const [vx, vy, vw] = this.layout.view;
         this.text("v" + VERSION, vx + 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, spacing: 1 });
         this.text(this.lastFPS + " FPS", vx + vw - 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, align: "right", spacing: 1 });
