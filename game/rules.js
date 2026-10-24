@@ -48,6 +48,9 @@ const COUNTDOWN_STEPS = 3, COUNTDOWN_STEP_FRAMES = 30;
 
 // Rows per frame the stack falls into cleared rows during a line clear delay (presentation)
 const LINE_DROP_SPEED = 0.5;
+// Frames the stack waits before it falls, so the clear's confetti and flash show first; shortened
+// when the delay is too short to fit the whole fall after it (the delay itself never changes)
+const LINE_DROP_PAUSE = 12;
 
 // Clear messages by number of lines
 const CLEAR_NAMES = ["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"];
@@ -626,11 +629,18 @@ class RuleGame {
         return this.pendingRows.filter(r => r > row).length;
     }
 
+    // Frame of the line clear delay at which the whole stack starts to fall: after
+    // LINE_DROP_PAUSE, or sooner so the longest fall still fits in the delay
+    dropStartFrame() {
+        const longest = Math.ceil(this.pendingRows.length / LINE_DROP_SPEED);
+        return clamp(this.phaseLength - longest, 0, LINE_DROP_PAUSE);
+    }
+
     // Frame of the line clear delay at which the stack at `row` lands: it falls at
     // LINE_DROP_SPEED, or faster when that wouldn't land it before the delay ends
     dropLandFrame(row) {
         const dist = this.getDropDistance(row);
-        return Math.min(Math.ceil(dist / LINE_DROP_SPEED), this.phaseLength);
+        return Math.min(this.dropStartFrame() + Math.ceil(dist / LINE_DROP_SPEED), this.phaseLength);
     }
 
     // How far the stack at `row` has fallen so far (presentation only: the field
@@ -638,7 +648,9 @@ class RuleGame {
     getDropOffset(row) {
         const dist = this.getDropDistance(row);
         if (!dist) return 0;
-        return Math.min(dist, dist * this.phaseCounter / this.dropLandFrame(row));
+        const start = this.dropStartFrame(), land = this.dropLandFrame(row);
+        if (this.phaseCounter >= land) return dist;
+        return Math.max(0, dist * (this.phaseCounter - start) / (land - start));
     }
 
     // Frames since the stack at `row` landed in this line clear delay, −1 while it
