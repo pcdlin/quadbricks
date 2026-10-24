@@ -1,0 +1,326 @@
+// Backdrop pass of the WebGL renderer (renderer.js), drawn first each frame: the backdrop
+// picture, its colour wash and drifting lights, the board glow and the line-clear
+// shockwaves. These are large, soft effects computed per pixel in shaders. The engine
+// builds a scene description each frame (see Engine.backdropScene).
+// Coordinates are device pixels, y down, unless noted.
+
+const BACKDROP_MAX_RINGS = 6;
+
+const FULLSCREEN_VS = `
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+// Static backdrop picture plus the three colour blobs (radial gradients, added)
+const WASH_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform sampler2D uBackground;
+uniform vec3 uBgView;          // scale, offset x, offset y of the backdrop's logical view
+uniform vec3 uBlob[3];         // centre x, y, radius (logical)
+uniform vec4 uBlobColor[3];    // rgb, alpha at the centre
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec3 c = texture2D(uBackground, p / uSize).rgb;
+    vec2 q = (p - uBgView.yz) / uBgView.x;
+    for (int i = 0; i < 3; i++) {
+        float a = uBlobColor[i].a * max(0.0, 1.0 - length(q - uBlob[i].xy) / uBlob[i].z);
+        c += uBlobColor[i].rgb * a;
+    }
+    gl_FragColor = vec4(c, 1.0);
+}`;
+
+// Drifting lights: one quad each, added
+const ORB_VS = `
+attribute vec2 aPos;
+attribute vec3 aOrb;           // centre x, y, radius
+attribute vec4 aColor;         // rgb, alpha at the centre
+uniform vec2 uSize;
+varying vec2 vOff;
+varying float vR;
+varying vec4 vColor;
+void main() {
+    vOff = aPos - aOrb.xy;
+    vR = aOrb.z;
+    vColor = aColor;
+    gl_Position = vec4(aPos.x / uSize.x * 2.0 - 1.0, 1.0 - aPos.y / uSize.y * 2.0, 0.0, 1.0);
+}`;
+const ORB_FS = `
+precision highp float;
+varying vec2 vOff;
+varying float vR;
+varying vec4 vColor;
+void main() {
+    float a = vColor.a * max(0.0, 1.0 - length(vOff) / vR);
+    gl_FragColor = vec4(vColor.rgb * a, 0.0);
+}`;
+
+// Shockwave rings (added) under the board glow (painted over). The glow is a Gaussian
+// blur of the frame, as canvas shadowBlur draws it (sigma = blur / 2), computed exactly
+// for a rectangle; the frame's small corner radius is ignored. Output is premultiplied
+// for blending with ONE, ONE_MINUS_SRC_ALPHA.
+const BOARD_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uView;                       // scale, offset x, offset y of the logical view
+uniform vec4 uGlowRect;                   // x0, y0, x1, y1
+uniform float uGlowSigma;
+uniform vec4 uGlowColor;                  // rgb, alpha (0: no glow)
+uniform vec4 uRing[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, line width (logical)
+uniform vec4 uRingColor[${BACKDROP_MAX_RINGS}];  // core rgb, alpha (0: unused)
+uniform vec3 uRingGlow[${BACKDROP_MAX_RINGS}];   // glow rgb
+uniform float uRingSigma;
+
+float erf(float x) { // Winitzki's approximation, error < 2e-4
+    float x2 = x * x;
+    float ax2 = 0.147 * x2;
+    return sign(x) * sqrt(1.0 - exp(-x2 * (1.2732395 + ax2) / (1.0 + ax2)));
+}
+
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uView.yz) / uView.x;
+    vec3 ring = vec3(0.0);
+    float k = 1.0 / (uRingSigma * 1.4142136);
+    for (int i = 0; i < ${BACKDROP_MAX_RINGS}; i++) {
+        if (uRingColor[i].a <= 0.0) continue;
+        // the ring is a circle stretched 1.6x horizontally
+        float d = abs(length((q - uRing[i].xy) / vec2(1.6, 1.0)) - uRing[i].z) * uView.x;
+        float hw = uRing[i].w * 0.5 * uView.x;
+        float core = clamp(hw - d + 0.5, 0.0, 1.0);
+        float glow = 0.5 * (erf((hw - d) * k) + erf((hw + d) * k));
+        ring += uRingColor[i].a * (uRingGlow[i] * glow + uRingColor[i].rgb * core);
+    }
+    float s = 1.0 / (uGlowSigma * 1.4142136);
+    float gx = 0.5 * (erf((p.x - uGlowRect.x) * s) - erf((p.x - uGlowRect.z) * s));
+    float gy = 0.5 * (erf((p.y - uGlowRect.y) * s) - erf((p.y - uGlowRect.w) * s));
+    float ga = uGlowColor.a * gx * gy;
+    gl_FragColor = vec4(uGlowColor.rgb * ga + ring * (1.0 - ga), ga);
+}`;
+
+// Clear ripples (Clear rings: Ripple): the finished frame, drawn onto the screen through a
+// wave packet on a sheet of glass. Each ripple's surface slope across its front bends the
+// lookup into the frame; nothing is added, so only the refraction shows.
+// The packet: slope = e^(-u²)·sin(3u), u = distance past the front / its width.
+const REFRACT_FS = `
+precision highp float;
+uniform sampler2D uScene;
+uniform vec2 uSize;
+uniform vec3 uView;                              // scale, offset x, offset y of the logical view
+uniform vec4 uWave[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, packet width (logical)
+uniform float uWaveAmp[${BACKDROP_MAX_RINGS}];   // largest displacement (logical; 0: unused)
+
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uView.yz) / uView.x;
+    vec2 disp = vec2(0.0);
+    for (int i = 0; i < ${BACKDROP_MAX_RINGS}; i++) {
+        if (uWaveAmp[i] <= 0.0) continue;
+        vec2 off = q - uWave[i].xy;
+        float d = length(off);
+        float u = (d - uWave[i].z) / uWave[i].w;
+        if (abs(u) > 3.5) continue; // e^(-u²) is below 1/200000 past this
+        float env = exp(-u * u) * smoothstep(0.0, uWave[i].w, d); // calm at the centre
+        disp += off / max(d, 0.001) * env * sin(3.0 * u) * uWaveAmp[i];
+    }
+    vec2 dp = vec2(disp.x, -disp.y) * uView.x / uSize; // render targets are stored bottom up
+    gl_FragColor = vec4(texture2D(uScene, gl_FragCoord.xy / uSize + dp).rgb, 1.0);
+}`;
+
+class GLBackdrop {
+    constructor(renderer) {
+        this.r = renderer;
+        this.gl = renderer.gl;
+        this.background = null;
+        // uniform arrays, filled each frame
+        this.blob = new Float32Array(9);
+        this.blobColor = new Float32Array(12);
+        this.ring = new Float32Array(BACKDROP_MAX_RINGS * 4);
+        this.ringColor = new Float32Array(BACKDROP_MAX_RINGS * 4);
+        this.ringGlow = new Float32Array(BACKDROP_MAX_RINGS * 3);
+        this.waveAmp = new Float32Array(BACKDROP_MAX_RINGS);
+        renderer.restoreHandlers.push(() => this.setup());
+        this.setup();
+    }
+
+    setup() {
+        const gl = this.gl;
+        this.wash = this.r.program(FULLSCREEN_VS, WASH_FS, [["aPos", 2]]);
+        this.orbProgram = this.r.program(ORB_VS, ORB_FS, [["aPos", 2], ["aOrb", 3], ["aColor", 4]]);
+        this.board = this.r.program(FULLSCREEN_VS, BOARD_FS, [["aPos", 2]]);
+        this.refraction = this.r.program(FULLSCREEN_VS, REFRACT_FS, [["aPos", 2]]);
+        // one triangle covering the screen
+        this.fullscreen = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreen);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+        this.orbBuffer = gl.createBuffer();
+        this.orbData = new Float32Array(0);
+    }
+
+    // The static backdrop picture (a new canvas the size of the screen, drawn 1:1)
+    setBackground(canvas) {
+        this.r.releaseTexture(this.background);
+        this.background = this.r.texture(canvas);
+    }
+
+    drawFullscreen(p) {
+        const gl = this.gl;
+        const loc = p.attribs[0].loc; // aPos
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreen);
+        gl.enableVertexAttribArray(loc);
+        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.disableVertexAttribArray(loc);
+    }
+
+    // scene: { bgView: [scale, offX, offY], view: [scale, offX, offY],
+    //   blobs: [{x, y, r, rgb, a}] (backdrop logical), orbs: [{x, y, r, rgb, a}] (same),
+    //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
+    //   glow: null or {rect: [x0, y0, x1, y1], sigma, rgb, a} }
+    render(scene) {
+        const gl = this.gl;
+        this.r.flush(); // anything queued before goes underneath
+        const width = this.r.width, height = this.r.height;
+        const [bs, bx, by] = scene.bgView;
+
+        // Backdrop picture and colour wash
+        let p = this.wash;
+        gl.useProgram(p.prog);
+        gl.disable(gl.BLEND);
+        gl.uniform2f(p.u("uSize"), width, height);
+        gl.uniform3fv(p.u("uBgView"), scene.bgView);
+        this.r.bindTexture(this.background, 0);
+        gl.uniform1i(p.u("uBackground"), 0);
+        const blob = this.blob, blobColor = this.blobColor;
+        blobColor.fill(0); // unused blobs add nothing
+        for (let i = 0; i < scene.blobs.length; i++) {
+            const b = scene.blobs[i];
+            blob[i * 3] = b.x; blob[i * 3 + 1] = b.y; blob[i * 3 + 2] = b.r;
+            blobColor.set(b.rgb, i * 4);
+            blobColor[i * 4 + 3] = b.a;
+        }
+        gl.uniform3fv(p.u("uBlob"), blob);
+        gl.uniform4fv(p.u("uBlobColor"), blobColor);
+        this.drawFullscreen(p);
+
+        gl.enable(gl.BLEND);
+
+        // Drifting lights
+        if (scene.orbs.length) {
+            p = this.orbProgram;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            const stride = p.stride; // pos 2, orb 3, colour 4
+            const need = scene.orbs.length * 6 * stride;
+            if (this.orbData.length < need) this.orbData = new Float32Array(need);
+            const d = this.orbData;
+            let n = 0;
+            for (const o of scene.orbs) {
+                const cx = bx + o.x * bs, cy = by + o.y * bs, r = o.r * bs;
+                for (let k = 0; k < 12; k += 2) {
+                    d[n++] = cx + SHAPE_CORNERS[k] * r; d[n++] = cy + SHAPE_CORNERS[k + 1] * r;
+                    d[n++] = cx; d[n++] = cy; d[n++] = r;
+                    d[n++] = o.rgb[0]; d[n++] = o.rgb[1]; d[n++] = o.rgb[2]; d[n++] = o.a;
+                }
+            }
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.orbBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, d.subarray(0, n), gl.DYNAMIC_DRAW);
+            for (const a of p.attribs) {
+                gl.enableVertexAttribArray(a.loc);
+                gl.vertexAttribPointer(a.loc, a.size, gl.FLOAT, false, stride * 4, a.offset * 4);
+            }
+            gl.drawArrays(gl.TRIANGLES, 0, n / stride);
+            for (const a of p.attribs) gl.disableVertexAttribArray(a.loc);
+        }
+
+        // Shockwaves and board glow, only inside the box they can light
+        const rings = scene.rings.slice(-BACKDROP_MAX_RINGS);
+        const box = this.boardPassBounds(scene, rings);
+        if (box) {
+            p = this.board;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uView"), scene.view);
+            const ring = this.ring, ringColor = this.ringColor, ringGlow = this.ringGlow;
+            ringColor.fill(0); // alpha 0: slot unused
+            for (let i = 0; i < rings.length; i++) {
+                const r = rings[i];
+                ring[i * 4] = r.x; ring[i * 4 + 1] = r.y; ring[i * 4 + 2] = r.r; ring[i * 4 + 3] = r.width;
+                ringColor.set(r.rgb, i * 4);
+                ringColor[i * 4 + 3] = r.a;
+                ringGlow.set(r.glowRgb, i * 3);
+            }
+            gl.uniform4fv(p.u("uRing"), ring);
+            gl.uniform4fv(p.u("uRingColor"), ringColor);
+            gl.uniform3fv(p.u("uRingGlow"), ringGlow);
+            gl.uniform1f(p.u("uRingSigma"), scene.ringSigma);
+            const glow = scene.glow;
+            if (glow) {
+                gl.uniform4fv(p.u("uGlowRect"), glow.rect);
+                gl.uniform1f(p.u("uGlowSigma"), glow.sigma);
+                gl.uniform4f(p.u("uGlowColor"), glow.rgb[0], glow.rgb[1], glow.rgb[2], glow.a);
+            } else {
+                gl.uniform1f(p.u("uGlowSigma"), 1);
+                gl.uniform4f(p.u("uGlowColor"), 0, 0, 0, 0);
+            }
+            gl.enable(gl.SCISSOR_TEST);
+            gl.scissor(box[0], height - box[3], box[2] - box[0], box[3] - box[1]); // GL counts from the bottom
+            this.drawFullscreen(p);
+            gl.disable(gl.SCISSOR_TEST);
+        }
+    }
+
+    // The frame drawn into layer (a render target the size of the screen) onto the screen,
+    // through the clear ripples: [{x, y, r, width, amp}] (view logical, see
+    // Engine.rippleShapes). view: [scale, offX, offY] of the logical view.
+    refract(layer, view, waves) {
+        const gl = this.gl;
+        this.r.flush();
+        waves = waves.slice(-BACKDROP_MAX_RINGS);
+        const p = this.refraction;
+        gl.useProgram(p.prog);
+        gl.disable(gl.BLEND);
+        gl.uniform2f(p.u("uSize"), this.r.width, this.r.height);
+        gl.uniform3fv(p.u("uView"), view);
+        this.r.bindTexture(layer, 0);
+        gl.uniform1i(p.u("uScene"), 0);
+        const wave = this.ring, amp = this.waveAmp;
+        amp.fill(0); // 0: slot unused
+        for (let i = 0; i < waves.length; i++) {
+            const w = waves[i];
+            wave[i * 4] = w.x; wave[i * 4 + 1] = w.y; wave[i * 4 + 2] = w.r; wave[i * 4 + 3] = w.width;
+            amp[i] = w.amp;
+        }
+        gl.uniform4fv(p.u("uWave"), wave);
+        gl.uniform1fv(p.u("uWaveAmp"), amp);
+        this.drawFullscreen(p);
+        gl.enable(gl.BLEND);
+    }
+
+    // Device-pixel box [x0, y0, x1, y1] around the board glow and the rings, 4 sigma past
+    // their edges (beyond that they add under 1/10000), or null when they draw nothing
+    boardPassBounds(scene, rings) {
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        const add = (ax, ay, bx, by) => {
+            x0 = Math.min(x0, ax); y0 = Math.min(y0, ay);
+            x1 = Math.max(x1, bx); y1 = Math.max(y1, by);
+        };
+        const glow = scene.glow;
+        if (glow && glow.a > 0) {
+            const m = 4 * glow.sigma;
+            add(glow.rect[0] - m, glow.rect[1] - m, glow.rect[2] + m, glow.rect[3] + m);
+        }
+        const [s, ox, oy] = scene.view;
+        for (const ring of rings) {
+            if (ring.a <= 0) continue;
+            // logical units before the ring's 1.6x horizontal stretch; the blur is in device pixels
+            const reach = ring.r + ring.width / 2 + 4 * scene.ringSigma / s;
+            const cx = ox + ring.x * s, cy = oy + ring.y * s;
+            add(cx - reach * 1.6 * s, cy - reach * s, cx + reach * 1.6 * s, cy + reach * s);
+        }
+        x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0));
+        x1 = Math.min(this.r.width, Math.ceil(x1)); y1 = Math.min(this.r.height, Math.ceil(y1));
+        return x1 > x0 && y1 > y0 ? [x0, y0, x1, y1] : null;
+    }
+}

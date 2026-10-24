@@ -1,0 +1,8 @@
+# Binaries
+*.exe
+*.dll
+*.o
+*.obj
+
+# Build output
+dist/

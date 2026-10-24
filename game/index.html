@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quadbricks</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+    html, body { margin: 0; height: 100%; background: #04050e; overflow: hidden; }
+    body { display: flex; align-items: center; justify-content: center; }
+    canvas { display: block; position: fixed; left: 0; top: 0; }
+    .nogl { color: #f4ecdc; font: 600 16px "Archivo", system-ui, sans-serif; letter-spacing: 1px; text-align: center; padding: 16px; }
+</style>
+</head>
+<body>
+<canvas id="screen"></canvas>
+<script src="game.js"></script>
+<script src="rules.js"></script>
+<script src="sound.js"></script>
+<script src="tiles.js"></script>
+<script src="options.js"></script>
+<script src="renderer.js"></script>
+<script src="backdrop.js"></script>
+<script src="engine.js"></script>
+<script>
+    let engine;
+    try {
+        engine = new Engine(document.getElementById("screen"));
+        engine.init().then(() => engine.start());
+    } catch (e) {
+        document.body.innerHTML = '<p class="nogl">Quadbricks needs WebGL, which this browser has turned off or doesn\'t support.</p>';
+    }
+</script>
+</body>
+</html>
