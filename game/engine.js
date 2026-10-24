@@ -63,7 +63,7 @@ const OPTIONS_ITEMS = [
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
 // Settings changed with ← →, by screen; descriptions show the current setting (optionValue())
-// (preview: the card is taller and shows the block style preview under its value)
+// (preview: the card is a little taller and shows the block style preview at its right)
 const VISUAL_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "scale", name: "Scale", accent: tetL },
@@ -107,13 +107,14 @@ const LEVEL_CHOICES = Object.fromEntries(LEVEL_ITEMS.map(item => [item.id, item.
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
 const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
-// Block style preview inside its card: a block per style, in colour indices (cyan, orange, purple)
+// Block style preview at the right of its card: a block per style, in colour indices (cyan, orange, purple)
 const PREVIEW_BLOCKS = [["active", 1], ["locked", 3], ["ghost", 2]];
-const PREVIEW_GAP = 10;
-const PREVIEW_PAD = 12; // what the preview adds to its card's height besides its blocks
+const PREVIEW_GAP = 6;
+const PREVIEW_RIGHT = 38; // from the preview's right end to the card's, leaving room for the ▶
+const PREVIEW_PAD = 6; // what the preview adds to its card's height
 // A menu card's height (cards with preview are taller), and a list's from its first card's top to its last's bottom
 function menuRowHeight(item, rowH) {
-    return item.preview ? rowH + CELL + PREVIEW_PAD : rowH;
+    return item.preview ? rowH + PREVIEW_PAD : rowH;
 }
 function menuListHeight(items, rowH, gap) {
     return items.reduce((h, item) => h + menuRowHeight(item, rowH) + gap, 0) - (items.length ? gap : 0);
@@ -1460,8 +1461,9 @@ class Engine {
     }
 
     // One block each as a falling piece, settled stack and ghost in the chosen block style, at
-    // their size in the well and each in its own colour (PREVIEW_BLOCKS), in a row from x
-    drawTilesetPreview(x, top) {
+    // their size in the well and each in its own colour (PREVIEW_BLOCKS), in a row ending at right
+    drawTilesetPreview(right, top) {
+        const x = right - PREVIEW_BLOCKS.length * (CELL + PREVIEW_GAP) + PREVIEW_GAP;
         PREVIEW_BLOCKS.forEach(([style, color], n) => this.drawBlock(color, x + n * (CELL + PREVIEW_GAP), top, CELL, style));
     }
 
@@ -1530,21 +1532,22 @@ class Engine {
     }
 
     // Cards with an accent piece, name and description; the selected one is highlighted. Cards
-    // with preview are taller and show the block style preview below.
+    // with preview are a little taller and show the block style preview at the right.
     // scroll: logical units scrolled out above the top (fractional while easing)
     drawMenuList(items, selectedIndex, top, rowH = 64, gap = 10, scroll = 0) {
         const listW = 420, x = VIEW_W / 2 - listW / 2;
         let y = top - scroll;
         items.forEach((item, n) => {
             const selected = n === selectedIndex;
-            this.card(x, y, listW, menuRowHeight(item, rowH), 10, selected, PIECE_COLORS[item.accent].base, 5);
-            if (item.preview) this.drawTilesetPreview(x + 92, y + rowH - 2); // under the name and value
+            const h = menuRowHeight(item, rowH);
+            this.card(x, y, listW, h, 10, selected, PIECE_COLORS[item.accent].base, 5);
+            if (item.preview) this.drawTilesetPreview(x + listW - PREVIEW_RIGHT, y + (h - CELL) / 2); // right of the name
 
-            this.drawPieceCentered(item.accent, x + 50, y + rowH / 2, 13, selected ? "active" : "locked");
-            this.text(item.name.toUpperCase(), x + 92, y + rowH / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
-            this.text(item.desc, x + 92, y + rowH / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
-            if (selected) this.text("▶", x + listW - 26, y + rowH / 2, { size: 14, color: this.pulseInk(10), align: "center" });
-            y += menuRowHeight(item, rowH) + gap;
+            this.drawPieceCentered(item.accent, x + 50, y + h / 2, 13, selected ? "active" : "locked");
+            this.text(item.name.toUpperCase(), x + 92, y + h / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
+            this.text(item.desc, x + 92, y + h / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
+            if (selected) this.text("▶", x + listW - 26, y + h / 2, { size: 14, color: this.pulseInk(10), align: "center" });
+            y += h + gap;
         });
     }
 
