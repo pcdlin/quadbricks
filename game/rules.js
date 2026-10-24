@@ -1310,6 +1310,13 @@ class RuleGame {
         }
         this.sonicMax = Math.max(this.sonicMax, distance);
         if (distance > 0) this.sounds.push("sonic");
+        if (this.tap && this.variant !== "death" && distance > 0) { // TAP shows the drop trail for the sonic drop too (not Death)
+            const shape = this.shapes[this.curPiece_type][this.curPiece_rotation];
+            for (let i = 0; i < 4; i++)
+                for (let j = 0; j < 4; j++)
+                    if (shape[i][j])
+                        this.hardDropCells.push({ row: this.curPiece_row + i, col: this.curPiece_col + j, type: this.curPiece_type, dist: distance, cleared: false });
+        }
     }
 
     hardDrop() {
