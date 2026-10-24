@@ -294,16 +294,13 @@ class Engine {
             sway: Math.random() * 6.28, hueOff: (Math.random() - 0.5) * 70,
             a: 0.1 + Math.random() * 0.22,
         }));
-        // Playing field motion: a slow drift made of two waves per axis with random speeds
-        // and phases, and a spring knocked by hard drops
-        this.tiltWaves = [0, 1].map(() => [
-            { f: 0.15 + Math.random() * 0.2, p: Math.random() * 6.28 },
-            { f: 0.4 + Math.random() * 0.3, p: Math.random() * 6.28 },
-        ]);
+        // Playing field motion: a slow drift made of two waves per axis, and a spring knocked
+        // by hard drops
+        this.uiFrame = 0;
+        this.newTiltWaves();
         this.boardLayer = null; // render target the field is drawn into when it moves
         this.blockCache = new Map(); // tileset:size -> sprite atlas
         this.glowAtlas = null;
-        this.uiFrame = 0;
         this.sound = new Sound();
     }
 
@@ -570,6 +567,7 @@ class Engine {
         this.game = new RuleGame(mode, variant, startLevel, height, this.options.handling);
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
+        this.newTiltWaves();
     }
 
     // Confetti, flashes, rings and the field's shake: none left over from another game
@@ -626,9 +624,19 @@ class Engine {
         if (Math.abs(s.x) + Math.abs(s.y) + Math.abs(s.vx) + Math.abs(s.vy) < 0.005) s.x = s.y = s.vx = s.vy = 0;
     }
 
+    // A fresh drift starting now, level: waves with random speeds that all start at zero
+    // (phase 0 or π, so the field leans either way first)
+    newTiltWaves() {
+        this.tiltStart = this.uiFrame;
+        this.tiltWaves = [0, 1].map(() => [
+            { f: 0.15 + Math.random() * 0.2, p: Math.random() < 0.5 ? 0 : Math.PI },
+            { f: 0.4 + Math.random() * 0.3, p: Math.random() < 0.5 ? 0 : Math.PI },
+        ]);
+    }
+
     // The field's tilt now (radians about the x and y axes) and shake offset (logical units)
     boardMotion() {
-        const t = this.uiFrame / 60 * TILT_SPEED;
+        const t = (this.uiFrame - this.tiltStart) / 60 * TILT_SPEED;
         const k = this.options.tiltAngle;
         const [ax, ay] = this.tiltWaves.map(([a, b], i) =>
             TILT_MAX[i] * k * (0.65 * Math.sin(t * a.f + a.p) + 0.35 * Math.sin(t * b.f + b.p)));
