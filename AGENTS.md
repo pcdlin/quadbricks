@@ -37,7 +37,7 @@ when WebGL is unavailable).
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings) and the clear ripples' refraction pass. |
 | `game/tiles.js` | Block styles (`TILESETS`): Radiant (default, glassy glow), Glossy, Flat, Neon, Faceted, Pixel, Mono and Game Boy (monochrome; Game Boy gives each piece its own pattern), Original. Loads the Original PNGs. |
 | `game/options.js` | `Options`: key bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
-| `game/touch.js` | `TouchControls`: on-screen buttons in a bar below the view on touch devices (or `?touch=1`); they feed `Engine.onKey()` with the same key codes, and `Engine.resize()` leaves the bar's height free. |
+| `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for `rules.js` (~220 checks). |
@@ -171,6 +171,13 @@ DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn
   engine draws with `boardY`/`boardH`/`wellTop` set per game by `layoutBoard()`: a shorter well (GB's
   18 rows) is centred on the 20-row one, and HOLD/NEXT, banners, glow and the wordmark follow it; the
   stats keep the standard position so five rows still clear the wordmark.
+- Layouts (`this.layout`, chosen in `resize()`): `LAYOUT_FULL` fits the whole 800×720 view;
+  `LAYOUT_COMPACT` (touch devices always, other windows when it shows the well `COMPACT_GAIN` times
+  bigger, i.e. narrow ones) fits only the well and a `COMPACT_SIDE_W` column each side:
+  `drawCompactPanels()` puts HOLD over smaller stats on the left, NEXT on the right, clear messages
+  centred over the well; the menu's wordmark shrinks and the keycap row is hidden. Board coordinates
+  are the same in both; only the view rect (`layout.view`) and the side columns change. With touch,
+  menu hints and the game-over line are reworded for the buttons (`touchWords()`).
 - Playing field motion (`boardMotion()`): the field drifts in 3D, two sine waves per axis
   with random speeds and phases, up to `TILT_MAX` degrees (x, y) × `options.tiltAngle`
   (Options → Visuals → 3D tilt: Off, Subtle, Normal, Strong). A hard drop knocks it down on a damped
@@ -376,7 +383,7 @@ add new globals there.
 - Settled blocks have a thin light rim (Glossy style).
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.
-- Clear messages appear below the next pieces, scaled by importance and combo length.
+- Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
 - Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TAP", "TGM3" and "GB" (in that order). Guideline's
   modes are "Endless", "Marathon", "Sprint" and "Ultra", TGM3's are "World" and "Classic", TAP's
   "Master" and "Death", GB's "A-Type" and "B-Type". GB keeps every visual style (Guideline colours,

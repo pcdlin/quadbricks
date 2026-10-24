@@ -6,9 +6,7 @@
 
 const STATE_MENU = 0, STATE_GAME = 1;
 
-const TOUCH_CROP_TOP = 40, TOUCH_CROP_BOTTOM = 40; // view rows (logical px) that may be covered with touch controls
-
-const VERSION ="0.1"; // shown in the top left corner
+const VERSION = "0.1"; // shown in the top left corner
 
 // Game keys are bound in options.js; menus always use these (KeyboardEvent.code)
 const MENU_KEYS = ["Escape", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
@@ -91,6 +89,12 @@ function frameValue(frames) {
     return `${frames} F  ·  ${Math.round(frames * 1000 / 60)} ms`;
 }
 
+// Key hints reworded for the on-screen buttons: OK and BACK in menus, MENU in games
+function touchWords(s) {
+    return s.replace("ESC — BACK TO MENU", "TAP MENU TO GO BACK").replace("ESC FOR MENU", "TAP MENU")
+        .replace(/ESC  BACK/g, "BACK").replace(/ENTER/g, "OK").replace(/ESC/g, "BACK");
+}
+
 // Start step 3 (GB): the starting level, and B-Type's height (levelItems())
 const LEVEL_ITEMS = [
     { id: "startLevel", name: "Level", accent: tetT },
@@ -112,6 +116,18 @@ const BOARD_H = CELL * (HEIGHT - VISIBLE_TOP);
 const SIDE_W = 170;
 const LEFT_X = BOARD_X - 30 - SIDE_W;
 const RIGHT_X = BOARD_X + BOARD_W + 30;
+// The compact layout (touch devices, narrow windows) crops the view to the well with a narrow column
+// each side: HOLD over the stats on the left, NEXT on the right; clear messages show over the well
+const COMPACT_SIDE_W = 72;
+const COMPACT_GAP = 10; // between the well's frame and a column
+const COMPACT_GAIN = 1.2; // without touch: used when it shows the well at least this much bigger
+// view: the part of the logical view [x, y, w, h] fitted to the window
+const LAYOUT_FULL = { compact: false, view: [0, 0, VIEW_W, VIEW_H], leftX: LEFT_X, rightX: RIGHT_X, sideW: SIDE_W };
+const LAYOUT_COMPACT = (() => {
+    const leftX = BOARD_X - 8 - COMPACT_GAP - COMPACT_SIDE_W, x0 = leftX - 12;
+    return { compact: true, view: [x0, 24, VIEW_W - 2 * x0, BOARD_Y + BOARD_H + 16 - 24],
+        leftX, rightX: BOARD_X + BOARD_W + 8 + COMPACT_GAP, sideW: COMPACT_SIDE_W };
+})();
 
 // ----------------------------------------------------------
 // LOOK
@@ -215,6 +231,7 @@ class Engine {
         this.handlingpos = 0;
         this.levelpos = 0;    // Level, or Height (B-Type)
         this.layoutBoard(VISIBLE_TOP);
+        this.layout = LAYOUT_FULL; // full or compact, by window (resize())
         this.startLevels = {}; // starting level chosen per mode ("rule set.mode"), kept for the session
         this.startHeights = {}; // B-Type height, the same way
         this.visualsScroll = 0;       // Visuals cards scrolled out above, eased
@@ -273,7 +290,7 @@ class Engine {
 
         this.touch = new TouchControls(this);
         this.resize();
-        window.addEventListener("resize", () => { this.resize(); this.touch.mode = null; });
+        window.addEventListener("resize", () => this.resize());
         window.addEventListener("keydown", (e) => this.onKey(e, true));
         window.addEventListener("keyup", (e) => this.onKey(e, false));
         // keys let go in another window never send keyup here
@@ -285,25 +302,31 @@ class Engine {
         window.addEventListener("pointerdown", () => this.sound.unlock());
     }
 
-    // Fill the window, fit the logical view centred inside it and render at device resolution.
-    // The Options scale shrinks the view only; the backdrop always covers the window at the fit size.
+    // Fill the window, fit the layout's view centred inside it (beside or above the touch controls)
+    // and render at device resolution. The Options scale shrinks the view only; the backdrop always
+    // covers the window at the fit size.
     resize() {
         const winW = window.innerWidth, winH = window.innerHeight;
-        const inset = this.touch ? this.touch.height() : 0; // touch buttons below the view
-        // the unused strips above and below the well may sit under the bar, so the view needn't shrink for it
-        const cropTop = inset ? TOUCH_CROP_TOP : 0, viewH = VIEW_H - cropTop - (inset ? TOUCH_CROP_BOTTOM : 0);
-        const fit = Math.min(winW / VIEW_W, (winH - inset) / viewH);
+        const fitIn = ([, , w, h], availW, availH) => Math.min(availW / w, availH / h);
+        // touch devices always take the compact layout; elsewhere a narrow window does
+        this.layout = this.touch.enabled || fitIn(LAYOUT_COMPACT.view, winW, winH) >= COMPACT_GAIN * fitIn(LAYOUT_FULL.view, winW, winH)
+            ? LAYOUT_COMPACT : LAYOUT_FULL;
+        const [vx, vy, vw, vh] = this.layout.view;
+        const inset = this.touch.place(winW, winH, this.layout.view);
+        const availW = winW - inset.left - inset.right, availH = winH - inset.bottom;
+        const fit = fitIn(this.layout.view, availW, availH);
         const dpr = window.devicePixelRatio || 1;
+        const cx = (inset.left + availW / 2) * dpr, cy = availH / 2 * dpr; // where the view's centre goes
         this.canvas.style.width = winW + "px";
         this.canvas.style.height = winH + "px";
         this.canvas.width = Math.round(winW * dpr);
         this.canvas.height = Math.round(winH * dpr);
         this.pixelScale = fit * this.options.scale * dpr;
-        this.offX = (this.canvas.width - VIEW_W * this.pixelScale) / 2;
-        this.offY = (this.canvas.height - inset * dpr - viewH * this.pixelScale) / 2 - cropTop * this.pixelScale;
+        this.offX = cx - (vx + vw / 2) * this.pixelScale;
+        this.offY = cy - (vy + vh / 2) * this.pixelScale;
         this.bgScale = fit * dpr;
-        this.bgOffX = (this.canvas.width - VIEW_W * this.bgScale) / 2;
-        this.bgOffY = (this.canvas.height - inset * dpr - viewH * this.bgScale) / 2 - cropTop * this.bgScale;
+        this.bgOffX = cx - (vx + vw / 2) * this.bgScale;
+        this.bgOffY = cy - (vy + vh / 2) * this.bgScale;
         // sprites and text are rendered at device resolution: redo them at the new scale
         for (const atlas of this.blockCache.values()) this.r.releaseTexture(atlas.tex);
         this.blockCache.clear();
@@ -456,10 +479,11 @@ class Engine {
             this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples);
         }
 
-        // Version and FPS, kept unobtrusive
-        this.text("v" + VERSION, 16, 14, { size: 10, weight: 500, color: INK_FAINT, spacing: 1 });
-        this.text(this.lastFPS + " FPS", VIEW_W - 16, 14, { size: 10, weight: 500, color: INK_FAINT, align: "right", spacing: 1 });
-        if (this.sound.muted) this.text("SOUND OFF · " + keyLabel(this.options.keys.sound), VIEW_W - 16, 30, { size: 10, weight: 600, color: INK_DIM, align: "right", spacing: 1 });
+        // Version and FPS in the view's top corners, kept unobtrusive
+        const [vx, vy, vw] = this.layout.view;
+        this.text("v" + VERSION, vx + 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, spacing: 1 });
+        this.text(this.lastFPS + " FPS", vx + vw - 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, align: "right", spacing: 1 });
+        if (this.sound.muted) this.text("SOUND OFF · " + keyLabel(this.options.keys.sound), vx + vw - 16, vy + 30, { size: 10, weight: 600, color: INK_DIM, align: "right", spacing: 1 });
         r.end();
     }
 
@@ -1089,10 +1113,10 @@ class Engine {
     }
 
     // Small caps heading with a hairline rule, used above each side panel
-    label(s, x, y, w) {
-        this.text(s, x, y, { size: 12, weight: 700, color: INK_DIM, spacing: 4 });
-        const tw = this.measureText(s, 12, 700, 4);
-        this.r.rect(x + tw + 8, y, w - tw - 8, 1, INK_FAINT);
+    label(s, x, y, w, size = 12, spacing = 4) {
+        this.text(s, x, y, { size, weight: 700, color: INK_DIM, spacing });
+        const tw = this.measureText(s, size, 700, spacing);
+        if (w - tw - 8 > 4) this.r.rect(x + tw + 8, y, w - tw - 8, 1, INK_FAINT);
     }
 
     panel(x, y, w, h) {
@@ -1252,8 +1276,9 @@ class Engine {
     drawMenu() {
         const cx = VIEW_W / 2;
 
-        // Wordmark
-        this.text("QUADBRICKS", cx, 150,{ size: 76, weight: 900, color: INK, align: "center", spacing: 14 });
+        // Wordmark, shrunk to the compact view's width
+        const markSize = Math.min(76, Math.floor(76 * (this.layout.view[2] - 48) / this.measureText("QUADBRICKS", 76, 900, 14)));
+        this.text("QUADBRICKS", cx, 150, { size: markSize, weight: 900, color: INK, align: "center", spacing: Math.round(markSize * 14 / 76) });
         this.colorStripe(cx - 150, 200, 300, 4);
 
         // Slide between screens: forward (deeper) moves left, back moves right
@@ -1271,7 +1296,8 @@ class Engine {
         const slide = this.menuSlide;
         const t = slide ? Math.min(1, (now - slide.start) / MENU_SLIDE_MS) : 1;
         if (t >= 1) this.menuSlide = null;
-        this.drawControls(cx, 660); // the same on every screen, so it stays put
+        // the same on every screen, so it stays put; too wide for the compact view, and no use with touch
+        if (!this.layout.compact) this.drawControls(cx, 660);
         if (!slide || t >= 1) { this.drawMenuScreen(this.menuStep); return; }
         const ease = 1 - Math.pow(1 - t, 3);
         const r = this.r;
@@ -1367,6 +1393,7 @@ class Engine {
         }
 
         // Footer
+        if (this.touch.enabled) hint = touchWords(hint);
         this.text(hint, cx, hintY, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
     }
 
@@ -1485,7 +1512,8 @@ class Engine {
         if (m.rx || m.ry || m.dx || m.dy) this.drawBoardInMotion(m);
         else this.drawBoard(); // straight onto the screen, pixel-sharp
         this.drawParticles();  // confetti flies off the field: never tilted
-        this.drawSidePanels();
+        if (this.layout.compact) this.drawCompactPanels();
+        else this.drawSidePanels();
 
         // Overlays
         if (game.inStartDelay()) this.drawCountdown(game);
@@ -1493,7 +1521,8 @@ class Engine {
             const title = game.endTitle || "GAME OVER";
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
                 : title === "COMPLETE" ? PIECE_COLORS[tetI].base : PIECE_COLORS[tetZ].base;
-            this.boardBanner(title, game.endSub || "ESC — BACK TO MENU", 1, accent);
+            const sub = game.endSub || "ESC — BACK TO MENU";
+            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent);
         }
     }
 
@@ -1605,8 +1634,9 @@ class Engine {
         return { size: 20, color: INK };
     }
 
-    // Clear names in the right column, starting at top (below the next pieces): pop in,
-    // then fade out. Back-to-back sits above the clear name; combo and perfect clear below it.
+    // Clear names in the right column, starting at top (below the next pieces), or centred over the
+    // well in the compact layout: pop in, then fade out. Back-to-back sits above the clear name;
+    // combo and perfect clear below it.
     drawClearMessage(top) {
         const game = this.game;
         const age = game.actionAge;
@@ -1617,9 +1647,9 @@ class Engine {
         const pop = 1 + (MESSAGE_POP_MAX - 1) * Math.max(0, 1 - age / 8);
         r.save();
         r.globalAlpha = alpha;
-        r.translate(RIGHT_X, top);
+        r.translate(this.layout.compact ? BOARD_X + BOARD_W / 2 : RIGHT_X, top);
         r.scale(pop);
-        r.image(c.tex, -c.pad, -c.pad, c.tex.w / c.res, c.tex.h / c.res);
+        r.image(c.tex, -c.pad - c.anchor, -c.pad, c.tex.w / c.res, c.tex.h / c.res);
         r.restore();
     }
 
@@ -1634,16 +1664,19 @@ class Engine {
         const lines = [...actions].sort((a, b) => order[a.kind] - order[b.kind]).map(a => ({ a, s: this.messageStyle(a) }));
         const canvas = document.createElement("canvas");
         const g = canvas.getContext("2d");
-        // shrink lines that would be wider than the column
+        // the column's width, or the well's (compact: centred over it)
+        const compact = this.layout.compact;
+        const w = compact ? BOARD_W - 24 : SIDE_W, anchor = compact ? w / 2 : 0, align = compact ? "center" : "left";
+        // shrink lines that would be wider than that
         let height = 0;
         for (const { a, s } of lines) {
             g.font = `900 ${s.size}px ${FONT}`;
             g.letterSpacing = (s.spacing ?? 2) + "px";
             const width = g.measureText(a.text).width;
-            if (width > SIDE_W) s.size = Math.floor(s.size * SIDE_W / width);
+            if (width > w) s.size = Math.floor(s.size * w / width);
             height += s.size * 1.15;
         }
-        canvas.width = Math.ceil((SIDE_W + pad * 2) * res);
+        canvas.width = Math.ceil((w + pad * 2) * res);
         canvas.height = Math.ceil((height + pad * 2) * res);
 
         g.scale(res, res);
@@ -1655,16 +1688,16 @@ class Engine {
             // (shadow blur is in canvas pixels: scale it like the main canvas would)
             g.shadowColor = "rgba(0,0,0,0.85)";
             g.shadowBlur = 10 * MESSAGE_POP_MAX;
-            fillText2D(g, a.text, 0, y, { size: s.size, weight: 900, color: s.color, spacing: s.spacing ?? 2 });
+            fillText2D(g, a.text, anchor, y, { size: s.size, weight: 900, color: s.color, spacing: s.spacing ?? 2, align });
             if (s.glow) {
                 g.shadowColor = s.glow;
                 g.shadowBlur = (8 + s.size / 3) * MESSAGE_POP_MAX;
-                fillText2D(g, a.text, 0, y, { size: s.size, weight: 900, color: s.color, spacing: s.spacing ?? 2 });
+                fillText2D(g, a.text, anchor, y, { size: s.size, weight: 900, color: s.color, spacing: s.spacing ?? 2, align });
             }
             y += s.size * 0.575;
         }
         if (cached) this.r.releaseTexture(cached.tex);
-        this.messageCache = { actions, count: actions.length, tex: this.r.texture(canvas), pad, res };
+        this.messageCache = { actions, count: actions.length, tex: this.r.texture(canvas), pad, res, anchor };
         return this.messageCache;
     }
 
@@ -1726,6 +1759,52 @@ class Engine {
         } else {
             this.drawClearMessage(this.boardY + 140 + 20);
         }
+    }
+
+    // The compact layout's columns: HOLD over the stats on the left, NEXT and the rest of the
+    // preview on the right; clear messages show over the well
+    drawCompactPanels() {
+        const game = this.game;
+        const { leftX, rightX, sideW } = this.layout;
+        const box = 64, size = 14; // HOLD and first NEXT panels, and their pieces
+        const top = this.boardY + 4;
+        // type size for a value, shrunk to the column (measured with zeros, so numbers don't change size as they count)
+        const fitted = (s, max) => Math.min(max, Math.floor(max * sideW / this.measureText(s.replace(/\d/g, "0"), max, 800, 1)));
+
+        let y = top;
+        if (game.hasHold) {
+            this.label("HOLD", leftX, y, sideW, 10, 3);
+            this.panel(leftX, y + 12, sideW, box);
+            this.drawPieceCentered(game.getHeldPiece(), leftX + sideW / 2, y + 12 + box / 2, size, "locked", game);
+            y += 12 + box + 28;
+        }
+        game.getStats().forEach(([name, value], n) => {
+            if (n === 0) { // rule set and mode
+                this.label("RULESET", leftX, y, sideW, 9, 2);
+                this.text(name, leftX, y + 18, { size: fitted(name, 14), weight: 800, color: INK, spacing: 1 });
+                this.text(value, leftX, y + 34, { size: fitted(value, 10), weight: 800, color: INK_DIM, spacing: 1 });
+                y += 58;
+                return;
+            }
+            this.label(name, leftX, y, sideW, 9, 2);
+            const opts = { size: fitted(value, 18), weight: 800, color: INK, spacing: 1 };
+            if (/^[\d:.,/ ]+$/.test(value)) this.textRun(value, leftX, y + 20, opts);
+            else this.text(value, leftX, y + 20, opts);
+            y += 46;
+        });
+
+        this.label("NEXT", rightX, top, sideW, 10, 3);
+        this.panel(rightX, top + 12, sideW, box);
+        this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game);
+        const rest = game.nextCount - 1;
+        if (rest > 0) {
+            const spacing = rest > 2 ? 42 : 50, listTop = top + 12 + box + 10;
+            this.panel(rightX, listTop, sideW, rest * spacing + 8);
+            for (let n = 1; n <= rest; n++) {
+                this.drawPieceCentered(game.rnd_get_queue(n), rightX + sideW / 2, listTop + 4 + spacing * (n - 0.5), rest > 2 ? 11 : 12, "locked", game);
+            }
+        }
+        this.drawClearMessage(this.boardY + this.boardH * 0.3);
     }
 
     // Start countdown 3, 2, 1: each digit slides in and fades out within its half second, the
