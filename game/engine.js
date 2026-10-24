@@ -178,7 +178,8 @@ const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
 const RIPPLE_AMP = 1.55; // refraction strength at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
-const DROP_TRAIL_LIFE = 10; // frames the hard-drop trail takes to dissolve, top to bottom
+const DROP_TRAIL_GROW = 4; // frames the hard-drop trail takes to reach down to the piece
+const DROP_TRAIL_FADE = 10; // frames a drop trail then takes to fade out, all at once
 const DROP_TRAIL_ALPHA = 0.35; // peak opacity of the trail
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 const TILT_MAX = [2.8, 4.8]; // playing field tilt in degrees about the x and y axes, at Normal
@@ -454,7 +455,7 @@ class Engine {
                     // no jolt for each row the field loses before the staff roll
                     if (cleared.length && this.options.shake && !this.game.inRollStart()) this.clearShake(cleared, this.game.chain);
                     const dropped = this.game.takeHardDropCells().map(toColor);
-                    if (dropped.length && this.options.effects) this.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_LIFE + 1 });
+                    if (dropped.length && this.options.effects) this.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 });
                     for (const s of this.game.takeSounds()) {
                         this.sound.play(s);
                         // from the event, not the dropped cells: those a clear removed aren't listed
@@ -877,11 +878,12 @@ class Engine {
         return Math.min(1.3, 0.4 + 0.6 * this.options.effectScale);
     }
 
-    // A drop trail streak in a column, from y0 down to y1 (the blocks), fading in towards them
-    drawTrail(col, y0, y1, color) {
+    // A drop trail streak in a column, from y0 down to y1 (the blocks), fading in towards them;
+    // drawn only down to yEnd while it grows, at `alpha` while it fades
+    drawTrail(col, y0, y1, color, yEnd = y1, alpha = 1) {
         const r = this.r;
-        r.globalAlpha = DROP_TRAIL_ALPHA * this.softEffectScale();
-        r.shape(this.cellX(col) + CELL * 0.2, y0, CELL * 0.6, y1 - y0, { fill: [color + "00", color], fillY: [y0, y1] });
+        r.globalAlpha = DROP_TRAIL_ALPHA * this.softEffectScale() * alpha;
+        r.shape(this.cellX(col) + CELL * 0.2, y0, CELL * 0.6, yEnd - y0, { fill: [color + "00", color], fillY: [y0, y1] });
         r.globalAlpha = 1;
     }
 
@@ -905,9 +907,11 @@ class Engine {
     }
 
     // Faint streak per column from where the piece started to where it landed,
-    // brightest at the piece and fading upwards as well as over time
+    // brightest at the piece and fading upwards; it grows down to the piece, then fades out
     drawDropTrail(f) {
-        const gone = 1 - f.life / (DROP_TRAIL_LIFE + 1); // share of the trail already dissolved
+        const n = DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 - f.life; // frames shown, from 1
+        const grown = Math.min(1, n / DROP_TRAIL_GROW); // share of the trail drawn so far
+        const alpha = 1 - Math.max(0, n - DROP_TRAIL_GROW) / (DROP_TRAIL_FADE + 1);
         const cols = new Map(); // col -> topmost landed cell
         for (const cell of f.cells) {
             const c = cols.get(cell.col);
@@ -917,13 +921,12 @@ class Engine {
             const top = Math.max(cell.row - cell.dist, this.wellTop);
             if (cell.dist <= 0 || cell.row <= top) continue;
             const y1 = this.cellY(cell.row), y0 = this.cellY(top);
-            const yStart = y0 + (y1 - y0) * gone; // dissolve front sweeps down toward the piece
-            if (yStart < y1) this.drawTrail(cell.col, yStart, y1, PIECE_COLORS[cell.type].light);
+            this.drawTrail(cell.col, y0, y1, PIECE_COLORS[cell.type].light, y0 + (y1 - y0) * grown, alpha);
         }
     }
 
     // Line clear delay: a streak above each column of the falling stack, from where it
-    // started to where it is, dissolving top to bottom once it has landed. One per run of
+    // started to where it is, fading out all at once after it has landed. One per run of
     // blocks falling together; drawn under the field, so only the gap above them shows.
     drawLineDropTrails(firstRow) {
         const game = this.game;
@@ -932,17 +935,16 @@ class Engine {
             const dist = game.getDropDistance(i);
             if (!dist) continue;
             const landed = game.getDropLandedFor(i);
-            if (landed >= DROP_TRAIL_LIFE) continue;
-            const gone = landed < 0 ? 0 : (landed + 1) / DROP_TRAIL_LIFE;
+            if (landed >= DROP_TRAIL_FADE) continue;
+            const alpha = landed < 0 ? 1 : 1 - (landed + 1) / (DROP_TRAIL_FADE + 1);
             const y1 = this.cellY(i + game.getDropOffset(i));
             const y0 = this.cellY(Math.max(i, top));
-            const yStart = y0 + (y1 - y0) * gone;
-            if (yStart >= y1) continue;
+            if (y0 >= y1) continue;
             for (let j = 0; j < WIDTH; j++) {
                 const cell = game.getCell(i, j);
                 if (!cell || game.getCellAlpha(i, j) <= 0) continue;
                 if (i > firstRow && game.getCell(i - 1, j) && game.getDropDistance(i - 1) === dist) continue; // not the run's top
-                this.drawTrail(j, yStart, y1, PIECE_COLORS[game.palette[cell]].light);
+                this.drawTrail(j, y0, y1, PIECE_COLORS[game.palette[cell]].light, y1, alpha);
             }
         }
     }
