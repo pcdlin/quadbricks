@@ -190,8 +190,8 @@ const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
 const RIPPLE_AMP = 1.55; // refraction strength at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
-const STACK_BORDER_W = 2; // TGM-style stack border: width of the line, drawn in the empty cells
-const STACK_BORDER_COLOR = "rgba(236,234,244,0.85)";
+const STACK_BORDER_W = 3; // TGM-style stack border: width of the line, drawn on the blocks' edges
+const STACK_BORDER_COLOR = "rgba(222,222,232,0.9)";
 const DROP_TRAIL_GROW = 4; // frames the hard-drop trail takes to reach down to the piece
 const DROP_TRAIL_FADE = 10; // frames a drop trail then takes to fade out, all at once
 const DROP_TRAIL_ALPHA = 0.35; // peak opacity of the trail
@@ -1670,10 +1670,11 @@ class Engine {
     }
 
     // TGM-style border: a light line along every side of the settled stack that faces an empty
-    // cell, drawn in that cell; none along the walls and floor. Rows falling during a line clear
-    // are outlined on their own, and blocks fading in the staff roll take their border with them
+    // cell, drawn on the block's own edge so it never reaches outside the stack; none along the
+    // walls and floor. Rows falling during a line clear are outlined on their own, and blocks
+    // fading in the staff roll take their border with them
     drawStackBorder(firstRow) {
-        const r = this.r, game = this.game, w = STACK_BORDER_W;
+        const r = this.r, game = this.game, w = STACK_BORDER_W, c = STACK_BORDER_COLOR;
         // empty beside a block of a row drawn at offset off: inside the well with nothing visible
         // there (or a block of a row falling apart from it); above the drawn rows counts as empty
         const open = (i, j, off) => j >= 0 && j < WIDTH && i < HEIGHT &&
@@ -1684,15 +1685,20 @@ class Engine {
                 if (open(i, j, off)) continue;
                 const x = this.cellX(j);
                 r.globalAlpha = game.getCellAlpha(i, j);
-                // top and bottom lines reach over outer corners, so the line goes round them
+                const top = open(i - 1, j, off), bottom = open(i + 1, j, off);
+                if (top) r.rect(x, y, CELL, w, c);
+                if (bottom) r.rect(x, y + CELL - w, CELL, w, c);
+                // side lines stop short of the top and bottom lines, so corners aren't drawn twice
+                const y0 = top ? y + w : y, y1 = bottom ? y + CELL - w : y + CELL;
+                if (open(i, j - 1, off)) r.rect(x, y0, w, y1 - y0, c);
+                if (open(i, j + 1, off)) r.rect(x + CELL - w, y0, w, y1 - y0, c);
+                // inner corners: both neighbours filled, the cell between them empty
                 for (let di = -1; di <= 1; di += 2) {
-                    if (!open(i + di, j, off)) continue;
-                    const left = open(i, j - 1, off) && open(i + di, j - 1, off) ? w : 0;
-                    const right = open(i, j + 1, off) && open(i + di, j + 1, off) ? w : 0;
-                    r.rect(x - left, di < 0 ? y - w : y + CELL, CELL + left + right, w, STACK_BORDER_COLOR);
+                    if (open(i + di, j, off)) continue;
+                    const cy = di < 0 ? y : y + CELL - w;
+                    if (!open(i, j - 1, off) && open(i + di, j - 1, off)) r.rect(x, cy, w, w, c);
+                    if (!open(i, j + 1, off) && open(i + di, j + 1, off)) r.rect(x + CELL - w, cy, w, w, c);
                 }
-                if (open(i, j - 1, off)) r.rect(x - w, y, w, CELL, STACK_BORDER_COLOR);
-                if (open(i, j + 1, off)) r.rect(x + CELL, y, w, CELL, STACK_BORDER_COLOR);
             }
         }
         r.globalAlpha = 1;

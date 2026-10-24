@@ -387,7 +387,8 @@ add new globals there.
 - Lock-delay fade on the falling piece; hard-drop flash in the piece's own colour, not white.
 - Options → Visuals → Stack border (`options.border`, off by default): a TGM-style light line
   (`STACK_BORDER_*`, `drawStackBorder()`) along every side of the settled stack that faces an empty
-  cell, drawn in that cell and round outer corners; none along the walls and floor. Falling rows during
+  cell, drawn on the block's own edge (never outside the stack, continuous round inner corners);
+  none along the walls and floor. Falling rows during
   a line clear are outlined on their own; staff roll blocks fade or vanish with their border.
 - Settled blocks have a thin light rim (Glossy style).
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
