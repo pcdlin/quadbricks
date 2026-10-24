@@ -202,7 +202,7 @@ DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn
   in the right column below the next pieces (bigger/warmer for longer combos).
   Options → Visuals → Effects (`options.effects`, level 0–3: Off, Subtle, Normal, Intense; `effectScale` multiplies strengths) at Off turns off confetti, the cleared-row flash and the
   hard-drop trail and flash and the clear rings; clear messages stay. Options → Visuals → Backdrop (`options.backdrop`) separately toggles the animated colour wash and drifting lights, and Clear rings (`options.rings`: `"off"`, `"rings"`, `"ripple"` (default), `RING_MODES`; `Engine.ringMode()` is the one in effect) the line-clear shockwaves, whose strength follows only the effects level (`RING_ALPHA` at Normal). Rings are glowing ellipses in the backdrop pass; Ripple (`rippleShapes()`, `RIPPLE_*`) is a wave packet that travels through the whole view and refracts it: while one runs, `draw()` sends the frame into `sceneLayer` (`GLRenderer.setScreen()`) and `GLBackdrop.refract()` draws it onto the screen through the waves (displacement only: no colour, light or rings of its own).
-- The version (`VERSION` in `engine.js`, "0.1") shows faintly in the top left, the FPS in the top right.
+- The version (`VERSION` in `engine.js`, "0.2") shows faintly in the top left, the FPS in the top right.
 - The READY countdown (`drawCountdown()`) shows each digit sliding in and fading out in its own
   colour (`COUNTDOWN_COLORS`); band and digit are gone on the first frame that takes input.
 - Font: Archivo from Google Fonts with a system fallback (only network dependency).
