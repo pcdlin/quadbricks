@@ -107,8 +107,8 @@ const LEVEL_CHOICES = Object.fromEntries(LEVEL_ITEMS.map(item => [item.id, item.
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
 const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
-// Block style preview at the right of its card: a block per style, in colour indices (cyan, orange, purple)
-const PREVIEW_BLOCKS = [["active", 1], ["locked", 3], ["ghost", 2]];
+// Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
+const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
 const PREVIEW_GAP = 6;
 const PREVIEW_RIGHT = 38; // from the preview's right end to the card's, leaving room for the ▶
 const PREVIEW_PAD = 6; // what the preview adds to its card's height
