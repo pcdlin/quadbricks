@@ -91,9 +91,11 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   the abbreviation spelled out and one line on what it does, drawn under the compact card list for
   the selected item. `options.handling` goes to `RuleGame` in `initGame()`; changes made while a
   game is paused apply at once (`applyHandling()` → `RuleGame.setHandling()`).
-- The Visuals screen shows `VISUALS_VISIBLE` cards at once; the list scrolls (eased in
-  `updateMenuScroll()`, clipped with `GLRenderer.clip()`) to keep the selection in view, with
-  a scrollbar beside it and the block style preview below.
+- The Visuals screen lists Block style first, then Scale, then the rest (`VISUAL_ITEMS`). The Block
+  style card (`preview: true`) is taller (`menuRowHeight()`) and shows the style's preview in it
+  (`drawTilesetPreview()`: the seven colours as active, locked and ghost blocks in one row). The list is
+  `VISUALS_LIST_H` high and scrolls in logical units (eased in `updateMenuScroll()`, clipped with
+  `GLRenderer.clip()`) to keep the selection in view, with a scrollbar beside it.
 
 ### Rules engine (`rules.js`)
 `new RuleGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
@@ -122,7 +124,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   `firstDrawnRow` (0: the two rows above the well are drawn; GB: 4); `wellTop` (first row of the
   well: `VISIBLE_TOP`, GB 4 for its 18 rows), which sizes the board (`Engine.layoutBoard()`).
 - Event queues the engine drains every frame: `takeClearedCells()` (confetti),
-  `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
+  `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
   (`{text, kind, value}`, kinds `clear`/`tspin`/`b2b`/`combo`/`pc`) with `actionAge`.
 - `chain`: consecutive clearing pieces, −1 after a miss, then 0, 1, 2…; identical in every

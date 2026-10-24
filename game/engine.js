@@ -59,18 +59,19 @@ const RULESETS = [
 ];
 const OPTIONS_ITEMS = [
     { name: "Controls", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS },
-    { name: "Visuals", desc: "Effects, backdrop, motion, scale and block style", accent: tetT, screen: MENU_VISUALS },
+    { name: "Visuals", desc: "Block style, scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
 // Settings changed with ← →, by screen; descriptions show the current setting (optionValue())
+// (preview: the card is taller and shows the block style preview under its value)
 const VISUAL_ITEMS = [
+    { id: "tileset", name: "Block style", accent: tetO, preview: true },
+    { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
     { id: "backdrop", name: "Backdrop", accent: tetJ },
     { id: "rings", name: "Clear rings", accent: tetZ },
     { id: "tilt", name: "3D tilt", accent: tetI },
     { id: "shake", name: "Drop shake", accent: tetS },
-    { id: "scale", name: "Scale", accent: tetL },
-    { id: "tileset", name: "Block style", accent: tetO },
 ];
 // Guideline handling; help: the name spelled out and what it does, shown under the list for the selection
 const HANDLING_ITEMS = [
@@ -103,7 +104,17 @@ const LEVEL_ITEMS = [
 ];
 const LEVEL_CHOICES = Object.fromEntries(LEVEL_ITEMS.map(item => [item.id, item.choice]));
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
-const VISUALS_VISIBLE = 6; // cards shown at once; the list scrolls to keep the selection in view
+const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals cards, tighter than the other menus
+const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
+const PREVIEW_SIZE = 14, PREVIEW_GAP = 2, PREVIEW_GROUP_GAP = 14; // block style preview inside its card
+const PREVIEW_H = 28; // what the preview adds to its card's height
+// A menu card's height (cards with preview are taller), and a list's from its first card's top to its last's bottom
+function menuRowHeight(item, rowH) {
+    return item.preview ? rowH + PREVIEW_H : rowH;
+}
+function menuListHeight(items, rowH, gap) {
+    return items.reduce((h, item) => h + menuRowHeight(item, rowH) + gap, 0) - (items.length ? gap : 0);
+}
 
 // ----------------------------------------------------------
 // LAYOUT (logical units, scaled to the window)
@@ -251,7 +262,7 @@ class Engine {
         this.layout = LAYOUT_FULL; // full or compact, by window (resize())
         this.startLevels = {}; // starting level chosen per mode ("rule set.mode"), kept for the session
         this.startHeights = {}; // B-Type height, the same way
-        this.visualsScroll = 0;       // Visuals cards scrolled out above, eased
+        this.visualsScroll = 0;       // Visuals list scrolled out above (logical units), eased
         this.visualsScrollTarget = 0;
         this.controlspos = 0; // key action, or "reset" after the last one
         this.capturing = null; // action waiting for a new key
@@ -1401,21 +1412,20 @@ class Engine {
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
             case MENU_VISUALS: {
-                const top = 236; // six cards, heading in the tagline's place: leaves room for the hint and preview
+                const top = 236; // heading in the tagline's place: leaves room for the hint
                 heading("OPTIONS  ·  VISUALS", INK_DIM, 220);
                 const items = this.settingCards(VISUAL_ITEMS);
-                // Tighter cards leave room for the hint and the preview above the shared controls row;
-                // only VISUALS_VISIBLE of them show, scrolled to keep the selection in view
-                const rowH = 48, gap = 4, listH = VISUALS_VISIBLE * (rowH + gap) - gap;
+                // Tighter cards leave room for the hint above the shared controls row; the list
+                // shows VISUALS_LIST_H of them, scrolled to keep the selection in view
+                const { rowH, gap } = VISUALS_ROWS, listH = VISUALS_LIST_H;
                 const r = this.r;
                 r.save();
                 r.clip(-VIEW_W, top - 1, VIEW_W * 3, listH + 2);
                 this.drawMenuList(items, this.visualspos, top, rowH, gap, this.visualsScroll);
                 r.restore();
-                this.drawScrollbar(VIEW_W / 2 + 210 + 10, top, listH, this.visualsScroll, VISUALS_VISIBLE, items.length);
-                hintY = 566;
+                this.drawScrollbar(VIEW_W / 2 + 210 + 10, top, listH, this.visualsScroll, menuListHeight(items, rowH, gap));
+                hintY = top + listH + 22;
                 hint = "← →  CHANGE      ESC  BACK";
-                this.drawTilesetPreview(578, 16);
                 break;
             }
             case MENU_HANDLING: {
@@ -1444,13 +1454,14 @@ class Engine {
         this.text(hint, cx, hintY, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
     }
 
-    // The seven colours as a falling piece, settled stack and ghost in the chosen block style
-    drawTilesetPreview(top, size = 22) {
-        const gap = 4;
-        const x0 = VIEW_W / 2 - (7 * size + 6 * gap) / 2;
-        ["active", "locked", "ghost"].forEach((style, row) => {
+    // The seven colours as a falling piece, settled stack and ghost in the chosen block style,
+    // side by side in one row centred on cx
+    drawTilesetPreview(cx, top) {
+        const size = PREVIEW_SIZE, gap = PREVIEW_GAP, groupW = 7 * size + 6 * gap;
+        const x0 = cx - (3 * groupW + 2 * PREVIEW_GROUP_GAP) / 2;
+        ["active", "locked", "ghost"].forEach((style, group) => {
             for (let t = 1; t <= 7; t++) {
-                this.drawBlock(t, x0 + (t - 1) * (size + gap), top + row * (size + gap), size, style);
+                this.drawBlock(t, x0 + group * (groupW + PREVIEW_GROUP_GAP) + (t - 1) * (size + gap), top, size, style);
             }
         });
     }
@@ -1495,38 +1506,46 @@ class Engine {
         });
     }
 
-    // Thin track beside a scrolling list, with a thumb for the part in view (if any is hidden)
-    drawScrollbar(x, top, h, scroll, visible, count) {
-        if (count <= visible) return;
+    // Thin track beside a scrolling list of height h, with a thumb for the part in view (if any is
+    // hidden); scroll and total in the same units
+    drawScrollbar(x, top, h, scroll, total) {
+        if (total <= h) return;
         const r = this.r;
         r.shape(x, top, 3, h, { radius: 1.5, fill: "rgba(244,236,220,0.08)" });
-        r.shape(x, top + h * scroll / count, 3, h * visible / count, { radius: 1.5, fill: "rgba(244,236,220,0.4)" });
+        r.shape(x, top + h * scroll / total, 3, h * h / total, { radius: 1.5, fill: "rgba(244,236,220,0.4)" });
     }
 
     // Eases the Visuals list's scroll toward keeping the selected card in view
     updateMenuScroll() {
-        let target = this.visualsScrollTarget;
+        const { rowH, gap } = VISUALS_ROWS;
         const pos = this.visualspos;
-        if (pos < target) target = pos;
-        else if (pos >= target + VISUALS_VISIBLE) target = pos - VISUALS_VISIBLE + 1;
-        this.visualsScrollTarget = Math.max(0, Math.min(target, VISUAL_ITEMS.length - VISUALS_VISIBLE));
+        const y = pos ? menuListHeight(VISUAL_ITEMS.slice(0, pos), rowH, gap) + gap : 0; // selected card's top
+        const h = menuRowHeight(VISUAL_ITEMS[pos], rowH);
+        let target = this.visualsScrollTarget;
+        if (y < target) target = y;
+        else if (y + h > target + VISUALS_LIST_H) target = y + h - VISUALS_LIST_H;
+        const max = Math.max(0, menuListHeight(VISUAL_ITEMS, rowH, gap) - VISUALS_LIST_H);
+        this.visualsScrollTarget = Math.max(0, Math.min(target, max));
         this.visualsScroll += (this.visualsScrollTarget - this.visualsScroll) * 0.3;
-        if (Math.abs(this.visualsScrollTarget - this.visualsScroll) < 0.001) this.visualsScroll = this.visualsScrollTarget;
+        if (Math.abs(this.visualsScrollTarget - this.visualsScroll) < 0.05) this.visualsScroll = this.visualsScrollTarget;
     }
 
-    // Cards with an accent piece, name and description; the selected one is highlighted.
-    // scroll: cards scrolled out above the top (fractional while easing)
+    // Cards with an accent piece, name and description; the selected one is highlighted. Cards
+    // with preview are taller and show the block style preview below.
+    // scroll: logical units scrolled out above the top (fractional while easing)
     drawMenuList(items, selectedIndex, top, rowH = 64, gap = 10, scroll = 0) {
         const listW = 420, x = VIEW_W / 2 - listW / 2;
+        let y = top - scroll;
         items.forEach((item, n) => {
-            const y = top + (n - scroll) * (rowH + gap);
             const selected = n === selectedIndex;
-            this.card(x, y, listW, rowH, 10, selected, PIECE_COLORS[item.accent].base, 5);
+            this.card(x, y, listW, menuRowHeight(item, rowH), 10, selected, PIECE_COLORS[item.accent].base, 5);
+            if (item.preview) this.drawTilesetPreview(VIEW_W / 2, y + rowH);
 
             this.drawPieceCentered(item.accent, x + 50, y + rowH / 2, 13, selected ? "active" : "locked");
             this.text(item.name.toUpperCase(), x + 92, y + rowH / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
             this.text(item.desc, x + 92, y + rowH / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
             if (selected) this.text("▶", x + listW - 26, y + rowH / 2, { size: 14, color: this.pulseInk(10), align: "center" });
+            y += menuRowHeight(item, rowH) + gap;
         });
     }
 
