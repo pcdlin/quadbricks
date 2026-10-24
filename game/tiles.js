@@ -365,6 +365,58 @@ const TILESETS = {
         },
     },
 
+    // Brushed grey metal that looks colourless face-on: the engine lays a sheen over each block
+    // (Engine.drawSheen()) whose colour follows the field's tilt, like a hologram or oil film.
+    // Pieces differ only in lightness, so the stack stays readable when the sheen is faint.
+    holo: {
+        name: "Holo",
+        sheen: true,
+        pad: (style) => style === "active" ? 10 : 0,
+        draw(g, col, size, style, index) {
+            const inset = 1.5, w = size - inset * 2, r = size * 0.1;
+            const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
+            if (style === "ghost") {
+                path();
+                g.fillStyle = "rgba(200,205,215,0.06)";
+                g.fill();
+                g.strokeStyle = "rgba(200,205,215,0.45)";
+                g.lineWidth = 1.2;
+                g.stroke();
+                return;
+            }
+            const active = style === "active";
+            const lum = 58 + index * 3 + (active ? 8 : 0); // 61..79 %
+            if (active) {
+                g.shadowColor = "rgba(210,215,230,0.7)";
+                g.shadowBlur = 14;
+            }
+            path();
+            const body = g.createLinearGradient(inset, inset, inset + w, inset + w);
+            body.addColorStop(0, `hsl(220,6%,${lum + 10}%)`);
+            body.addColorStop(0.5, `hsl(220,5%,${lum - 8}%)`);
+            body.addColorStop(1, `hsl(220,7%,${lum - 24}%)`);
+            g.fillStyle = body;
+            g.fill();
+            g.shadowBlur = 0;
+            // fine horizontal brushing
+            g.save();
+            path();
+            g.clip();
+            g.fillStyle = "rgba(255,255,255,0.07)";
+            for (let y = inset + 2; y < inset + w; y += 3) g.fillRect(inset, y, w, 1);
+            g.restore();
+            // bevelled face
+            g.beginPath();
+            g.roundRect(inset + size * 0.16, inset + size * 0.16, w - size * 0.32, w - size * 0.32, r * 0.6);
+            g.fillStyle = active ? "rgba(6,8,22,0.06)" : "rgba(6,8,22,0.16)";
+            g.fill();
+            path();
+            g.strokeStyle = active ? "rgba(255,255,255,0.9)" : "rgba(235,238,248,0.55)";
+            g.lineWidth = 1;
+            g.stroke();
+        },
+    },
+
     // Monochrome four-shade green, like the Game Boy's screen: each piece has its own pattern
     gameboy: {
         name: "1989",

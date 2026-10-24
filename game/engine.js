@@ -190,6 +190,11 @@ const SHAKE_CLEAR_LINE = 0.4, SHAKE_CLEAR_CHAIN = 0.08; // extra per further lin
 const SHAKE_BUMP = 0.6; // sideways speed a piece pushed against the border gives the field
 const SHAKE_SPRING =0.22, SHAKE_DAMPING = 0.28; // how fast the field settles back
 const SHAKE_TIP = 0.25; // degrees the field tips back per unit it is knocked down
+const HOLO_FULL_TILT = 3.5; // degrees of field tilt at which the Holo sheen is at full strength
+const HOLO_HUE_PER_DEG = [95, 70]; // hue shift per degree of tilt about the x and y axes
+const HOLO_HUE_ACROSS = 140; // hue spread across the well, as a viewing angle changes over it
+const HOLO_HUE_STEPS = 48; // hues are quantised so their colours can be cached
+const HOLO_ALPHA = 0.55; // sheen opacity at full strength
 const BOARD_LAYER_MARGIN = 18; // room around the frame in the tilted layer for block glows
 const BOARD_GLOW_BLUR = [44, 74]; // board glow blur (device px) at rest and at full pulse
 
@@ -472,6 +477,7 @@ class Engine {
         const r = this.r;
         if (!r.begin()) return; // WebGL context lost: nothing to draw on until it's restored
         this.motion = this.boardMotion();
+        this.updateSheen(this.motion);
         // Clear ripples: the frame is drawn into a layer, then onto the screen through them
         const ripples = this.ringMode() === "ripple" && this.rings.length ? this.rippleShapes() : null;
         if (ripples) {
@@ -1179,6 +1185,44 @@ class Engine {
         const sp = atlas.sprites[style][type];
         const w = size + sp.pad * 2;
         this.r.image(atlas.tex, x - sp.pad, y - sp.pad, w, w, sp.sx, sp.sy, sp.px, sp.px);
+        if (TILESETS[tileset].sheen && style !== "ghost") this.drawSheen(x, y, size);
+    }
+
+    // Holo blocks: how strong the colour sheen is and which hue it starts at, from the
+    // field's tilt now. Face-on (no tilt) the strength is 0 and the blocks stay grey.
+    updateSheen(m) {
+        const deg = 180 / Math.PI;
+        const tilt = Math.hypot(m.rx, m.ry) * deg / HOLO_FULL_TILT;
+        const k = Math.min(1, tilt);
+        this.sheen = {
+            strength: k * k * (3 - 2 * k) * HOLO_ALPHA,
+            hue: m.ry * deg * HOLO_HUE_PER_DEG[1] + m.rx * deg * HOLO_HUE_PER_DEG[0],
+        };
+        this.sheenColors = this.sheenColors || [];
+        this.sheenY = this.sheenY || [0, 0];
+    }
+
+    // Additive coloured gloss over a block: the hue follows the tilt and also changes across
+    // the well, so a tilted field shimmers in bands
+    drawSheen(x, y, size) {
+        const s = this.sheen;
+        if (!s || s.strength <= 0.004) return;
+        const r = this.r;
+        const hue = s.hue + (x - BOARD_X) / BOARD_W * HOLO_HUE_ACROSS + (y - this.boardY) / this.boardH * HOLO_HUE_ACROSS * 0.5;
+        const step = (Math.round(hue / 360 * HOLO_HUE_STEPS) % HOLO_HUE_STEPS + HOLO_HUE_STEPS) % HOLO_HUE_STEPS;
+        let pair = this.sheenColors[step];
+        if (!pair) {
+            const h = step / HOLO_HUE_STEPS * 360;
+            pair = this.sheenColors[step] = [hsla(h, 95, 62), hsla(h + 70, 95, 50)];
+        }
+        const inset = 3, a = r.globalAlpha;
+        const sy = this.sheenY;
+        sy[0] = y; sy[1] = y + size;
+        r.save();
+        r.globalAlpha = a * s.strength;
+        r.blendMode = "add";
+        r.shape(x + inset, y + inset, size - inset * 2, size - inset * 2, { radius: size * 0.1, fill: pair, fillY: sy });
+        r.restore();
     }
 
     // Draw a piece (rotation 0) centred on cx/cy, with a game's shapes and colours if given
