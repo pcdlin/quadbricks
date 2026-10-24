@@ -1,5 +1,5 @@
 // Port of the original C++ game's engine: 60 fps fixed timestep (17/17/16 ms pattern)
-// and SDL-style input bitmap. Rendering is a modern redesign (night-gallery
+// and SDL-style input bitmap; animation and drawing follow the display's refresh rate. Rendering is a modern redesign (night-gallery
 // look inspired by Tetris Forever) drawn with WebGL (renderer.js, backdrop.js) in
 // resolution-independent logical units; piece colours are sampled from the original
 // tile graphics.
@@ -220,6 +220,7 @@ const BOARD_GLOW_BLUR = [44, 74]; // board glow blur (device px) at rest and at 
 // Timing: a game frame may run this many ms early, so a display refresh landing just
 // before the 17/17/16 ms schedule doesn't skip a frame and then run two
 const FRAME_SLACK = 4;
+const FRAME_MS = 1000 / 60; // a game frame's length on average; animations count time in these
 
 // Clear messages, in the right column below the next pieces
 const MESSAGE_LIFE = 100; // frames
@@ -281,6 +282,8 @@ class Engine {
         this.syncKeys = false;     // the game missed key events: release what isn't held
         this.lastFPS = 0;
         this.lastFPSTicks = 0;
+        this.lastDrawTicks = 0;
+        this.tickPhase = 0; // 0..1: how far the display is from the last game frame to the next
         this.fpscounter = 0;
         this.nextframe = 0;
         this.extraWait = 0;
@@ -296,7 +299,7 @@ class Engine {
         }));
         // Playing field motion: a slow drift made of two waves per axis, and a spring knocked
         // by hard drops
-        this.uiFrame = 0;
+        this.clock = 0; // animation time in game frames, fractional above 60 Hz
         this.newTiltWaves();
         this.boardLayer = null; // render target the field is drawn into when it moves
         this.blockCache = new Map(); // tileset:size -> sprite atlas
@@ -420,10 +423,14 @@ class Engine {
                 this.frame(ticks);
                 frames++;
             }
-            if (frames) {
-                this.draw();
-                this.countFPS(ticks);
-            }
+            // Animations and drawing run on every display refresh, whatever its rate; the game
+            // state steps once a frame, so the drawing is told how far it is into the next one
+            const dt = this.lastDrawTicks ? Math.min(ticks - this.lastDrawTicks, 4 * FRAME_MS) / FRAME_MS : 1;
+            this.lastDrawTicks = ticks;
+            this.tickPhase = clamp(1 - (this.nextframe - ticks) / FRAME_MS, 0, 1);
+            this.animate(dt);
+            this.draw();
+            this.countFPS(ticks);
             requestAnimationFrame(loop);
         };
         requestAnimationFrame(loop);
@@ -449,8 +456,6 @@ class Engine {
     frame(ticks) {
         this.nextframe += (this.extraWait === 2 ? 16 : 17); // Every 3 Frames, wait 16ms instead of 17 to maintain 60 fps
         this.extraWait = (this.extraWait + 1) % 3;
-        this.uiFrame++;
-        this.updateAmbient();
         this.touch.update();
 
         switch (this.GAMESTATE) {
@@ -477,16 +482,23 @@ class Engine {
                         if (s === "harddrop" && this.options.shake) this.kickShake(this.game.hardDropDistance);
                     }
                     for (const dir of this.game.takeBumps()) if (this.options.shake) this.bumpShake(dir);
-                    this.updateParticles();
-                    this.updateShake();
                 }
                 break;
 
             case STATE_MENU:
                 this.handleMenuInput();
-                this.updateMenuScroll();
                 break;
         }
+    }
+
+    // Moves the animations on by dt game frames (fractional above 60 Hz), once per refresh
+    animate(dt) {
+        this.clock += dt;
+        this.updateAmbient(dt);
+        if (this.GAMESTATE === STATE_GAME) {
+            this.updateParticles(dt);
+            this.updateShake(dt);
+        } else this.updateMenuScroll(dt);
     }
 
     draw() {
@@ -576,7 +588,7 @@ class Engine {
         this.flashes = [];
         this.dropFlashes = [];
         this.rings = [];
-        this.shake = { x: 0, vx: 0, y: 0, vy: 0 };
+        this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 }; // px, py: before the last step
     }
 
     // Top-left corner of a field cell in logical units (the well's rows start at wellTop)
@@ -614,20 +626,25 @@ class Engine {
         this.shake.vy += Math.sin(angle) * kick;
     }
 
-    // Damped spring back to rest
-    updateShake() {
+    // Damped spring back to rest, stepped once per game frame (as tuned) and shown between
+    // its last two steps (t: share of a frame since the last step)
+    updateShake(dt) {
         const s = this.shake;
-        s.vx += -SHAKE_SPRING * s.x - SHAKE_DAMPING * s.vx;
-        s.vy += -SHAKE_SPRING * s.y - SHAKE_DAMPING * s.vy;
-        s.x += s.vx;
-        s.y += s.vy;
-        if (Math.abs(s.x) + Math.abs(s.y) + Math.abs(s.vx) + Math.abs(s.vy) < 0.005) s.x = s.y = s.vx = s.vy = 0;
+        for (s.t += dt; s.t >= 1; s.t--) {
+            s.px = s.x;
+            s.py = s.y;
+            s.vx += -SHAKE_SPRING * s.x - SHAKE_DAMPING * s.vx;
+            s.vy += -SHAKE_SPRING * s.y - SHAKE_DAMPING * s.vy;
+            s.x += s.vx;
+            s.y += s.vy;
+            if (Math.abs(s.x) + Math.abs(s.y) + Math.abs(s.vx) + Math.abs(s.vy) < 0.005) s.x = s.y = s.vx = s.vy = 0;
+        }
     }
 
     // A fresh drift starting now, level: waves with random speeds that all start at zero
     // (phase 0 or π, so the field leans either way first)
     newTiltWaves() {
-        this.tiltStart = this.uiFrame;
+        this.tiltStart = this.clock;
         this.tiltWaves = [0, 1].map(() => [
             { f: 0.15 + Math.random() * 0.2, p: Math.random() < 0.5 ? 0 : Math.PI },
             { f: 0.4 + Math.random() * 0.3, p: Math.random() < 0.5 ? 0 : Math.PI },
@@ -636,12 +653,14 @@ class Engine {
 
     // The field's tilt now (radians about the x and y axes) and shake offset (logical units)
     boardMotion() {
-        const t = (this.uiFrame - this.tiltStart) / 60 * TILT_SPEED;
+        const t = (this.clock - this.tiltStart) / 60 * TILT_SPEED;
         const k = this.options.tiltAngle;
         const [ax, ay] = this.tiltWaves.map(([a, b], i) =>
             TILT_MAX[i] * k * (0.65 * Math.sin(t * a.f + a.p) + 0.35 * Math.sin(t * b.f + b.p)));
         const rad = Math.PI / 180;
-        return { rx: (ax + this.shake.y * SHAKE_TIP) * rad, ry: ay * rad, dx: this.shake.x, dy: this.shake.y };
+        const s = this.shake;
+        const dx = s.px + (s.x - s.px) * s.t, dy = s.py + (s.y - s.py) * s.t;
+        return { rx: (ax + dy * SHAKE_TIP) * rad, ry: ay * rad, dx, dy };
     }
 
     // The field drawn into a layer, then onto the screen in perspective: rotated about its
@@ -881,18 +900,20 @@ class Engine {
         }
     }
 
-    updateParticles() {
+    // Lives and speeds are in game frames; dt is the time passed in them
+    updateParticles(dt) {
+        const drag = Math.pow(0.97, dt); // air drag
         for (const p of this.particles) {
-            p.vy += CONFETTI_GRAVITY;
-            p.vx *= 0.97; // air drag
-            p.vy *= 0.97;
-            p.x += p.vx;
-            p.y += p.vy;
-            p.twinkle += 0.3;
-            p.life--;
+            p.vy += CONFETTI_GRAVITY * dt;
+            p.vx *= drag;
+            p.vy *= drag;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.twinkle += 0.3 * dt;
+            p.life -= dt;
         }
         this.particles = this.particles.filter(p => p.life > 0 && p.y < VIEW_H + 20);
-        const age = (effects) => effects.filter(e => --e.life > 0);
+        const age = (effects) => effects.filter(e => (e.life -= dt) > 0);
         this.rings = age(this.rings);
         this.flashes = age(this.flashes);
         this.dropFlashes = age(this.dropFlashes);
@@ -967,10 +988,10 @@ class Engine {
         for (let i = firstRow; i < HEIGHT; i++) {
             const dist = game.getDropDistance(i);
             if (!dist) continue;
-            const landed = game.getDropLandedFor(i);
+            const landed = game.getDropLandedFor(i, this.tickPhase);
             if (landed >= DROP_TRAIL_FADE) continue;
             const alpha = landed < 0 ? 1 : 1 - (landed + 1) / (DROP_TRAIL_FADE + 1);
-            const y1 = this.cellY(i + game.getDropOffset(i));
+            const y1 = this.cellY(i + game.getDropOffset(i, this.tickPhase));
             const y0 = this.cellY(Math.max(i, top));
             if (y0 >= y1) continue;
             for (let j = 0; j < WIDTH; j++) {
@@ -1024,14 +1045,14 @@ class Engine {
     }
 
     // Slow backdrop drift and colour easing; runs in the menus too
-    updateAmbient() {
-        this.hueTarget += 0.02; // endless slow colour drift
-        this.hue += (this.hueTarget - this.hue) * 0.03;
-        this.pulse *= 0.95;
+    updateAmbient(dt) {
+        this.hueTarget += 0.02 * dt; // endless slow colour drift
+        this.hue += (this.hueTarget - this.hue) * (1 - Math.pow(0.97, dt));
+        this.pulse *= Math.pow(0.95, dt);
         if (this.hueTarget > 720) { this.hueTarget -= 360; this.hue -= 360; }
         for (const o of this.orbs) {
-            o.y -= o.vy * (1 + this.pulse * 2);
-            o.sway += 0.01;
+            o.y -= o.vy * (1 + this.pulse * 2) * dt;
+            o.sway += 0.01 * dt;
             if (o.y < -o.r * 3) { o.y = VIEW_H + o.r * 3; o.x = Math.random() * VIEW_W; }
         }
     }
@@ -1039,7 +1060,7 @@ class Engine {
     // Aurora wash (big colour blobs) and rising lights, in backdrop coordinates. Each has a
     // centre, radius, hue, saturation, lightness and alpha at the centre (fading to 0 at r).
     ambientShapes() {
-        const t = this.uiFrame / 60;
+        const t = this.clock / 60;
         const h = this.hue;
         const swell = (0.16 + 0.22 * this.pulse) * this.softEffectScale();
         const blobs = [
@@ -1496,7 +1517,7 @@ class Engine {
 
     // INK pulsing between 40% and full opacity (a waiting prompt, the selection marker)
     pulseInk(period) {
-        return inkAlpha(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(this.uiFrame / period)));
+        return inkAlpha(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(this.clock / period)));
     }
 
     // Rows of action name and key; Enter on a row waits for the new key
@@ -1533,7 +1554,7 @@ class Engine {
     }
 
     // Eases the Visuals list's scroll toward keeping the selected card in view
-    updateMenuScroll() {
+    updateMenuScroll(dt) {
         const { rowH, gap } = VISUALS_ROWS;
         const pos = this.visualspos;
         const y = pos ? menuListHeight(VISUAL_ITEMS.slice(0, pos), rowH, gap) + gap : 0; // selected card's top
@@ -1543,7 +1564,7 @@ class Engine {
         else if (y + h > target + VISUALS_LIST_H) target = y + h - VISUALS_LIST_H;
         const max = Math.max(0, menuListHeight(VISUAL_ITEMS, rowH, gap) - VISUALS_LIST_H);
         this.visualsScrollTarget = Math.max(0, Math.min(target, max));
-        this.visualsScroll += (this.visualsScrollTarget - this.visualsScroll) * 0.3;
+        this.visualsScroll += (this.visualsScrollTarget - this.visualsScroll) * (1 - Math.pow(0.7, dt));
         if (Math.abs(this.visualsScrollTarget - this.visualsScroll) < 0.05) this.visualsScroll = this.visualsScrollTarget;
     }
 
@@ -1654,7 +1675,7 @@ class Engine {
         // Draw Field
         if (this.options.effects && this.options.trail) this.drawLineDropTrails(firstRow);
         for (let i = firstRow; i < HEIGHT; i++) {
-            const y = this.cellY(i + game.getDropOffset(i)); // rows fall into place during a line clear
+            const y = this.cellY(i + game.getDropOffset(i, this.tickPhase)); // rows fall into place during a line clear
             for (let j = 0; j < WIDTH; j++) {
                 const alpha = game.getCellAlpha(i, j); // TGM3 and TAP staff roll: blocks fade or vanish
                 if (alpha <= 0) continue;
@@ -1693,9 +1714,9 @@ class Engine {
         // empty beside a block of a row drawn at offset off: inside the well with nothing visible
         // there (or a block of a row falling apart from it); above the drawn rows counts as empty
         const open = (i, j, off) => j >= 0 && j < WIDTH && i < HEIGHT &&
-            (i < firstRow || !game.getCell(i, j) || game.getCellAlpha(i, j) <= 0 || game.getDropOffset(i) !== off);
+            (i < firstRow || !game.getCell(i, j) || game.getCellAlpha(i, j) <= 0 || game.getDropOffset(i, this.tickPhase) !== off);
         for (let i = firstRow; i < HEIGHT; i++) {
-            const off = game.getDropOffset(i), y = this.cellY(i + off);
+            const off = game.getDropOffset(i, this.tickPhase), y = this.cellY(i + off);
             for (let j = 0; j < WIDTH; j++) {
                 if (open(i, j, off)) continue;
                 const x = this.cellX(j);
@@ -1746,7 +1767,7 @@ class Engine {
     // combo and perfect clear below it.
     drawClearMessage(top) {
         const game = this.game;
-        const age = game.actionAge;
+        const age = game.actionAge + this.tickPhase; // frames, and how far into the next one
         if (!game.actions.length || age >= MESSAGE_LIFE) return;
         const r = this.r;
         const c = this.messageTexture(game.actions);
@@ -1920,9 +1941,10 @@ class Engine {
         if (!digit) return;
         const left = game.startdelayMax - game.startdelayCounter; // frames until the game takes input
         // 0..1 within the digit (the "3" also shows before the first frame, as its first frame)
-        const t = 1 - (Math.min(left, game.startdelayMax - 1) % COUNTDOWN_STEP_FRAMES) / (COUNTDOWN_STEP_FRAMES - 1);
+        // (plus how far the display is into the next frame)
+        const t = Math.min(1, 1 - (Math.min(left, game.startdelayMax - 1) % COUNTDOWN_STEP_FRAMES - this.tickPhase) / (COUNTDOWN_STEP_FRAMES - 1));
         const fadeIn = Math.min(1, t / 0.15), fadeOut = Math.min(1, (1 - t) / 0.25);
-        const band = digit > 1 ? 1 : Math.min(1, (left + 1) / 12);
+        const band = digit > 1 ? 1 : Math.min(1, (left + 1 - this.tickPhase) / 12);
         const r = this.r;
         const cy = this.bandY();
         const accent = COUNTDOWN_COLORS[digit];

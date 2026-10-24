@@ -644,20 +644,22 @@ class RuleGame {
     }
 
     // How far the stack at `row` has fallen so far (presentation only: the field
-    // collapses when the delay ends)
-    getDropOffset(row) {
+    // collapses when the delay ends); sub: share of the next frame already shown (0..1),
+    // for displays faster than the game
+    getDropOffset(row, sub = 0) {
         const dist = this.getDropDistance(row);
         if (!dist) return 0;
         const start = this.dropStartFrame(), land = this.dropLandFrame(row);
-        if (this.phaseCounter >= land) return dist;
-        return Math.max(0, dist * (this.phaseCounter - start) / (land - start));
+        const now = this.phaseCounter + sub;
+        if (now >= land) return dist;
+        return Math.max(0, dist * (now - start) / (land - start));
     }
 
-    // Frames since the stack at `row` landed in this line clear delay, −1 while it
-    // still falls or doesn't move
-    getDropLandedFor(row) {
+    // Frames since the stack at `row` landed in this line clear delay (sub as above), −1
+    // while it still falls or doesn't move
+    getDropLandedFor(row, sub = 0) {
         if (!this.getDropDistance(row)) return -1;
-        const since = this.phaseCounter - this.dropLandFrame(row);
+        const since = this.phaseCounter + sub - this.dropLandFrame(row);
         return since >= 0 ? since : -1;
     }
 

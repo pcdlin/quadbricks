@@ -54,6 +54,16 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 ### Frame loop and input (`engine.js`)
 - Fixed timestep from the original: frames of 17, 17, 16 ms (≈60 fps), run from
   `requestAnimationFrame`, catching up at most 4 frames, resetting after a >250 ms stall.
+  `frame()` is game logic and input only; every display refresh (60 Hz or more) then calls
+  `animate(dt)` and `draw()`. `animate()` moves the presentation on by `dt` game frames
+  (fractional above 60 Hz, `FRAME_MS`): `clock` (replaces a frame counter for tilt, wash and
+  pulsing text), ambient easing, confetti and effect lives (`life -= dt`), menu scroll; decays
+  and eases use `Math.pow(factor, dt)`. The shake spring still steps once per game frame (as
+  tuned) and is shown between its last two steps (`shake.px/py/t`). Game state changes only
+  per frame; `tickPhase` (0..1, how far the display is into the next frame) smooths what reads
+  frame counters: `getDropOffset(row, sub)`/`getDropLandedFor(row, sub)`, the clear messages'
+  `actionAge` and the countdown. New animations should take `dt` (or `tickPhase`), never count
+  calls.
 - Keys are collected as events and turned into one **input bitmap per frame**
   (`LEFT_PUSH`, `LEFT_RELEASE`, … from `game.js`), like the SDL original. Key repeat is
   ignored in games (`e.repeat`); DAS/ARR are implemented by the rules, not the OS. Menus take
@@ -428,10 +438,11 @@ add new globals there.
   - Wait for `engine.init()` (fonts and tile images) before sending keys; earlier key
     presses are lost. Click the page first so it has focus; audio only starts after a key
     press or click.
-  - A hidden preview pane throttles `requestAnimationFrame` (single-digit FPS). For
-    deterministic checks, freeze the loop (`const f = engine.frame; engine.frame = () => {}`),
-    step frames manually with `f.call(engine, performance.now())`, call `engine.draw()`,
-    screenshot, then restore `engine.frame = f`.
+  - A hidden preview pane throttles or pauses `requestAnimationFrame`. For deterministic
+    checks, take over the loop: `requestAnimationFrame = cb => { window.__cb = cb; }`, then
+    `engine.start()`, and call `__cb(t)` with your own timestamps (e.g. steps of 1000/144 ms
+    to check a 144 Hz display), screenshot, and reload the page afterwards. Freezing only
+    `engine.frame` stops the game but not the animations.
   - The canvas has no `preserveDrawingBuffer`: to read pixels, call `engine.draw()` and read
     them in the same task. Test context loss with
     `engine.r.gl.getExtension("WEBGL_lose_context")` (`loseContext()`, `restoreContext()`).
