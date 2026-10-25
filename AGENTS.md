@@ -79,7 +79,12 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   of the roll, 5 to 10 s before the 15-minute speed-up (TGM3 only). They call
   `RuleGame.testSetup()`, which refuses during READY, after game over, in the Guideline, and for
   setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4).
-- Game keys come from `options.keys` (rebindable). Menus always use arrows / Enter / Esc
+- Game keys come from `options.keys` (rebindable): each action has a list of one or two key codes
+  (`MAX_KEYS_PER_ACTION`). On the Controls screen, Enter then a new key adds it (a third replaces
+  the action's oldest); a key the action already has is removed, unless it is its only one
+  (`Options.bind()`). A key taken from another action leaves that one its other key, or if it had
+  none, the replaced key (or, with nothing replaced, the two swap). An action is released only when
+  none of its keys is held. Key hints and the touch controls use each action's first key. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
 - Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: New Game, Options; `mainItems()` adds Restart first while a game exists, restarting it with the same settings, and Esc from a game opens the menu on it). New Game → `MENU_RULES` (rule sets) →
   `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master for the Guideline, Master/20G
@@ -505,7 +510,7 @@ add new globals there.
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound}, tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound} (lists of key codes; a plain string from older versions is read as one key), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - Every access is wrapped in try/catch; the game must work with storage unavailable.
 

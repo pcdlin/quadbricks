@@ -17,10 +17,13 @@ const KEY_ACTIONS = [
     { id: "sound", name: "Sound on/off" },
 ];
 
+// Each action takes up to MAX_KEYS_PER_ACTION keys (lists of KeyboardEvent.code), at least one
 const DEFAULT_KEYS = {
-    left: "ArrowLeft", right: "ArrowRight", soft: "ArrowDown", hard: "ArrowUp",
-    rotl: "KeyZ", rotr: "KeyX", hold: "Space", sound: "KeyM",
+    left: ["ArrowLeft"], right: ["ArrowRight"], soft: ["ArrowDown"], hard: ["ArrowUp"],
+    rotl: ["KeyZ"], rotr: ["KeyX"], hold: ["Space"], sound: ["KeyM"],
 };
+const MAX_KEYS_PER_ACTION = 2;
+const defaultKeys = () => Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([id, codes]) => [id, [...codes]]));
 
 // Board size as a share of the largest size that fits the window (fullscreen can be huge)
 const SCALE_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1]; // smallest first, so → makes it bigger
@@ -101,7 +104,7 @@ function stepIndex(i, dir, n, wrap = true) {
 
 class Options {
     constructor() {
-        this.keys = { ...DEFAULT_KEYS };
+        this.keys = defaultKeys();
         this.tileset = TILESET_IDS[0];
         this.effects = DEFAULT_EFFECTS;
         this.backdrop = true; // animated backdrop: colour wash and drifting lights
@@ -116,7 +119,11 @@ class Options {
             const saved = JSON.parse(localStorage.getItem(OPTIONS_STORAGE_KEY) || "{}");
             if (saved.keys) {
                 for (const { id } of KEY_ACTIONS) {
-                    if (typeof saved.keys[id] === "string") this.keys[id] = saved.keys[id];
+                    let codes = saved.keys[id];
+                    if (typeof codes === "string") codes = [codes]; // older versions: one key per action
+                    if (!Array.isArray(codes)) continue;
+                    codes = [...new Set(codes.filter(c => typeof c === "string" && !RESERVED_KEYS.includes(c)))];
+                    if (codes.length) this.keys[id] = codes.slice(0, MAX_KEYS_PER_ACTION);
                 }
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
@@ -141,20 +148,31 @@ class Options {
         } catch (e) { /* storage unavailable */ }
     }
 
-    // Bind a key to an action; an action already using that key takes over the old one
+    // Add a key to an action. A key the action already has is removed instead (unless it is its
+    // only one); a key past MAX_KEYS_PER_ACTION replaces the action's oldest. Another action using
+    // the key loses it, and if that was its only key it takes the replaced one (or, with none
+    // replaced, swaps: it gets this action's old key, which this action gives up)
     bind(action, code) {
         if (RESERVED_KEYS.includes(code)) return false;
-        const old = this.keys[action];
-        for (const { id } of KEY_ACTIONS) {
-            if (id !== action && this.keys[id] === code) this.keys[id] = old;
+        const keys = this.keys[action];
+        if (keys.includes(code)) {
+            if (keys.length > 1) keys.splice(keys.indexOf(code), 1);
+        } else {
+            keys.push(code);
+            const replaced = keys.length > MAX_KEYS_PER_ACTION ? keys.shift() : null;
+            for (const { id } of KEY_ACTIONS) {
+                const other = this.keys[id];
+                if (id === action || !other.includes(code)) continue;
+                other.splice(other.indexOf(code), 1);
+                if (!other.length) other.push(replaced ?? keys.shift());
+            }
         }
-        this.keys[action] = code;
         this.save();
         return true;
     }
 
     resetKeys() {
-        this.keys = { ...DEFAULT_KEYS };
+        this.keys = defaultKeys();
         this.save();
     }
 
@@ -189,7 +207,7 @@ class Options {
 
     // Action bound to a key code, or null
     actionFor(code) {
-        for (const { id } of KEY_ACTIONS) if (this.keys[id] === code) return id;
+        for (const { id } of KEY_ACTIONS) if (this.keys[id].includes(code)) return id;
         return null;
     }
 }

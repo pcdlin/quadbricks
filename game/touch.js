@@ -182,7 +182,7 @@ class TouchControls {
 
     // Key code of a D-pad arm or button in the current mode (bindings can change between presses)
     codeFor(name) {
-        const k = this.engine.options.keys;
+        const k = Object.fromEntries(Object.entries(this.engine.options.keys).map(([id, codes]) => [id, codes[0]]));
         const menu = this.mode === "menu";
         switch (name) {
             case "up": return menu ? "ArrowUp" : k.hard;

@@ -412,7 +412,7 @@ class Engine {
             if (down && !e.repeat && this.GAMESTATE === STATE_GAME && this.game) this.game.testSetup(TEST_KEYS[e.code]);
             return;
         }
-        if (e.code === this.options.keys.sound) {
+        if (this.options.keys.sound.includes(e.code)) {
             e.preventDefault();
             if (down && !e.repeat) this.sound.toggleMute();
             return;
@@ -541,7 +541,7 @@ class Engine {
         const [vx, vy, vw] = this.layout.view;
         this.text("v" + VERSION, vx + 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, spacing: 1 });
         this.text(this.lastFPS + " FPS", vx + vw - 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, align: "right", spacing: 1 });
-        if (this.sound.muted) this.text("SOUND OFF · " + keyLabel(this.options.keys.sound), vx + vw - 16, vy + 30, { size: 10, weight: 600, color: INK_DIM, align: "right", spacing: 1 });
+        if (this.sound.muted) this.text("SOUND OFF · " + keyLabel(this.options.keys.sound[0]), vx + vw - 16, vy + 30, { size: 10, weight: 600, color: INK_DIM, align: "right", spacing: 1 });
         r.end();
     }
 
@@ -712,7 +712,7 @@ class Engine {
         if (this.syncKeys) {
             this.syncKeys = false;
             for (const { id } of KEY_ACTIONS) {
-                if (RELEASE_BITS[id] && !this.keysDown.has(this.options.keys[id])) this.player_input |= RELEASE_BITS[id];
+                if (RELEASE_BITS[id] && !this.options.keys[id].some(c => this.keysDown.has(c))) this.player_input |= RELEASE_BITS[id];
             }
         }
         while (this.events.length) {
@@ -732,8 +732,8 @@ class Engine {
                     return;
                 }
                 if (PUSH_BITS[action]) this.player_input |= PUSH_BITS[action];
-            } else if (RELEASE_BITS[action]) {
-                this.player_input |= RELEASE_BITS[action];
+            } else if (RELEASE_BITS[action] && !this.options.keys[action].some(c => this.keysDown.has(c))) {
+                this.player_input |= RELEASE_BITS[action]; // not while the action's other key is held
             }
         }
     }
@@ -1511,7 +1511,7 @@ class Engine {
             case MENU_CONTROLS:
                 heading("OPTIONS  ·  CONTROLS");
                 this.drawKeyBindings(listTop - 8);
-                hint = this.capturing ? "PRESS A KEY      ESC  CANCEL" : "ENTER  CHANGE      ESC  BACK";
+                hint = this.capturing ? "NEW KEY ADDS · BOUND KEY REMOVES      ESC  CANCEL" : "ENTER  CHANGE      ESC  BACK";
                 break;
         }
 
@@ -1543,7 +1543,7 @@ class Engine {
         return inkAlpha(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(this.clock / period)));
     }
 
-    // Rows of action name and key; Enter on a row waits for the new key
+    // Rows of action name and keys; Enter on a row waits for a key to add (or remove, if it has it)
     drawKeyBindings(top) {
         const listW = 420, rowH = 31, x = VIEW_W / 2 - listW / 2;
         const rows = [...KEY_ACTIONS.map(a => ({ name: a.name, key: this.options.keys[a.id], id: a.id })), { name: "Reset to defaults" }];
@@ -1561,8 +1561,13 @@ class Engine {
             if (this.capturing === row.id) {
                 this.text("PRESS A KEY", x + listW - 18, cy + 1, { size: 11, weight: 800, color: this.pulseInk(6), align: "right", spacing: 3 });
             } else {
-                const label = keyLabel(row.key);
-                this.keycap(label, x + listW - 18 - this.keycapWidth(label), cy);
+                let kx = x + listW - 18;
+                for (const code of [...row.key].reverse()) { // right-aligned, first key leftmost
+                    const label = keyLabel(code);
+                    kx -= this.keycapWidth(label);
+                    this.keycap(label, kx, cy);
+                    kx -= 6;
+                }
             }
         });
     }
@@ -1618,7 +1623,7 @@ class Engine {
 
     // Key hints for the current bindings
     drawControls(cx, y) {
-        const k = this.options.keys;
+        const k = Object.fromEntries(Object.entries(this.options.keys).map(([id, codes]) => [id, codes[0]]));
         const items = [[[k.left, k.right], "MOVE"], [[k.soft], "SOFT"], [[k.hard], "HARD"], [[k.rotl, k.rotr], "ROTATE"],
             [[k.hold], "HOLD"], [[k.sound], "SOUND"], [["Escape"], "MENU"]].map(([keys, label]) => [keys.map(keyLabel), label]);
         // measure total width first so the row is centred
