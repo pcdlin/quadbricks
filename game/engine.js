@@ -20,15 +20,15 @@ const PUSH_BITS = { left: LEFT_PUSH, right: RIGHT_PUSH, hard: HARD_PUSH, soft: S
 const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELEASE, rotl: ROTL_RELEASE, rotr: ROTR_RELEASE, rot180: ROT180_RELEASE, hold: HOLD_RELEASE };
 
 // Menu screens
-const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7;
-const MENU_DEPTH = [0, 1, 2, 1, 2, 2, 2, 3];   // by screen; deeper = slide in from the right
+const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8;
+const MENU_DEPTH = [0, 1, 2, 1, 2, 2, 2, 3, 2];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
 const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", accent: tetI, resume: true };
 const RESTART_ITEM = { name: "Restart", desc: "Start the current game over", accent: tetL, restart: true };
 const MAIN_ITEMS = [
     { name: "New Game", desc: "Choose a rule set and mode", accent: tetT, screen: MENU_RULES },
-    { name: "Options", desc: "Controls, visuals and Guideline handling", accent: tetS, screen: MENU_OPTIONS },
+    { name: "Options", desc: "Keybinds, gamepad, visuals and Guideline handling", accent: tetS, screen: MENU_OPTIONS },
 ];
 
 // Start step 3 (MENU_SETUP), for modes with `setup`: setting cards changed with ← →, each choosing
@@ -110,7 +110,8 @@ const RULESETS = [
       ] },
 ];
 const OPTIONS_ITEMS = [
-    { name: "Controls", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS },
+    { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS },
+    { name: "Gamepad", desc: "Change gamepad buttons", accent: tetI, screen: MENU_GAMEPAD },
     { name: "Visuals", desc: "Block style, scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
@@ -140,7 +141,7 @@ const HANDLING_ITEMS = [
     { id: "holdPiece", name: "Hold", accent: tetT, help: ["Hold", "Lets you keep a piece aside and swap it in later"] },
     { id: "irs", name: "IRS", accent: tetS, help: ["Initial Rotation System", "A rotation held as a piece enters turns it at once"] },
     { id: "ihs", name: "IHS", accent: tetZ, help: ["Initial Hold System", "Hold held as a piece enters swaps it at once"] },
-    { id: "rot180", name: "180° rotation", accent: tetJ, help: ["180° rotation", "Turns the piece half round with its own key (see Controls)"] },
+    { id: "rot180", name: "180° rotation", accent: tetJ, help: ["180° rotation", "Turns the piece half round with its own key (see Keybinds)"] },
     // action: Enter does it, ← → do nothing; the card shows desc instead of a value
     { id: "resetHandling", name: "Reset to defaults", accent: tetL, action: true, desc: "Press Enter to restore every setting above",
       help: ["Reset to defaults", "DAS 10 F, ARR 2 F, SDF 20×, DCD off, ghost on, guard off, 6 next, hold, IRS, IHS, no 180°"] },
@@ -154,6 +155,12 @@ function frameValue(frames) {
 function touchWords(s) {
     return s.replace("ESC — BACK TO MENU", "TAP MENU TO GO BACK").replace("ESC FOR MENU", "TAP MENU")
         .replace(/ESC  BACK/g, "BACK").replace(/ENTER/g, "OK").replace(/ESC/g, "BACK");
+}
+
+// Key hints reworded for a gamepad, while it is the one in use: A and B in menus, START in games
+function padWords(s) {
+    return s.replace("ESC — BACK TO MENU", "START — BACK TO MENU").replace("ESC FOR MENU", "START FOR MENU")
+        .replace(/ENTER/g, "A").replace(/ESC/g, "B");
 }
 
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
@@ -354,7 +361,7 @@ class Engine {
         this.mainpos = 0;     // Start or Options
         this.menupos = 0;     // sub-mode
         this.rulesetpos = 0;  // rule set
-        this.optionspos = 0;  // Controls, Visuals or Guideline handling
+        this.optionspos = 0;  // Keybinds, Gamepad, Visuals or Guideline handling
         this.visualspos = 0;
         this.handlingpos = 0;
         this.setuppos = 0;    // setup card
@@ -365,6 +372,8 @@ class Engine {
         this.menuScroll = Object.fromEntries(Object.keys(SCROLLED_LISTS).map(step => [step, { at: 0, target: 0 }]));
         this.controlspos = 0; // key action, or "reset" after the last one
         this.capturing = null; // action waiting for a new key
+        this.padpos = 0;      // gamepad action, or "reset" after the last one
+        this.padCapturing = null; // action waiting for a gamepad button (GamepadControls.poll() binds it)
         this.options = new Options();
         this.records = new Records();
         this.exams = new Exams(); // TGM3 Master's qualified grades
@@ -415,9 +424,10 @@ class Engine {
         if (document.fonts) document.fonts.addEventListener("loadingdone", () => this.clearTextCache());
 
         this.touch = new TouchControls(this);
+        this.gamepad = new GamepadControls(this);
         this.resize();
         window.addEventListener("resize", () => this.resize());
-        window.addEventListener("keydown", (e) => this.onKey(e, true));
+        window.addEventListener("keydown", (e) => { this.gamepad.active = false; this.onKey(e, true); });
         window.addEventListener("keyup", (e) => this.onKey(e, false));
         // keys let go in another window never send keyup here
         window.addEventListener("blur", () => {
@@ -481,13 +491,19 @@ class Engine {
         if (down) this.sound.unlock(); // audio may only start from a user gesture
         if (down) this.keysDown.add(e.code);
         else this.keysDown.delete(e.code);
-        // Controls screen waiting for a new key: the next press is the binding
+        // Keybinds screen waiting for a new key: the next press is the binding
         if (this.capturing) {
             e.preventDefault();
             if (down && !e.repeat) {
                 if (e.code !== "Escape") this.options.bind(this.capturing, e.code);
                 this.capturing = null;
             }
+            return;
+        }
+        // Gamepad screen waiting for a button: Esc cancels, other keys do nothing
+        if (this.padCapturing) {
+            e.preventDefault();
+            if (down && !e.repeat && e.code === "Escape") this.padCapturing = null;
             return;
         }
         // Hidden TGM3 test keys: Ctrl+Shift+1..5 (see RuleGame.testSetup)
@@ -554,6 +570,7 @@ class Engine {
         this.nextframe += (this.extraWait === 2 ? 16 : 17); // Every 3 Frames, wait 16ms instead of 17 to maintain 60 fps
         this.extraWait = (this.extraWait + 1) % 3;
         this.touch.update();
+        this.gamepad.poll(ticks);
 
         switch (this.GAMESTATE) {
             case STATE_GAME:
@@ -879,7 +896,7 @@ class Engine {
         }
     }
 
-    // Start -> rule set -> sub-mode -> game; or Options -> Controls, Visuals or Guideline handling.
+    // Start -> rule set -> sub-mode -> game; or Options -> Keybinds, Gamepad, Visuals or Guideline handling.
     // Esc goes back a screen, and on the first one resumes a paused game.
     handleMenuInput() {
         // count() is only called for the screen on show: a rule set's modes depend on rulesetpos
@@ -889,6 +906,7 @@ class Engine {
             [MENU_MODES]: { pos: "menupos", count: () => RULESETS[this.rulesetpos].modes.length, back: MENU_RULES },
             [MENU_OPTIONS]: { pos: "optionspos", count: () => OPTIONS_ITEMS.length, back: MENU_MAIN },
             [MENU_CONTROLS]: { pos: "controlspos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
+            [MENU_GAMEPAD]: { pos: "padpos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
             [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: MENU_MODES },
@@ -938,6 +956,9 @@ class Engine {
                 } else if (this.menuStep === MENU_CONTROLS) {
                     if (pos === KEY_ACTIONS.length) this.options.resetKeys();
                     else this.capturing = KEY_ACTIONS[pos].id; // next key press becomes the binding
+                } else if (this.menuStep === MENU_GAMEPAD) {
+                    if (pos === KEY_ACTIONS.length) this.options.resetPad();
+                    else this.padCapturing = KEY_ACTIONS[pos].id; // next pad button becomes the binding
                 }
             }
         }
@@ -1898,8 +1919,6 @@ class Engine {
         const slide = this.menuSlide;
         const t = slide ? Math.min(1, (now - slide.start) / MENU_SLIDE_MS) : 1;
         if (t >= 1) this.menuSlide = null;
-        // the same on every screen, so it stays put; too wide for the compact view, and no use with touch
-        if (!this.layout.compact) this.drawControls(cx, 660);
         if (!slide || t >= 1) { this.drawMenuScreen(this.menuStep); return; }
         const ease = 1 - Math.pow(1 - t, 3);
         const r = this.r;
@@ -1922,7 +1941,7 @@ class Engine {
         // The tagline under the wordmark, on the main screen only: it slides with the screen, and
         // its place holds the Visuals heading
         if (step === MENU_MAIN) this.text("WELCOME", cx, 228, { size: 12, weight: 600, color: INK_DIM, align: "center", spacing: 6 });
-        let hint, hintY = 620;
+        let hint, hintY = 660; // the bottom of the view, lower under a long list
         switch (step) {
             case MENU_MAIN:
                 this.drawMenuList(this.mainItems(), this.mainpos, listTop);
@@ -1933,7 +1952,7 @@ class Engine {
                 const top = listTop - 20, rowH = 44, gap = 4;
                 heading("START  ·  CHOOSE A RULE SET", INK_DIM, top - 26);
                 this.drawMenuList(RULESETS, this.rulesetpos, top, rowH, gap);
-                hintY = top + menuListHeight(RULESETS, rowH, gap) + 22;
+                hintY = Math.max(hintY, top + menuListHeight(RULESETS, rowH, gap) + 22);
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
             }
@@ -1969,10 +1988,10 @@ class Engine {
                 const top = 236; // heading in the tagline's place: leaves room for the hint
                 heading("OPTIONS  ·  VISUALS", INK_DIM, 220);
                 const items = this.settingCards(VISUAL_ITEMS);
-                // Tighter cards leave room for the hint above the shared controls row; the list
-                // shows VISUALS_LIST_H of them, scrolled to keep the selection in view
+                // Tighter cards leave room for the hint; the list shows VISUALS_LIST_H of them,
+                // scrolled to keep the selection in view
                 this.drawScrolledList(MENU_VISUALS, items, top);
-                hintY = top + VISUALS_LIST_H + 22;
+                hintY = Math.max(hintY, top + VISUALS_LIST_H + 22);
                 hint = "← →  CHANGE      ESC  BACK";
                 break;
             }
@@ -1986,19 +2005,27 @@ class Engine {
                 const y = top + HANDLING_LIST_H + 14;
                 this.text(title.toUpperCase(), cx, y, { size: 11, weight: 700, color: INK, align: "center", spacing: 3 });
                 this.text(help, cx, y + 19, { size: 13, weight: 500, color: INK_DIM, align: "center" });
-                hintY = y + 44;
+                hintY = Math.max(hintY, y + 44);
                 hint = HANDLING_ITEMS[this.handlingpos].action ? "ENTER  RESET      ESC  BACK" : "← →  CHANGE      ESC  BACK";
                 break;
             }
             case MENU_CONTROLS:
-                heading("OPTIONS  ·  CONTROLS");
-                this.drawKeyBindings(listTop - 8);
+                heading("OPTIONS  ·  KEYBINDS");
+                this.drawBindings(listTop - 8, this.options.keys, keyLabel, this.controlspos, this.capturing, "PRESS A KEY", tetS);
                 hint = this.capturing ? "NEW KEY ADDS · BOUND KEY REMOVES      ESC  CANCEL" : "ENTER  CHANGE      ESC  BACK";
+                break;
+            case MENU_GAMEPAD:
+                heading("OPTIONS  ·  GAMEPAD");
+                this.drawBindings(listTop - 8, this.options.pad, padLabel, this.padpos, this.padCapturing, "PRESS A BUTTON", tetI);
+                // the cancel hint names Start, the pad's only way out (Esc works too)
+                hint = this.padCapturing ? "NEW BUTTON ADDS · BOUND BUTTON REMOVES      START  CANCEL"
+                    : this.gamepad.connected ? "ENTER  CHANGE      ESC  BACK" : "NO GAMEPAD FOUND: PRESS A BUTTON ON IT      ESC  BACK";
                 break;
         }
 
         // Footer
-        if (this.touch.enabled) hint = touchWords(hint);
+        if (this.gamepad.active) hint = padWords(hint);
+        else if (this.touch.enabled) hint = touchWords(hint);
         this.text(hint, cx, hintY, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
     }
 
@@ -2025,14 +2052,16 @@ class Engine {
         return inkAlpha(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(this.clock / period)));
     }
 
-    // Rows of action name and keys; Enter on a row waits for a key to add (or remove, if it has it)
-    drawKeyBindings(top) {
+    // Rows of action name and keys (or gamepad buttons: table, labelled by label); Enter on a row
+    // waits for a key to add (or remove, if it has it): capturing is the action waiting, prompt is
+    // shown in its row
+    drawBindings(top, table, label, pos, capturing, prompt, accent) {
         const listW = 420, rowH = 31, x = VIEW_W / 2 - listW / 2;
-        const rows = [...KEY_ACTIONS.map(a => ({ name: a.name, key: this.options.keys[a.id], id: a.id })), { name: "Reset to defaults" }];
+        const rows = [...KEY_ACTIONS.map(a => ({ name: a.name, key: table[a.id], id: a.id })), { name: "Reset to defaults" }];
         rows.forEach((row, n) => {
             const y = top + n * (rowH + 2);
-            const selected = n === this.controlspos;
-            this.card(x, y, listW, rowH, 8, selected, PIECE_COLORS[tetS].base, 4);
+            const selected = n === pos;
+            this.card(x, y, listW, rowH, 8, selected, PIECE_COLORS[accent].base, 4);
 
             const cy = y + rowH / 2;
             if (!row.id) { // reset row
@@ -2040,14 +2069,14 @@ class Engine {
                 return;
             }
             this.text(row.name.toUpperCase(), x + 20, cy + 1, { size: 13, weight: 800, color: selected ? INK : INK_DIM, spacing: 2 });
-            if (this.capturing === row.id) {
-                this.text("PRESS A KEY", x + listW - 18, cy + 1, { size: 11, weight: 800, color: this.pulseInk(6), align: "right", spacing: 3 });
+            if (capturing === row.id) {
+                this.text(prompt, x + listW - 18, cy + 1, { size: 11, weight: 800, color: this.pulseInk(6), align: "right", spacing: 3 });
             } else {
                 let kx = x + listW - 18;
                 for (const code of [...row.key].reverse()) { // right-aligned, first key leftmost
-                    const label = keyLabel(code);
-                    kx -= this.keycapWidth(label);
-                    this.keycap(label, kx, cy);
+                    const text = label(code);
+                    kx -= this.keycapWidth(text);
+                    this.keycap(text, kx, cy);
                     kx -= 6;
                 }
             }
@@ -2116,24 +2145,6 @@ class Engine {
         });
     }
 
-    // Key hints for the current bindings
-    drawControls(cx, y) {
-        const k = Object.fromEntries(Object.entries(this.options.keys).map(([id, codes]) => [id, codes[0]]));
-        const items = [[[k.left, k.right], "MOVE"], [[k.soft], "SOFT"], [[k.hard], "HARD"], [[k.rotl, k.rotr], "ROTATE"],
-            [[k.hold], "HOLD"], [[k.sound], "SOUND"], [["Escape"], "MENU"]].map(([keys, label]) => [keys.map(keyLabel), label]);
-        // measure total width first so the row is centred
-        const widths = items.map(([keys, label]) =>
-            keys.reduce((a, k) => a + this.keycapWidth(k) + 4, 0) + 4 + this.measureText(label, 10, 600, 2));
-        const gap = 22;
-        let x = cx - (widths.reduce((a, b) => a + b, 0) + gap * (items.length - 1)) / 2;
-        items.forEach(([keys, label], n) => {
-            let kx = x;
-            for (const k of keys) kx += this.keycap(k, kx, y) + 4;
-            this.text(label, kx + 4, y + 1, { size: 10, weight: 600, color: INK_DIM, spacing: 2 });
-            x += widths[n] + gap;
-        });
-    }
-
     drawGame() {
         const game = this.game;
 
@@ -2151,7 +2162,7 @@ class Engine {
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
                 : title === "COMPLETE" ? PIECE_COLORS[tetI].base : PIECE_COLORS[tetZ].base;
             const sub = game.endSub || "ESC — BACK TO MENU";
-            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew, game.endNotes());
+            this.boardBanner(title, this.gamepad.active ? padWords(sub) : this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew, game.endNotes());
         }
     }
 

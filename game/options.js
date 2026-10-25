@@ -1,4 +1,4 @@
-// Player options, kept in localStorage: key bindings, block style, effects and motion, and
+// Player options, kept in localStorage: key and gamepad bindings, block style, effects and motion, and
 // the Guideline handling.
 // Storage can be unavailable (private windows, blocked site data); the game then
 // runs on the defaults and simply doesn't remember changes.
@@ -27,6 +27,26 @@ const DEFAULT_KEYS = {
 };
 const MAX_KEYS_PER_ACTION = 2;
 const defaultKeys = () => Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([id, codes]) => [id, [...codes]]));
+
+// Gamepad bindings: per action, up to MAX_KEYS_PER_ACTION controls of the standard layout, a button
+// index or a left stick direction (PAD_STICK). Start (PAD_START) can't be bound: it opens the menu
+const PAD_STICK = { left: 100, right: 101, up: 102, down: 103 };
+const PAD_START = 9;
+const DEFAULT_PAD = {
+    left: [14, PAD_STICK.left], right: [15, PAD_STICK.right], soft: [13, PAD_STICK.down], hard: [12],
+    rotl: [1, 2], rotr: [0], rot180: [3], hold: [4, 5], sound: [8],
+};
+const defaultPad = () => Object.fromEntries(Object.entries(DEFAULT_PAD).map(([id, buttons]) => [id, [...buttons]]));
+const PAD_LABELS = {
+    0: "A", 1: "B", 2: "X", 3: "Y", 4: "LB", 5: "RB", 6: "LT", 7: "RT", 8: "BACK", 9: "START", 10: "LS", 11: "RS",
+    12: "D ↑", 13: "D ↓", 14: "D ←", 15: "D →", 16: "HOME",
+    [PAD_STICK.left]: "LS ←", [PAD_STICK.right]: "LS →", [PAD_STICK.up]: "LS ↑", [PAD_STICK.down]: "LS ↓",
+};
+
+// Short label for a gamepad control (Xbox names), for keycaps
+function padLabel(id) {
+    return PAD_LABELS[id] || "BTN " + id;
+}
 
 // Board size as a share of the largest size that fits the window (fullscreen can be huge)
 const SCALE_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1]; // smallest first, so → makes it bigger
@@ -122,6 +142,7 @@ function stepIndex(i, dir, n, wrap = true) {
 class Options {
     constructor() {
         this.keys = defaultKeys();
+        this.pad = defaultPad();
         this.tileset = TILESET_IDS[0];
         this.confetti = "glow"; // line clear confetti, an id from CONFETTI_STYLES
         this.effects = DEFAULT_EFFECTS;
@@ -143,6 +164,14 @@ class Options {
                     if (valid.length) this.keys[id] = valid.slice(0, MAX_KEYS_PER_ACTION);
                 }
             }
+            if (saved.pad) {
+                for (const { id } of KEY_ACTIONS) {
+                    const ids = saved.pad[id];
+                    if (!Array.isArray(ids)) continue;
+                    const valid = [...new Set(ids.filter(b => Number.isInteger(b) && b >= 0 && b !== PAD_START))];
+                    if (valid.length) this.pad[id] = valid.slice(0, MAX_KEYS_PER_ACTION);
+                }
+            }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
             for (const [id, values] of Object.entries(OPTION_CHOICES)) {
                 if (values.includes(saved[id])) this[id] = saved[id];
@@ -154,7 +183,7 @@ class Options {
     }
 
     save() {
-        const saved = { keys: this.keys };
+        const saved = { keys: this.keys, pad: this.pad };
         for (const id of [...Object.keys(OPTION_CHOICES), ...OPTION_TOGGLES]) saved[id] = this[id];
         if (!Number.isFinite(saved.sdf)) saved.sdf = null;
         try {
@@ -168,25 +197,26 @@ class Options {
     // replaced, swaps: it gets this action's old key, which this action gives up)
     bind(action, code) {
         if (RESERVED_KEYS.includes(code)) return false;
-        const keys = this.keys[action];
-        if (keys.includes(code)) {
-            if (keys.length > 1) keys.splice(keys.indexOf(code), 1);
-        } else {
-            keys.push(code);
-            const replaced = keys.length > MAX_KEYS_PER_ACTION ? keys.shift() : null;
-            for (const { id } of KEY_ACTIONS) {
-                const other = this.keys[id];
-                if (id === action || !other.includes(code)) continue;
-                other.splice(other.indexOf(code), 1);
-                if (!other.length) other.push(replaced ?? keys.shift());
-            }
-        }
+        bindIn(this.keys, action, code);
+        this.save();
+        return true;
+    }
+
+    // The same for a gamepad control (a button index or PAD_STICK direction)
+    bindPad(action, button) {
+        if (button === PAD_START) return false;
+        bindIn(this.pad, action, button);
         this.save();
         return true;
     }
 
     resetKeys() {
         this.keys = defaultKeys();
+        this.save();
+    }
+
+    resetPad() {
+        this.pad = defaultPad();
         this.save();
     }
 
@@ -223,6 +253,29 @@ class Options {
     actionFor(code) {
         for (const { id } of KEY_ACTIONS) if (this.keys[id].includes(code)) return id;
         return null;
+    }
+
+    // Action bound to a gamepad control, or null
+    padActionFor(button) {
+        for (const { id } of KEY_ACTIONS) if (this.pad[id].includes(button)) return id;
+        return null;
+    }
+}
+
+// Options.bind() on a binding table (action -> list of keys or pad controls)
+function bindIn(table, action, code) {
+    const keys = table[action];
+    if (keys.includes(code)) {
+        if (keys.length > 1) keys.splice(keys.indexOf(code), 1);
+        return;
+    }
+    keys.push(code);
+    const replaced = keys.length > MAX_KEYS_PER_ACTION ? keys.shift() : null;
+    for (const { id } of KEY_ACTIONS) {
+        const other = table[id];
+        if (id === action || !other.includes(code)) continue;
+        other.splice(other.indexOf(code), 1);
+        if (!other.length) other.push(replaced ?? keys.shift());
     }
 }
 
