@@ -636,8 +636,10 @@ class Engine {
     }
 
     // The main menu's items: Continue and Restart come first while there is a game
+    // (no Continue once it is over)
     mainItems() {
-        return this.game !== null ? [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS] : MAIN_ITEMS;
+        if (this.game === null) return MAIN_ITEMS;
+        return this.game.isGameOver() ? [RESTART_ITEM, ...MAIN_ITEMS] : [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS];
     }
 
     // options: the hidden modes' (createGame)
@@ -830,7 +832,7 @@ class Engine {
             const count = screen.count();
             if (code === "Escape") {
                 if (screen.back !== null) this.menuStep = screen.back;
-                else if (this.game !== null) { this.GAMESTATE = STATE_GAME; this.syncKeys = true; return; }
+                else if (this.game !== null && !this.game.isGameOver()) { this.GAMESTATE = STATE_GAME; this.syncKeys = true; return; }
             } else if (code === "ArrowUp") {
                 this[screen.pos] = repeat ? Math.max(0, pos - 1) : (pos + count - 1) % count;
             } else if (code === "ArrowDown") {
