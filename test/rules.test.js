@@ -953,8 +953,8 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
     g.updateSection();
     check("REGRET: section over 1:30 loses one grade boost and the points", [g.internalGrade, g.gradePoints], [4, 0]);
     const h = started(arika);
-    h.level = 100; h.frames = 91 * 60; h.updateSection();
-    check("REGRET: no effect at no boosts", h.internalGrade, 0);
+    h.gradePoints = 40; h.level = 100; h.frames = 91 * 60; h.updateSection();
+    check("REGRET: no effect at no boosts, not even on the points", [h.internalGrade, h.gradePoints], [0, 40]);
 }
 for (const [secs, label, regret] of [[51, "4", true], [49, "3", false]]) {
     // The last section ends at 999, where the staff roll starts: it is judged too (limit 50 s)

@@ -409,7 +409,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 - COOL: reaching *70 within the section time (52 s … 38 s, `TGM_COOL_TIME`), and if the previous
   section earned a COOL, at most 2 s slower than its *70; once the section is finished, +1 grade and speed level +100
   (the delay table runs past 999 for this); none in 900–999. REGRET: a section slower than
-  `TGM_REGRET_TIME` (the last one judged at 999) drops one boost and zeroes the points.
+  `TGM_REGRET_TIME` (the last one judged at 999) drops one boost and zeroes the points (with no
+  boosts it does nothing).
   Both messages use action kind `grade`, as do STAFF ROLL / INVISIBLE ROLL. Times are read as seconds.
   Displayed grade = boosts + COOLs + roll grade, capped at MasterM until the roll is survived.
 - Exams (the Exams card, On by default; Master without Big, each rule its own; tetris.wiki, demotion

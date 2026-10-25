@@ -1239,11 +1239,13 @@ class TiGame extends TgmGame {
                 this.speedBonus += TGM_COOL_SPEEDUP;
             }
             if (seconds > TGM_REGRET_TIME[this.section]) {
+                // fall back to the highest internal grade with one boost less, the points gone; with
+                // no boosts it changes nothing, not even the points (tetris.wiki)
                 const boosts = TGM_GRADES[this.internalGrade][0];
-                if (boosts > 0) { // fall back to the highest internal grade with one boost less
+                if (boosts > 0) {
                     while (TGM_GRADES[this.internalGrade][0] >= boosts) this.internalGrade--;
+                    this.gradePoints = 0;
                 }
-                this.gradePoints = 0;
                 this.addAction("REGRET!!", "grade");
             }
             this.prevCool = this.coolPending;
