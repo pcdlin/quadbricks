@@ -836,9 +836,10 @@ class Engine {
         }
     }
 
-    // Setting cards with their current values (action cards keep their own description)
+    // Setting cards with their current values, drawn larger than a description (action cards keep
+    // their own description)
     settingCards(items) {
-        return items.map(item => item.action ? item : { ...item, desc: `◀  ${this.optionValue(item.id)}  ▶` });
+        return items.map(item => item.action ? item : { ...item, value: `◀  ${this.optionValue(item.id)}  ▶` });
     }
 
     // The mode selected on the modes screen
@@ -1603,8 +1604,13 @@ class Engine {
             if (item.preview) this.drawTilesetPreview(x + listW - PREVIEW_RIGHT, y + (h - CELL) / 2); // right of the name
 
             this.drawPieceCentered(item.accent, x + 50, y + h / 2, 13, selected ? "active" : "locked");
-            this.text(item.name.toUpperCase(), x + 92, y + h / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
-            this.text(item.desc, x + 92, y + h / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
+            if (item.value) { // a setting: a smaller name over its value
+                this.text(item.name.toUpperCase(), x + 92, y + h / 2 - 9, { size: 14, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
+                this.text(item.value, x + 92, y + h / 2 + 10, { size: 16, weight: 700, color: selected ? INK : "rgba(244,236,220,0.75)" });
+            } else {
+                this.text(item.name.toUpperCase(), x + 92, y + h / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
+                this.text(item.desc, x + 92, y + h / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
+            }
             if (selected) this.text("▶", x + listW - 26, y + h / 2, { size: 14, color: this.pulseInk(10), align: "center" });
             y += h + gap;
         });
