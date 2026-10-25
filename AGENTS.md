@@ -99,10 +99,10 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or a hidden mode's option
-  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, gathered into `options`) (the label's entry in
+  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, gathered into `options`) (the label's entry in
   `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
   but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; TGM3 Master's Exams,
-  On / Off; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
+  On / Off; GB's Heart, Off / On; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
   Time, 1:00 / 2:00 / 3:00 / 5:00), or `"startLevel"` / `"height"` (the label's index: Level 0–19 for
   NES, 0–9 for GB, M1–M30 for Master, 1–15 for Marathon; Height 0–5 for B-Type; Rows 5/10/18 for Dig).
   `initial`: the label chosen at first (Sprint 40, Ultra 2:00), else the first.
@@ -579,6 +579,9 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (start + 1) × 10 lines, then every 10, max 20, endless. B-Type: stays at the chosen level,
   starts over height × 2 rows of garbage (height 0–5, `GB_ROWS_PER_HEIGHT`; each cell filled with
   probability 0.5, every row with a hole; the stats show a HEIGHT row), ends with COMPLETE at 25 lines.
+- Heart mode (the Heart card; tetris.wiki, `SetNumFramesUntilPiecesMoveDown` in the disassembly): gravity
+  as at the level + 10 (`GB_HEART_LEVELS`, `speedLevel()`), at most level 20's; levels and score as
+  without it; the LEVEL row shows a ♥. Both types.
 
 ### Variants (all rule sets)
 - `standard`: as specified (Guideline's "Endless", Marathon's Goal card). `marathon`: Guideline only, ends with
@@ -646,8 +649,9 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (the countdown stands in), no level 29 colour glitches, kill screen or score above 999,999. Start
   levels 10–19 are on the level card rather than A + Start. Colours stay the Guideline ones.
 - GB: the level and height
-  choices use setting cards, not the original's number grids. No B-Type end bonus,
-  no heart mode, no line-clear duplication bug, block out at spawn ends the game. The randomizer's
+  choices use setting cards, not the original's number grids (heart mode is the Heart card rather than
+  Down + Start). There is no B-Type end bonus to add: the disassemblies show the GB's end screen only
+  tallies the clears and the NES's B-Type ends without one. No line-clear duplication bug, block out at spawn ends the game. The randomizer's
   OR test is a reconstruction (compared with the previous piece) that reproduces the published
   piece frequencies; it is seeded from the shared generator, not a DIV timer. Soft drop needing a
   re-press per piece follows NES behaviour; soft drop points require the drop to lock the piece.

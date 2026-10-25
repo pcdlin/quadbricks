@@ -49,8 +49,8 @@ const ULTRA_SETUP = { name: "Time", accent: tetZ, arg: "variant", labels: ["1:00
     values: ["ultra1", "ultra", "ultra3", "ultra5"], initial: 1 };
 const ACE_RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["SRS", "ARS", "ARS2"], values: [tgmAce, aceArs, aceArs2] };
 const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
-// createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams
-const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams"];
+// createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams, GB's heart mode
+const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart"];
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
 const REV_SETUP = { name: "Reverse", accent: tetZ, arg: "rev", labels: ["Off", "On"], values: [false, true] }; // the well upside down
 const MONO_SETUP = { name: "Mono", accent: tetS, arg: "mono", labels: ["Off", "On"], values: [false, true] }; // one colour
@@ -58,6 +58,7 @@ const TLS_SETUP = { name: "Ghost", accent: tetI, arg: "tls", labels: ["To level 
 const TGM1_SETUP = [BIG_SETUP, REV_SETUP, MONO_SETUP, TLS_SETUP]; // TGM1's codes, which combine
 // TGM3 Master: the qualified grade and its exams (Exams, tgm3ExamFor); none with Big
 const EXAMS_SETUP = { name: "Exams", accent: tetJ, arg: "exams", labels: ["On", "Off"], values: [true, false] };
+const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off", "On"], values: [false, true] }; // GB: gravity 10 levels on
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
@@ -104,8 +105,8 @@ const RULESETS = [
       ] },
     { name: "GB", accent: tetO, desc: "GB (1989) — no hard drop, no hold, no kicks",
       modes: [
-          { name: "A-Type", mode: gbTetris, variant: "standard", setup: [levelSetup(GB_START_LEVELS)], accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
-          { name: "B-Type", mode: gbTetris, variant: "btype", setup: [levelSetup(GB_START_LEVELS), HEIGHT_SETUP], accent: tetS, desc: "Clear 25 lines, starting over garbage" },
+          { name: "A-Type", mode: gbTetris, variant: "standard", setup: [levelSetup(GB_START_LEVELS), HEART_SETUP], accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
+          { name: "B-Type", mode: gbTetris, variant: "btype", setup: [levelSetup(GB_START_LEVELS), HEIGHT_SETUP, HEART_SETUP], accent: tetS, desc: "Clear 25 lines, starting over garbage" },
       ] },
 ];
 const OPTIONS_ITEMS = [

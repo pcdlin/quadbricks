@@ -68,6 +68,9 @@ const GB_MAX_SCORE = 999999; // NES too
 const GB_B_LINES = 25; // B-Type: 25 lines; NES too
 const GB_B_HEIGHTS = 6, GB_ROWS_PER_HEIGHT = 2; // B-Type height 0-5: 0 to 10 rows of garbage
 const GB_GARBAGE_FILL = 0.5; // chance of a block in each garbage cell
+// Heart mode (Down + Start on the title screen): gravity as at the level + 10, at most level 20's;
+// scoring unchanged (tetris.wiki; SetNumFramesUntilPiecesMoveDown in the disassembly)
+const GB_HEART_LEVELS = 10;
 
 // ----------------------------------------------------------
 // What NES and GB share: no hard drop, no hold, no kicks, no IRS, no lock delay (a piece that
@@ -124,13 +127,15 @@ class Game1989 extends RuleGame {
         this.arr = nes ? NES_ARR : GB_ARR;
         this.lineClearDelay = nes ? NES_LINE_CLEAR : GB_LINE_CLEAR;
         // the gravity timer (applyGravityGb)
-        this.gbFrames = nes ? NES_GRAVITY[Math.min(this.level, NES_GRAVITY.length - 1)] : GB_GRAVITY[Math.min(this.level, GB_MAX_LEVEL)];
+        this.gbFrames = nes ? NES_GRAVITY[Math.min(this.level, NES_GRAVITY.length - 1)] : GB_GRAVITY[Math.min(this.speedLevel(), GB_MAX_LEVEL)];
         this.lockDelayMax = this.gbFrames; // no lock delay: shown as the time left to the next gravity row
         this.gravity = 1 / this.gbFrames;
         this.softGravity = 1 / (nes ? NES_SOFT_FRAMES : GB_SOFT_FRAMES);
     }
 
     ghostVisible() { return false; }
+
+    speedLevel() { return this.level; } // the level gravity is taken from (GB's heart mode adds to it)
 
     onNewPiece() {
         this.softArmed = false; // soft drop needs a fresh press for each piece
@@ -294,6 +299,22 @@ class GbGame extends Game1989 {
         this.wellTop = this.firstDrawnRow = this.pieceTop = GB_WELL_TOP;
         this.randomizer = new GbRandomizer(Date.now());
         this.setStart(startLevel, GB_START_LEVELS, height);
+        this.heart = false;
+    }
+
+    // Heart mode (the Heart card), before the first piece
+    setOptions(options = {}) {
+        super.setOptions(options);
+        this.heart = !!options.heart;
+    }
+
+    speedLevel() { return this.level + (this.heart ? GB_HEART_LEVELS : 0); }
+
+    // The level with a heart in heart mode, as the GB shows it
+    getStats() {
+        const stats = super.getStats();
+        if (this.heart) stats[1] = ["LEVEL", `${this.level} ♥`];
+        return stats;
     }
 
     garbageRows() { return this.height * GB_ROWS_PER_HEIGHT; }

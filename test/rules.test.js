@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, GB_GRAVITY, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -2348,6 +2348,22 @@ function secretAt(g, rows, cover = true) {
     demoted.endGame("GAME OVER", "");
     check("  ...the banner reports the exam", [g.endNotes(), passed.endNotes(), demoted.endNotes()],
         [["EXAM FAILED — S1 NOT REACHED"], ["EXAM PASSED — QUALIFIED 9"], ["DEMOTED TO S3"]]);
+}
+
+// ---------------------------------------------------------------- GB heart mode
+{
+    const plain = createGame(gbTetris, "standard", 5), heart = createGame(gbTetris, "standard", 5, 0, {}, { heart: true });
+    const b = createGame(gbTetris, "btype", 9, 0, {}, { heart: true });
+    check("GB heart mode: gravity as 10 levels higher (at most level 20's), the level and score unchanged",
+        [plain.gbFrames, heart.gbFrames, b.gbFrames, heart.level], [GB_GRAVITY[5], GB_GRAVITY[15], GB_GRAVITY[19], 5]);
+    heart.level = 15; heart.updateTimings();
+    check("  ...capped at level 20's speed; the stats show the level with a heart", [heart.gbFrames, heart.getStats()[1]], [GB_GRAVITY[20], ["LEVEL", "15 ♥"]]);
+    const g = startedWith(gbTetris, "standard", { heart: true });
+    fill(g, ["######### "]);
+    place(g, tetI, 1, 16, 8); // standing in column 9
+    g.gravityAcc = 0;
+    for (let f = 0; f < 200 && g.lines === 0; f++) g.advanceFrame(0);
+    check("  ...a single at level 0 scores 40 as without it", [g.lines, g.score], [1, 40]);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
