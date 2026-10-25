@@ -41,12 +41,12 @@ const RULESETS = [
           { name: "Sprint", mode: guideline, variant: "sprint", accent: tetL, desc: "Clear 40 lines as fast as you can" },
           { name: "Ultra", mode: guideline, variant: "ultra", accent: tetZ, desc: "Score as much as you can in two minutes" },
       ] },
-    { name: "TGM1", accent: tetZ, desc: "The Grand Master — ARS, no hard or sonic drop, no hold",
+    { name: "TGM1", accent: tetZ, desc: "ARS, no hard or sonic drop, no hold",
       modes: [
           { name: "Master", mode: tgmOriginal, variant: "standard", accent: tetT, desc: "Up to level 999, grades 9 to S9, GM by checkpoints" },
           { name: "20G", mode: tgmOriginal, variant: "20g", accent: tetZ, desc: "Master mode at 20G from the start" },
       ] },
-    { name: "TGM2 TAP", accent: tetI, desc: "TGM2 The Absolute Plus — ARS, sonic drop, no hold",
+    { name: "TGM2 TAP", accent: tetI, desc: "ARS, sonic drop, no hold",
       modes: [
           { name: "Master", mode: tgmTap, variant: "standard", accent: tetT, desc: "Up to level 999, grades 9 to GM" },
           { name: "Death", mode: tgmTap, variant: "death", accent: tetZ, desc: "20G from the start, M at 500, GM at 999" },
@@ -61,7 +61,7 @@ const RULESETS = [
           { name: "A-Type", mode: nesTetris, variant: "standard", startLevels: NES_START_LEVELS, accent: tetL, desc: "Endless, faster every 10 lines, top speed at level 29" },
           { name: "B-Type", mode: nesTetris, variant: "btype", startLevels: NES_START_LEVELS, startHeights: GB_B_HEIGHTS, accent: tetS, desc: "Clear 25 lines, starting over garbage" },
       ] },
-    { name: "GB", accent: tetO, desc: "Game Boy (1989) — no hard drop, no hold, no kicks",
+    { name: "GB", accent: tetO, desc: "GB (1989) — no hard drop, no hold, no kicks",
       modes: [
           { name: "A-Type", mode: gameBoy, variant: "standard", startLevels: GB_START_LEVELS, accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
           { name: "B-Type", mode: gameBoy, variant: "btype", startLevels: GB_START_LEVELS, startHeights: GB_B_HEIGHTS, accent: tetS, desc: "Clear 25 lines, starting over garbage" },
