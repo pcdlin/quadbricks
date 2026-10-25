@@ -309,7 +309,8 @@ for (const manual of [true, false]) {
 function clearField(g) { for (let r = -18; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, 0); }
 function framesToNextPiece(g) { let f = 0; while (g.phase !== "active" && f < 200) { g.advanceFrame(0); f++; } return f; }
 
-for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 12, 14, 16, 18, 20]], [arika, "Arika (DAS 16, ARR 1)", [0, 16, 17, 18, 19, 20]]]) {
+for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 12, 14, 16, 18, 20]], [arika, "Arika (DAS 16 counted inclusively, ARR 1)", [0, 15, 16, 17, 18, 19]],
+    [tgmTap, "TAP (DAS 16 counted inclusively, ARR 1)", [0, 15, 16, 17, 18, 19]], [tgmOriginal, "TGM1 (DAS 16 counted inclusively, ARR 1)", [0, 15, 16, 17, 18, 19]]]) {
     const g = createGame(rs, "test"); // no gravity: only shifting moves the piece
     for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
     clearField(g);

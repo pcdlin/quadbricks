@@ -72,7 +72,9 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   calls.
 - Keys are collected as events and turned into one **input bitmap per frame**
   (`LEFT_PUSH`, `LEFT_RELEASE`, … from `game.js`), like the SDL original. Key repeat is
-  ignored in games (`e.repeat`); DAS/ARR are implemented by the rules, not the OS. Menus take
+  ignored in games (`e.repeat`); DAS/ARR are implemented by the rules, not the OS (the first
+  auto-shift comes DAS frames after the press; the TGM series' tables count the press frame too,
+  `dasInclusive`, so theirs comes DAS − 1 frames after it, as in NullpoMino and Cambridge). Menus take
   the OS repeat for the arrows (`MENU_REPEAT_KEYS`, events marked `repeat`) to scroll while held;
   repeats stop at the ends of lists and values instead of wrapping (`stepIndex()` in
   `options.js`) and don't flip on/off settings.

@@ -217,6 +217,9 @@ class RuleGame {
         this.dasCounter = 0;
         this.arrCounter = 0;
         this.dcdWait = 0; // frames the charged auto-shift still pauses (DAS cut delay)
+        // das counts the press frame as the first (the TGM tables, as tetris.wiki gives them): the
+        // first auto-shift comes das - 1 frames after the press instead of das
+        this.dasInclusive = false;
 
         // Current piece
         this.curPiece_type = 0;
@@ -538,11 +541,13 @@ class RuleGame {
         if (C(RIGHT_PUSH)) { this.held.right = true; this.restartShift(1); shiftPushed = true; }
 
         // DAS charges in every phase, including ARE and line clears (unless dasCharges() says
-        // otherwise). The first auto-shift comes DAS frames after the press, then one every ARR frames.
+        // otherwise). The first auto-shift comes DAS frames after the press (one less with
+        // dasInclusive), then one every ARR frames.
         let autoShift = false;
         if (this.shiftDir !== 0 && !shiftPushed && this.dasCharges()) {
-            if (this.dasCounter < this.das) {
-                if (++this.dasCounter >= this.das) {
+            const das = this.dasInclusive ? Math.max(1, this.das - 1) : this.das;
+            if (this.dasCounter < das) {
+                if (++this.dasCounter >= das) {
                     autoShift = true;
                     this.arrCounter = 0;
                 }

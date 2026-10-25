@@ -307,6 +307,7 @@ class TgmGame extends RuleGame {
     constructor(mode, variant) {
         super(mode, variant);
         this.tgm = true;
+        this.dasInclusive = true; // the delay tables are tetris.wiki's, with DAS counted inclusively
         this.level = 0;
         this.combo = 1; // TGM's combo: a score multiplier
         this.bufferTop = TGM_BUFFER_TOP;
