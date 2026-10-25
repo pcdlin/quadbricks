@@ -378,7 +378,9 @@ class Engine {
     // and render at device resolution. The Options scale shrinks the view in games only (menus stay
     // at full size); the backdrop always covers the window at the fit size.
     resize() {
-        const winW = window.innerWidth, winH = window.innerHeight;
+        // a window with no size yet (a hidden or not yet laid out page) counts as 1 x 1: zero would
+        // make the backdrop's gradients non-finite and stop init(); the next resize sets it right
+        const winW = Math.max(1, window.innerWidth), winH = Math.max(1, window.innerHeight);
         const fitIn = ([, , w, h], availW, availH) => Math.min(availW / w, availH / h);
         // touch devices always take the compact layout; elsewhere a narrow window does
         this.layout = this.touch.enabled || fitIn(LAYOUT_COMPACT.view, winW, winH) >= COMPACT_GAIN * fitIn(LAYOUT_FULL.view, winW, winH)

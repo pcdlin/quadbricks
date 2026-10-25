@@ -747,6 +747,14 @@ class TapGame extends TgmGame {
                 for (let r = HEIGHT - 1; r >= FIELD_TOP; r--) if (this.getCell(r, c)) blocks.push(this.getCell(r, c));
                 for (let r = HEIGHT - 1, k = 0; r >= FIELD_TOP; r--, k++) this.setCell(r, c, k < blocks.length ? blocks[k] : 0);
             }
+            // rows it fills clear at once (no score or lines: the item's, not the player's)
+            const full = [];
+            for (let r = FIELD_TOP; r < HEIGHT; r++) {
+                if (!this.field[r - FIELD_TOP].every(v => v !== 0)) continue;
+                full.push(r);
+                for (let c = 0; c < WIDTH; c++) this.clearedCells.push({ row: r, col: c, type: this.getCell(r, c) });
+            }
+            this.collapse(full);
         } else {
             const rows = [];
             for (let r = HEIGHT - 2; r >= FIELD_TOP; r -= 2) {

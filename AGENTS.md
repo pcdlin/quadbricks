@@ -417,7 +417,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   100, no grades. Score: TAP's formula ×6, and at 300 a time bonus of 1253 × the seconds under 5:00.
 - Items (`TAP_NORMAL_ITEMS`): reaching 100 brings Free Fall (every block drops down its column, no
   holes left), 200 Del Even (every other row from the bottom deleted: the second, fourth, ...); used
-  after the next lock (`useItem()`, from `afterClear()` or `onMiss()`).
+  after the next lock (`useItem()`, from `afterClear()` or `onMiss()`). Rows Free Fall fills clear at
+  once, without score or lines (an assumption: the sources don't say).
 - Level 300: a 20G staff roll (TAP's length) with blocks visible; COMPLETE whether survived or not.
 
 ### Big modes

@@ -2208,5 +2208,21 @@ function startedTgm1With(options, variant = "standard") {
         [true, true, 1, true, 20, ["TGM1", "20G BIG"]]);
 }
 
+// ---------------------------------------------------------------- TAP Normal: Free Fall's full rows
+{
+    const g = startedMode(tgmTap, "normal");
+    clearField(g);
+    fill(g, ["#########.", "#########.", "#########."]);
+    for (let r = 10; r < 13; r++) g.setCell(r, 9, 2); // three blocks hanging over the gaps
+    g.setCell(9, 0, 3);
+    g.pendingItem = "FREE FALL";
+    const lines = g.lines, score = g.score;
+    place(g, tetO, 0, 5, 3);
+    g.lock();
+    const row = r => [...Array(WIDTH)].map((_, c) => g.getCell(r, c) ? "#" : ".").join("");
+    check("TAP Normal Free Fall: rows it fills clear at once, without score or lines",
+        [row(21), row(20), g.lines - lines, g.score - score], ["#...##....", "....##....", 0, 0]); // the O locked on top fell too
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);
