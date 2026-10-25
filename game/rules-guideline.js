@@ -1,7 +1,9 @@
 // Guideline rule set (GuidelineGame): Tetris Guideline with SRS, a 7-bag, T-spins and
 // back-to-backs, and the player's handling options.
 //  - standard: endless; marathon: 150 lines; variable: marathon with the variable goal, levels 1-15
-//  - sprint: 40 lines as fast as possible; ultra: highest score in 2 minutes (both at level 1)
+//    (all three can start at a later level: startLevel)
+//  - sprint: 40 lines as fast as possible (sprint20, sprint100: 20 or 100); ultra: highest score in
+//    2 minutes (ultra1, ultra3, ultra5: 1, 3 or 5); both at level 1
 //  - dig: clear 5, 10 or 18 rows of garbage as fast as possible, level 1
 //  - master: 20G, shorter lock and line clear delays by level M1-M30, 300 lines
 // (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin; Master's delays
@@ -15,9 +17,13 @@ function guidelineGravity(level) {
 
 const GUIDELINE_MAX_LEVEL = 15;  // level cap; endless play continues at level 15 speed
 const GUIDELINE_LINES_PER_LEVEL = 10; // fixed goal
-const GUIDELINE_LINE_GOALS = { marathon: 150, sprint: 40, master: 300 }; // variants that end on a number of lines
-const GUIDELINE_ULTRA_FRAMES = 2 * 60 * 60; // the ultra variant ends after two minutes
-const GUIDELINE_FIXED_LEVEL = ["sprint", "ultra", "dig"]; // variants that stay at level 1
+// Variants that end on a number of lines
+const GUIDELINE_LINE_GOALS = { marathon: 150, sprint: 40, sprint20: 20, sprint100: 100, master: 300 };
+// Ultra variants: the frames they last
+const GUIDELINE_ULTRA_FRAMES = { ultra: 2 * 60 * 60, ultra1: 1 * 60 * 60, ultra3: 3 * 60 * 60, ultra5: 5 * 60 * 60 };
+const GUIDELINE_SPRINTS = ["sprint", "sprint20", "sprint100"];
+const GUIDELINE_MARATHONS = ["standard", "marathon", "variable"]; // the ones that take a start level
+const GUIDELINE_FIXED_LEVEL = [...GUIDELINE_SPRINTS, ...Object.keys(GUIDELINE_ULTRA_FRAMES), "dig"]; // variants that stay at level 1
 // Variable goal: each level needs 5 x level goal points; a clear (or T-spin) earns its base score / 100,
 // rounded down (back-to-back included), and points beyond the goal are lost. Levels 1-15.
 const GUIDELINE_VARIABLE_GOAL = 5;
@@ -49,7 +55,11 @@ class GuidelineGame extends RuleGame {
         this.handling = { ...GUIDELINE_HANDLING, ...handling };
         this.master = variant === "master";
         this.dig = variant === "dig";
-        this.startLevel = this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1) : 0; // master: M1 + startLevel
+        this.sprint = GUIDELINE_SPRINTS.includes(variant);
+        this.ultraFrames = GUIDELINE_ULTRA_FRAMES[variant] || 0; // ultra: its length
+        // level 1 + startLevel: Master M1-M30, the marathons 1-15
+        this.startLevel = this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1)
+            : GUIDELINE_MARATHONS.includes(variant) ? clamp(startLevel, 0, GUIDELINE_MAX_LEVEL - 1) : 0;
         this.level = 1 + this.startLevel;
         this.height = this.dig ? clamp(height, 0, GUIDELINE_DIG_ROWS.length - 1) : 0;
         this.goalPoints = 0; // variable goal: points towards the current level's goal
@@ -89,9 +99,9 @@ class GuidelineGame extends RuleGame {
         const mode = ["GUIDELINE", VARIANT_NAMES[this.variant] || "ENDLESS"];
         const goal = GUIDELINE_LINE_GOALS[this.variant];
         const lines = ["LINES", goal ? `${this.lines} / ${goal}` : String(this.lines)];
-        if (this.variant === "sprint") return [mode, ["TIME", this.formatTime()], lines, ["SCORE", score]];
-        if (this.variant === "ultra") {
-            return [mode, ["TIME", this.formatTime(Math.max(0, GUIDELINE_ULTRA_FRAMES - this.frames))], lines, ["SCORE", score]];
+        if (this.sprint) return [mode, ["TIME", this.formatTime()], lines, ["SCORE", score]];
+        if (this.ultraFrames) {
+            return [mode, ["TIME", this.formatTime(Math.max(0, this.ultraFrames - this.frames))], lines, ["SCORE", score]];
         }
         if (this.variant === "variable") {
             return [mode, ["LEVEL", String(this.level)], ["GOAL", `${this.goalPoints} / ${GUIDELINE_VARIABLE_GOAL * this.level}`], lines, ["SCORE", score]];
@@ -130,7 +140,7 @@ class GuidelineGame extends RuleGame {
     }
 
     onClock() {
-        if (this.variant === "ultra" && this.frames >= GUIDELINE_ULTRA_FRAMES) {
+        if (this.ultraFrames && this.frames >= this.ultraFrames) {
             this.endGame("TIME UP", `SCORE ${this.scoreText()}`);
             return false;
         }
@@ -210,8 +220,8 @@ class GuidelineGame extends RuleGame {
             }
             this.lines += n;
             const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) || this.variant === "variable" ? this.level
-                : this.master ? Math.min(GUIDELINE_MASTER_DELAYS.length, 1 + this.startLevel + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL))
-                : Math.min(GUIDELINE_MAX_LEVEL, 1 + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL));
+                : Math.min(this.master ? GUIDELINE_MASTER_DELAYS.length : GUIDELINE_MAX_LEVEL,
+                    1 + this.startLevel + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL));
             if (level !== this.level) {
                 this.level = level;
                 this.updateTimings();

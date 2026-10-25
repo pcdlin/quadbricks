@@ -33,7 +33,7 @@ when WebGL is unavailable).
 |---|---|
 | `game/game.js` | Shared definitions only: field size (`WIDTH` 10, `HEIGHT` 22, first visible row `VISIBLE_TOP` 2), piece ids (`tetI`=1 … `tetO`=7), input bitmap bits, SRS `shapes`; `shapeCells()` (a shape table's blocks as offsets) and `clamp()`. |
 | `game/randomizers.js` | The non-bag piece randomizers (TGM3, TAP, TGM1, GB, NES) on the arcade's generator. |
-| `game/rules.js` | `RuleGame`, the rule sets' base class (field, input, frame and phases, collision, SRS rotation, gravity, lock delay, line clears, event queues), mode ids, `registerRules()` and `createGame()`. |
+| `game/rules.js` | `RuleGame`, the rule sets' base class (field, input, frame and phases, collision, SRS and ARS rotation, sonic drop, gravity, lock delay, line clears, event queues), mode ids, `registerRules()` and `createGame()`. |
 | `game/rules-guideline.js` | `GuidelineGame`: the Guideline and its modes. |
 | `game/rules-tgm.js` | `TgmGame` and its games: `Tgm1Game`, `TapGame` (Master, Death, TGM+), `TiGame` (TGM3 Master, World or Classic) with `TiEasyGame` and `TiShiraseGame`. |
 | `game/rules-ace.js` | `AceGame`: ACE's five modes. |
@@ -46,7 +46,7 @@ when WebGL is unavailable).
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for the rule sets (~375 checks). |
+| `test/rules.test.js` | Spec checks for the rule sets (~385 checks). |
 
 ## History in one paragraph
 
@@ -99,9 +99,11 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or `"big"` (the label's entry in
-  `values`: TGM3's Rule, World / Classic; Big, Off / On, on the TGM modes but TGM+; Marathon's
-  Goal, 150 lines / Variable / Endless), or `"startLevel"` / `"height"` (the label's index: Level
-  0–19 for NES, 0–9 for GB, M1–M30 for Master; Height 0–5 for B-Type; Rows 5/10/18 for Dig).
+  `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
+  but TGM+; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
+  Time, 1:00 / 2:00 / 3:00 / 5:00), or `"startLevel"` / `"height"` (the label's index: Level 0–19 for
+  NES, 0–9 for GB, M1–M30 for Master, 1–15 for Marathon; Height 0–5 for B-Type; Rows 5/10/18 for Dig).
+  `initial`: the label chosen at first (Sprint 40, Ultra 2:00), else the first.
   Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
   `menuAction()` turns them into arguments). The mode lists use the Visuals screen's
   tighter cards (`VISUALS_ROWS`), the rule set list (seven) tighter still, a little higher, with its
@@ -130,10 +132,11 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 ### Rules engine (`rules.js` and the family files)
 `createGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
 `tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gbTetris` (7, GB), `tgmOriginal` (8, TGM1),
-`nesTetris` (9, NES), `tgmAce` (10, ACE) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus the
+`nesTetris` (9, NES), `tgmAce` (10, ACE with SRS), `aceArs` (11) and `aceArs2` (12) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus the
 Guideline's `"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"` and `"master"`, NES's and GB's
 `"btype"`, TGM1's `"20g"`, TAP's `"plus"` (TGM+), TGM3's `"easy"` and `"shirase"` (with either rule), and
-ACE's `"normal"`, `"hispeed1"`, `"hispeed2"`, `"another"`, `"another2"`).
+ACE's `"normal"`, `"hispeed1"`, `"hispeed2"`, `"another"`, `"another2"`, `"big"`; and the Guideline's
+`"sprint20"`, `"sprint100"`, `"ultra1"`, `"ultra3"`, `"ultra5"` for its other goals and times).
 TAP's `"standard"` is its Master mode, `"death"` its Death mode; NES's and GB's `"standard"` is A-Type.
 A third argument, `startLevel` (NES and GB only, clamped to 0–19, `NES_START_LEVELS`, or 0–9,
 `GB_START_LEVELS`; Guideline master: 0–29 for M1–M30), sets the starting level;
@@ -153,7 +156,10 @@ configuration fields set in their constructors and hooks they override:
   Guideline's, or Arika's for TGM3 World and ACE), `moveLimit` (lock resets per piece), `lockOut`,
   `dropsOnSpawn` (Guideline), `bufferTop` (TGM: blocks locking above it are deleted),
   `softDropPoints`, `randomizer` (else a 7-bag), `wellTop` / `firstDrawnRow` / `pieceTop`, `level`,
-  `combo`, `handling` (`NO_HANDLING` unless the Guideline's).
+  `combo`, `handling` (`NO_HANDLING` unless the Guideline's); ARS: `useArs(plain, palette)` (`ars`,
+  `plainArs`: basic kicks only), `arsFloorKicks` (per piece, `{ i, t }`), `floorKickZeroes`,
+  `sonicTrail`; `rotate()` then uses `rotateArs()`, and `sonicDrop()` is there for an up key that
+  doesn't lock.
 - Hooks: `setTimings()` (are, lineAre, das, arr, lockDelayMax, lineClearDelay, gravity,
   softGravity; `updateTimings()` then applies the test/death/20g variants), `spawnPosition()`,
   `beforeSpawn()` / `onNewPiece()` / `afterSpawn()` / `onBlockOut()`, `onClock()` (every frame after
@@ -162,8 +168,7 @@ configuration fields set in their constructors and hooks they override:
   drop by default) / `onGround()` / `onHardDrop()`, `beforeLock()` / `onBlockLocked()`,
   `scoreClear(n, rows)`, `onCollapse()`, `afterClear()`, `ghostVisible()`, `getStats()`,
   `setupField()`, `setHandling()`, `testSetup()`.
-- Inside a family, its own flags stay local: `TgmGame` has `ars` / `plainArs` (`useArs()`),
-  `internalGrading` (grade points and decay: TGM3 and TAP Master), `hasKill` (TGM3 Master's 15-minute
+- Inside a family, its own flags stay local: `TgmGame` has `internalGrading` (grade points and decay: TGM3 and TAP Master), `hasKill` (TGM3 Master's 15-minute
   speed-up), `maxLevel` (999; Shirase 1300, Easy 200) and its own hooks (`delayRow()`, `gravityAt()`,
   `scoreLines()`, `scoreRollClear()`, `onMiss()`, `rollKind()`, `onRollBegin()`, `prepareTestRoll()`,
   `finishRoll()`, `statsName()`, `tgmStats()`, `gradeComboMultiplier()`); TGM3's Easy and Shirase
@@ -442,10 +447,17 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   1000 (`MONO_PALETTE`, green). Level 1300: a 3238-frame staff roll with big pieces, blocks visible;
   surviving it completes the mode (orange line), topping out ends it with the grade.
 
-### ACE: Normal, Hi-Speed 1, Hi-Speed 2, Another, Another 2
+### ACE: Normal, Hi-Speed 1, Hi-Speed 2, Another, Another 2, Big (SRS, ARS or ARS2)
 - Sources: tetris.wiki *Tetris The Grand Master Ace*; NullpoMino `TimeAttackMode.java` (tables).
-- Arika SRS (TGM3 World's kicks), hold with IHS, three next pieces, TGM3's randomizer, hard drop,
-  ghost (hidden at 20G), lock resets up to 128 per piece (`ACE_MOVE_RESETS`), no score.
+- Hold with IHS, three next pieces, TGM3's randomizer, ghost (hidden at 20G), lock resets up to 128
+  per piece (`ACE_MOVE_RESETS`, move reset with every rule), no score. Rules (the mode id, the Rule card):
+  - SRS (`tgmAce`): Arika SRS (TGM3 World's kicks), hard drop, soft drop 1G.
+  - ARS (`aceArs`): TGM3's ARS shapes and kicks (`useArs(false, DEFAULT_PALETTE)`: standard colours)
+    with no floor kick limit, no zeroed lock delay after floor kicks, spawn in rows 19-20; up is a hard
+    drop that locks, soft drop about 0.5G (`ACE_ARS_SOFT`) and doesn't lock.
+  - ARS2 (`aceArs2`): as ARS with the drops' locking swapped: up is a sonic drop, soft drop locks on
+    the ground. The stats put ARS or ARS2 before the mode.
+- Big: Normal's speeds with big pieces.
 - 15 levels of 10 lines; 150 lines complete it. Each level has a time limit (`ACE_TIME_LIMITS`: 2:00,
   2:00, then 1:30; Another 1:00), its clock starting over when the next piece comes; running out ends
   the game (TIME OVER). Stats: LEVEL, LINES, LIMIT (the level's clock), TIME.
@@ -521,8 +533,10 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 ### Variants (all rule sets)
 - `standard`: as specified (Guideline's "Endless", Marathon's Goal card). `marathon`: Guideline only, ends with
   COMPLETE after 150 lines (`GUIDELINE_LINE_GOALS`). `variable`, `dig`, `master`: Guideline only (above). `sprint`: Guideline only, COMPLETE after 40
-  lines with a TIME row. `ultra`: Guideline only, TIME UP after 2 minutes (`GUIDELINE_ULTRA_FRAMES`)
-  with a countdown TIME row. Sprint, ultra and dig stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
+  lines with a TIME row (`sprint20`, `sprint100`: 20 or 100). `ultra`: Guideline only, TIME UP after
+  2 minutes (`GUIDELINE_ULTRA_FRAMES`; `ultra1`, `ultra3`, `ultra5`: 1, 3 or 5) with a countdown TIME
+  row. The marathons (standard, marathon, variable) start at level 1 + startLevel (to 15) and level up
+  every 10 lines from there. Sprint, ultra and dig stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
   assumption, the sources only give the goals). `death`: constant 20G, no ghost (for TAP it is
   TAP's own Death mode, above). `btype`: NES and GB only (above). `20g`: TGM1 only (above).
   `test`: no gravity (still implemented and tested, but hidden from the menu).
@@ -563,7 +577,10 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   the roll. Shirase: the roll length and big roll pieces follow NullpoMino; the green monochrome is
   used with both rules (Classic's white has no colour here); level 1300 is reached by clears only.
 - ACE: NullpoMino's tables are used as they are (its DAS and ARE may be counted differently from the
-  arcade's); only the SRS rule is offered (not ARS or ARS2); soft drop is 1G and doesn't lock.
+  arcade's); SRS's soft drop is 1G and doesn't lock. ARS and ARS2 per the wiki's description; ARS's
+  "zangi-moves impossible" (and ARS2's re-enabled ones) aren't modelled: both play the same in that
+  respect. The Guideline's extra goals and times are this game's choice; the sources name 40 lines and
+  2 minutes.
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's; the DAS
   charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it. No secret grade,
@@ -606,7 +623,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
 - Menu: main screen with New Game and Options (Continue and Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
   the rule set and mode lists use tighter cards). Guideline's
-  modes are "Marathon" (Goal: 150 lines, Variable or Endless), "Sprint", "Ultra", "Dig" and "Master";
+  modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master";
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G", TGM3's are
   "Master", "Easy" and "Shirase" (each with a Rule card, World or Classic), TAP's "Normal", "Master", "Death" and
   "TGM+", ACE's "Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2" and "Big" (Big is otherwise

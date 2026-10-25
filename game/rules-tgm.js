@@ -25,28 +25,6 @@ const TGM_BUFFER_TOP = 1; // one buffer row: blocks locking above it are deleted
 const VISIBLE_ROLL_HIDE = { visible: Infinity };
 
 // ----------------------------------------------------------
-// Arika Rotation System (Classic rule)
-
-// Piece shapes per rotation state (spawn, CW, 180, CCW). All but I sit at the bottom of
-// their 3x3 box; L, J and T spawn with the flat side up; I, S and Z toggle between two states.
-const ARS_SHAPES = parseShapes([
-    [["....", "IIII", "....", "...."], ["..I.", "..I.", "..I.", "..I."], ["....", "IIII", "....", "...."], ["..I.", "..I.", "..I.", "..I."]],
-    [["....", "TTT.", ".T..", "...."], [".T..", "TT..", ".T..", "...."], ["....", ".T..", "TTT.", "...."], [".T..", ".TT.", ".T..", "...."]],
-    [["....", "LLL.", "L...", "...."], ["LL..", ".L..", ".L..", "...."], ["....", "..L.", "LLL.", "...."], [".L..", ".L..", ".LL.", "...."]],
-    [["....", "JJJ.", "..J.", "...."], [".J..", ".J..", "JJ..", "...."], ["....", "J...", "JJJ.", "...."], [".JJ.", ".J..", ".J..", "...."]],
-    [["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."], ["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."]],
-    [["....", "ZZ..", ".ZZ.", "...."], ["..Z.", ".ZZ.", ".Z..", "...."], ["....", "ZZ..", ".ZZ.", "...."], ["..Z.", ".ZZ.", ".Z..", "...."]],
-    [["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."]],
-]);
-
-const ARS_SPAWN_ROW = 1; // pieces appear in rows 19-20
-const ARS_I_FLOOR_KICKS = 1, ARS_T_FLOOR_KICKS = 2; // TGM3 limits per piece
-
-// Colour of each piece type, as an index into the engine's palette (cyan, purple, orange,
-// blue, green, red, yellow): the Sega/Arika colours
-const ARS_PALETTE = [0, 6, 1, 3, 4, 2, 5, 7]; // I red, T cyan, L orange, J blue, S purple, Z green, O yellow
-
-// ----------------------------------------------------------
 // TGM3 Master timing
 
 // Gravity in 1/65536 G: [from level, value]
@@ -276,13 +254,10 @@ class TgmGame extends RuleGame {
         this.iKicks = KICKS_I_ARIKA;
         this.nextCount = TGM_NEXT;
         this.randomizer = new TiRandomizer(Date.now());
-        this.ars = false; // Arika Rotation System (useArs), else Arika SRS
-        this.plainArs = false; // ARS with only the basic kicks (TGM1, TAP)
         this.maxLevel = TGM_MAX_LEVEL;
         this.sectionStops = true; // a new piece doesn't pass x99 (TAP Normal: only the last stop)
         this.internalGrading = false; // grade points and their decay (TGM3 and TAP Master)
         this.hasKill = false; // the 15-minute speed-up (TGM3 Master)
-        this.sonicTrail = false; // the sonic drop leaves a drop trail (TAP Master)
         this.invisibleRollName = "INVISIBLE ROLL";
 
         // Grading (TGM3 and TAP Master)
@@ -309,13 +284,6 @@ class TgmGame extends RuleGame {
         this.rollLength = TGM_ROLL_FRAMES;
         this.rollHide = TGM_ROLL_HIDE; // frames until locked blocks hide, by roll
         this.lockTime = null; // per cell, rollFrames when it locked (during the roll)
-    }
-
-    // The Arika Rotation System's shapes and Sega colours; plain: only the basic kicks
-    useArs(plain) {
-        this.ars = true;
-        this.plainArs = plain;
-        this.setShapes(ARS_SHAPES, ARS_PALETTE);
     }
 
     // Opacity of a settled block: during the staff roll they fade or vanish after locking,
@@ -382,14 +350,6 @@ class TgmGame extends RuleGame {
         return [this.ars ? ARS_SPAWN_ROW : TGM_SPAWN_ROW, 3];
     }
 
-    onNewPiece() {
-        this.sonicMax = 0;
-        this.iFloorKicks = 0;
-        this.tFloorKicks = 0;
-        this.floorKicked = false;
-        this.lockDelayZeroed = false;
-    }
-
     // Level +1 per new piece, except at section stops (x99 and the one before the end) and in the
     // staff roll (TAP Death's can start at 500)
     afterSpawn(newPiece) {
@@ -434,81 +394,6 @@ class TgmGame extends RuleGame {
             this.moveResets++;
         }
         this.curPiece_lockDelay = 0;
-    }
-
-    rotate(dir) {
-        return this.ars ? this.rotateArs(dir) : super.rotate(dir);
-    }
-
-    // ARS rotation with TGM3's kicks; TGM1 and TAP have only the basic ones (I never kicks, no floor kicks)
-    rotateArs(dir) {
-        const type = this.curPiece_type;
-        if (type === tetO) return false;
-        const from = this.curPiece_rotation;
-        const to = (from + dir + 4) % 4;
-        const k = this.big ? 2 : 1; // big pieces kick two cells
-        const at = (dr, dc) => this.movePossible(this.curPiece_row + k * dr, this.curPiece_col + k * dc, to) ? [k * dr, k * dc] : null;
-
-        let kick = at(0, 0);
-        let floorKick = false;
-        if (!kick) {
-            if (type === tetI) {
-                if (this.plainArs) {
-                    // no kicks
-                } else if (to === 0 || to === 2) {
-                    kick = at(0, -1) || at(0, 1) || at(0, 2); // wall kicks into horizontal
-                } else if (this.iFloorKicks < ARS_I_FLOOR_KICKS && !this.canFall()) {
-                    kick = at(-1, 0) || at(-2, 0); // floor kick, only when resting on something
-                    floorKick = kick !== null;
-                }
-            } else {
-                if (this.arsWallKickAllowed(type, from, to)) kick = at(0, 1) || at(0, -1); // right first
-                if (!kick && !this.plainArs && type === tetT && to === 2 && this.tFloorKicks < ARS_T_FLOOR_KICKS) {
-                    kick = at(-1, 0); // T escapes upwards into its pointing-up state
-                    floorKick = kick !== null;
-                }
-            }
-        }
-        if (!kick) return false;
-
-        // TGM3: rotating a T or I again after a floor kick sets its lock delay to zero
-        if (this.floorKicked) this.lockDelayZeroed = true;
-        if (floorKick) {
-            this.floorKicked = true;
-            if (type === tetI) this.iFloorKicks++;
-            else this.tFloorKicks++;
-        }
-
-        this.curPiece_row += kick[0];
-        this.curPiece_col += kick[1];
-        this.curPiece_rotation = to;
-        if (this.curPiece_row > this.lowestRow) this.onFall();
-        this.lastRotation = true;
-        this.setShadow();
-        this.sounds.push("rotate");
-        return true;
-    }
-
-    // Centre column rule: L, J and T rotating from a 3-wide orientation may only kick if the
-    // first colliding cell of the rotated piece (scanning its 3x3 box in reading order) is
-    // not in the centre column
-    arsWallKickAllowed(type, from, to) {
-        if (type !== tetL && type !== tetJ && type !== tetT) return true;
-        if (from !== 0 && from !== 2 || this.big) return true;
-        // L, J and T fit their box's top three rows and columns; the cells come in reading order
-        const hit = this.pieceCells[type][to].find(([i, j]) => this.blocked(this.curPiece_row + i, this.curPiece_col + j));
-        return !hit || hit[1] !== 1;
-    }
-
-    // Classic: drop to the floor without locking; the lock delay then runs as usual
-    sonicDrop() {
-        const distance = this.dropToFloor(true);
-        this.sonicMax = Math.max(this.sonicMax, distance);
-        if (distance === 0) return;
-        this.sounds.push("sonic");
-        if (this.sonicTrail) {
-            for (const cell of this.curPieceCells()) this.hardDropCells.push({ ...cell, dist: distance, cleared: false });
-        }
     }
 
     onHardDrop(distance) {

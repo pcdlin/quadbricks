@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -732,7 +732,7 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
     for (let c = 0; c < 8; c++) g.setCell(21, c, 1);
     place(g, tetO, 0, 5, 7); g.hardDrop();
     check("  ...300 lines complete it", [g.isGameOver(), g.endTitle], [true, "COMPLETE"]);
-    const other = createGame(guideline, "marathon", 7);
+    const other = createGame(guideline, "sprint", 7);
     check("  ...other Guideline modes ignore the start level", other.level, 1);
 }
 {
@@ -1453,7 +1453,7 @@ const garbageRows = g => {
     tapClear(g, 1, h => { h.curPiece_col = 8; });
     check("  ...first level-up after 60 lines (start x 10 + 10), not before", [at59, g.lines, g.level], [5, 60, 6]);
     check("GB start level stays within 0-9, and other rule sets ignore it",
-        [createGame(gbTetris, "standard", 12).level, createGame(gbTetris, "standard", -3).level, createGame(guideline, "standard", 5).level, createGame(arika, "standard", 5).level],
+        [createGame(gbTetris, "standard", 12).level, createGame(gbTetris, "standard", -3).level, createGame(guideline, "sprint", 5).level, createGame(arika, "standard", 5).level],
         [9, 0, 1, 0]);
     const b = createGame(gbTetris, "btype", 7);
     for (; b.phase !== "active";) b.advanceFrame(0);
@@ -2115,6 +2115,76 @@ function startedBig(mode, variant = "standard") {
     for (let c = 0; c < WIDTH; c++) for (let r = 1; r < 5; r++) fast.setCell(r, c, 1);
     fast.spawn(tetT, false);
     check("  ...that needn't be survived", [fast.isGameOver(), fast.endTitle], [true, "COMPLETE"]);
+}
+
+// ---------------------------------------------------------------- ACE ARS and ARS2
+function aceAt(mode, type, rot, row, col, blocks = []) {
+    const g = startedMode(mode, "normal");
+    clearField(g);
+    for (const [r, c] of blocks) g.setCell(r, c, 1);
+    place(g, type, rot, row, col);
+    return g;
+}
+{
+    const g = startedMode(aceArs, "normal");
+    const rows = [...new Set(g.curPieceCells().map(c => c.row))];
+    check("ACE ARS: ARS shapes in the standard colours, spawn in rows 19-20, soft drop 0.5G, 128 lock resets",
+        [g.ars, g.shapes === ARS_SHAPES, g.palette[tetI], Math.min(...rows), g.softGravity, g.moveLimit, g.getStats()[0]],
+        [true, true, 1, 2, 0.5, 128, ["ACE", "ARS NORMAL"]]);
+    const hard = aceAt(aceArs, tetO, 0, 5, 3);
+    hard.advanceFrame(HARD_PUSH);
+    const soft = aceAt(aceArs, tetO, 0, 19, 3);
+    soft.advanceFrame(SOFT_PUSH);
+    check("  ...up is a hard drop that locks, soft drop doesn't lock on the ground", [hard.phase, soft.phase], ["are", "active"]);
+    const sonic = aceAt(aceArs2, tetO, 0, 5, 3);
+    sonic.advanceFrame(HARD_PUSH);
+    const lock = aceAt(aceArs2, tetO, 0, 19, 3);
+    lock.advanceFrame(SOFT_PUSH);
+    check("ACE ARS2: the drops swap: up is a sonic drop (no lock), soft drop locks on the ground",
+        [sonic.phase, sonic.curPiece_row, lock.phase, startedMode(aceArs2, "another").getStats()[0]], ["active", 19, "are", ["ACE", "ARS2 ANOTHER"]]);
+    const notch = (mode) => {
+        const t = mode === tgmClassic ? startedMode(tgmClassic, "standard") : startedMode(mode, "normal");
+        clearField(t);
+        for (const [r, c] of [[21, 4], [21, 6]]) t.setCell(r, c, 1);
+        place(t, tetT, 1, 19, 4);
+        t.tFloorKicks = 5;
+        return t.rotate(1);
+    };
+    check("  ...no floor kick limit (TGM3 Classic stops at two)", [notch(aceArs), notch(aceArs2), notch(tgmClassic)], [true, true, false]);
+    const zero = aceAt(aceArs, tetT, 1, 19, 4, [[21, 4], [21, 6]]);
+    zero.rotate(1); zero.rotate(-1);
+    check("  ...and turning again after a floor kick doesn't zero the lock delay", zero.lockDelayZeroed, false);
+    const srs = startedMode(tgmAce, "normal");
+    check("ACE SRS is unchanged", [srs.ars, srs.softGravity, srs.getStats()[0]], [false, 1, ["ACE", "NORMAL"]]);
+}
+
+// ---------------------------------------------------------------- Guideline Sprint, Ultra and Marathon options
+{
+    const stats = (variant, start = 0) => createGame(guideline, variant, start).getStats();
+    check("Sprint lines: 20, 40 or 100",
+        [stats("sprint20")[0], stats("sprint20")[2], stats("sprint")[2], stats("sprint100")[2]],
+        [["GUIDELINE", "SPRINT"], ["LINES", "0 / 20"], ["LINES", "0 / 40"], ["LINES", "0 / 100"]]);
+    const g = startedGuideline("sprint20");
+    g.lines = 19;
+    for (let r = 2; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, r === 21 && c < 8 ? 1 : 0);
+    place(g, tetO, 0, 5, 7); g.hardDrop();
+    check("  ...the 20th line completes Sprint 20", [g.isGameOver(), g.endTitle], [true, "COMPLETE"]);
+    check("Ultra time: 1, 2, 3 or 5 minutes",
+        [stats("ultra1")[1], stats("ultra")[1], stats("ultra3")[1], stats("ultra5")[1], stats("ultra5")[0]],
+        [["TIME", "1:00.00"], ["TIME", "2:00.00"], ["TIME", "3:00.00"], ["TIME", "5:00.00"], ["GUIDELINE", "ULTRA"]]);
+    const u = startedGuideline("ultra1");
+    u.frames = 3599;
+    u.advanceFrame(0);
+    check("  ...Ultra 1:00 ends after a minute", [u.isGameOver(), u.endTitle], [true, "TIME UP"]);
+    const m = startedGuideline("marathon", 5);
+    const gravity6 = m.gravity;
+    clearField(m);
+    m.lines = 9;
+    tapClear(m, 1);
+    check("Marathon start level: from level 1 + startLevel, a level per 10 lines from there",
+        [createGame(guideline, "marathon", 5).level, gravity6 === createGame(guideline, "standard", 5).gravity, m.level, createGame(guideline, "marathon", 40).level],
+        [6, true, 7, 15]);
+    check("  ...Variable goal from a later level too", stats("variable", 2).slice(1, 3), [["LEVEL", "3"], ["GOAL", "0 / 15"]]);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");

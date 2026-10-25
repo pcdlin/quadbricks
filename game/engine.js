@@ -33,7 +33,8 @@ const MAIN_ITEMS = [
 
 // Start step 3 (MENU_SETUP), for modes with `setup`: setting cards changed with ← →, each choosing
 // one of its labels for a createGame argument: arg "mode", "variant" or "big" (the label's entry in
-// values), or "startLevel" and "height" (the label's index). Remembered per mode for the session (setupChoices)
+// values), or "startLevel" and "height" (the label's index); initial: the label chosen at first (else
+// the first). Remembered per mode for the session (setupChoices)
 const indexLabels = count => Array.from({ length: count }, (_, i) => String(i));
 const levelSetup = count => ({ name: "Level", accent: tetT, arg: "startLevel", labels: indexLabels(count) });
 const HEIGHT_SETUP = { name: "Height", accent: tetZ, arg: "height", labels: indexLabels(GB_B_HEIGHTS) };
@@ -41,6 +42,12 @@ const GOAL_SETUP = { name: "Goal", accent: tetO, arg: "variant", labels: ["150 l
     values: ["marathon", "variable", "standard"] };
 const DIG_SETUP = { name: "Rows", accent: tetS, arg: "height", labels: GUIDELINE_DIG_ROWS.map(String) };
 const MASTER_SETUP = { name: "Level", accent: tetT, arg: "startLevel", labels: GUIDELINE_MASTER_DELAYS.map((_, i) => `M${i + 1}`) };
+const MARATHON_LEVEL_SETUP = { name: "Level", accent: tetT, arg: "startLevel", labels: indexLabels(GUIDELINE_MAX_LEVEL).map(i => String(+i + 1)) };
+const SPRINT_SETUP = { name: "Lines", accent: tetL, arg: "variant", labels: ["20", "40", "100"],
+    values: ["sprint20", "sprint", "sprint100"], initial: 1 };
+const ULTRA_SETUP = { name: "Time", accent: tetZ, arg: "variant", labels: ["1:00", "2:00", "3:00", "5:00"],
+    values: ["ultra1", "ultra", "ultra3", "ultra5"], initial: 1 };
+const ACE_RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["SRS", "ARS", "ARS2"], values: [tgmAce, aceArs, aceArs2] };
 const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
 
@@ -49,9 +56,9 @@ const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"]
 const RULESETS = [
     { name: "Guideline", accent: tetT, desc: "SRS, 7-bag, T-spins and back-to-backs",
       modes: [
-          { name: "Marathon", mode: guideline, variant: "marathon", setup: [GOAL_SETUP], accent: tetO, desc: "150 lines, a variable goal, or endless" },
-          { name: "Sprint", mode: guideline, variant: "sprint", accent: tetL, desc: "Clear 40 lines as fast as you can" },
-          { name: "Ultra", mode: guideline, variant: "ultra", accent: tetZ, desc: "Score as much as you can in two minutes" },
+          { name: "Marathon", mode: guideline, variant: "marathon", setup: [GOAL_SETUP, MARATHON_LEVEL_SETUP], accent: tetO, desc: "150 lines, a variable goal, or endless" },
+          { name: "Sprint", mode: guideline, variant: "sprint", setup: [SPRINT_SETUP], accent: tetL, desc: "Clear 20, 40 or 100 lines as fast as you can" },
+          { name: "Ultra", mode: guideline, variant: "ultra", setup: [ULTRA_SETUP], accent: tetZ, desc: "Score as much as you can in 1 to 5 minutes" },
           { name: "Dig", mode: guideline, variant: "dig", setup: [DIG_SETUP], accent: tetS, desc: "Clear rows of garbage as fast as you can" },
           { name: "Master", mode: guideline, variant: "master", setup: [MASTER_SETUP], accent: tetJ, desc: "20G from the start, less time to lock as you go" },
       ] },
@@ -73,14 +80,14 @@ const RULESETS = [
           { name: "Easy", mode: arika, variant: "easy", setup: [RULE_SETUP, BIG_SETUP], accent: tetO, desc: "Up to level 200, scored in fireworks" },
           { name: "Shirase", mode: arika, variant: "shirase", setup: [RULE_SETUP, BIG_SETUP], accent: tetZ, desc: "20G to level 1300, rising garbage, a big staff roll" },
       ] },
-    { name: "ACE", accent: tetS, desc: "150 lines against the clock — Arika SRS, hold",
+    { name: "ACE", accent: tetS, desc: "150 lines against the clock — SRS, ARS or ARS2, hold",
       modes: [
-          { name: "Normal", mode: tgmAce, variant: "normal", accent: tetI, desc: "Gentle start, 20G by level 13" },
-          { name: "Hi-Speed 1", mode: tgmAce, variant: "hispeed1", accent: tetL, desc: "Faster start, 20G by level 8" },
-          { name: "Hi-Speed 2", mode: tgmAce, variant: "hispeed2", accent: tetO, desc: "20G from the start" },
-          { name: "Another", mode: tgmAce, variant: "another", accent: tetZ, desc: "20G, shorter delays every level, a minute each" },
-          { name: "Another 2", mode: tgmAce, variant: "another2", accent: tetJ, desc: "20G at Another's fastest delays" },
-          { name: "Big", mode: tgmAce, variant: "big", accent: tetS, desc: "Normal's speeds with pieces twice the size" },
+          { name: "Normal", mode: tgmAce, variant: "normal", setup: [ACE_RULE_SETUP], accent: tetI, desc: "Gentle start, 20G by level 13" },
+          { name: "Hi-Speed 1", mode: tgmAce, variant: "hispeed1", setup: [ACE_RULE_SETUP], accent: tetL, desc: "Faster start, 20G by level 8" },
+          { name: "Hi-Speed 2", mode: tgmAce, variant: "hispeed2", setup: [ACE_RULE_SETUP], accent: tetO, desc: "20G from the start" },
+          { name: "Another", mode: tgmAce, variant: "another", setup: [ACE_RULE_SETUP], accent: tetZ, desc: "20G, shorter delays every level, a minute each" },
+          { name: "Another 2", mode: tgmAce, variant: "another2", setup: [ACE_RULE_SETUP], accent: tetJ, desc: "20G at Another's fastest delays" },
+          { name: "Big", mode: tgmAce, variant: "big", setup: [ACE_RULE_SETUP], accent: tetS, desc: "Normal's speeds with pieces twice the size" },
       ] },
     { name: "NES", accent: tetJ, desc: "NES (1989) — no hard drop, no hold, no kicks",
       modes: [
@@ -880,7 +887,7 @@ class Engine {
 
     // The chosen mode's remembered label index for setup card n (0 at first)
     setupIndex(n) {
-        return this.setupChoices[`${this.rulesetpos}.${this.menupos}.${n}`] || 0;
+        return this.setupChoices[`${this.rulesetpos}.${this.menupos}.${n}`] ?? (this.chosenMode().setup[n].initial || 0);
     }
 
     // Activation of menu item: the mode, with its setup cards' choices

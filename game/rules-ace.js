@@ -3,6 +3,10 @@
 // and three next pieces (tetris.wiki: Tetris_The_Grand_Master_Ace; speeds and time limits from
 // NullpoMino's TimeAttackMode). Big plays at Normal's speeds with pieces twice the size (the wiki:
 // "similar or possibly identical" to Normal).
+// Three rules (the mode ids): SRS (tgmAce), ARS (aceArs: TGM3's ARS shapes and kicks with no floor
+// kick limit, standard colours, hard drop locks, soft drop about 0.5G and not locking) and ARS2
+// (aceArs2: the same with the drops' locking swapped: up is a sonic drop, soft drop locks on the
+// ground). All three: lock resets up to 128 per piece.
 
 const ACE_LEVELS = 15, ACE_LINES_PER_LEVEL = 10;
 // Gravity in 1/256 G by level from 1; past the end of a mode's list, 20G
@@ -23,6 +27,8 @@ const ACE_TIME_LIMITS = { another: [60 * 60], other: [120 * 60, 120 * 60, 90 * 6
 const ACE_MOVE_RESETS = 128; // lock resets per piece
 const ACE_NEXT = 3;
 const ACE_SPAWN_ROW = 2; // spawn in the top visible rows, as in TGM3
+const ACE_ARS_SOFT = 0.5; // ARS rules' soft drop, rows per frame
+const ACE_RULE_NAMES = { [aceArs]: "ARS ", [aceArs2]: "ARS2 " }; // before the mode in the stats
 
 class AceGame extends RuleGame {
     constructor(mode, variant) {
@@ -32,6 +38,12 @@ class AceGame extends RuleGame {
         this.moveLimit = ACE_MOVE_RESETS;
         this.lockOut = true;
         this.randomizer = new TiRandomizer(Date.now());
+        this.ars2 = mode === aceArs2;
+        if (mode !== tgmAce) {
+            this.useArs(false, DEFAULT_PALETTE);
+            this.arsFloorKicks = { i: Infinity, t: Infinity };
+            this.floorKickZeroes = false;
+        }
         if (variant === "big") this.setBig();
         // time left on the level's clock; it waits from a level-up to the next piece
         this.aceTimer = this.aceLimit();
@@ -39,7 +51,7 @@ class AceGame extends RuleGame {
     }
 
     getStats() {
-        return [["ACE", VARIANT_NAMES[this.variant]], ["LEVEL", `${this.level} / ${ACE_LEVELS}`],
+        return [["ACE", (ACE_RULE_NAMES[this.gamemode] || "") + VARIANT_NAMES[this.variant]], ["LEVEL", `${this.level} / ${ACE_LEVELS}`],
             ["LINES", `${this.lines} / ${ACE_LEVELS * ACE_LINES_PER_LEVEL}`],
             ["LIMIT", this.formatTime(Math.max(0, this.aceTimer))], ["TIME", this.formatTime()]];
     }
@@ -52,7 +64,7 @@ class AceGame extends RuleGame {
         this.arr = 1;
         const gravity = ACE_GRAVITY[v] || [];
         this.gravity = i < gravity.length ? gravity[i] / 256 : 20;
-        this.softGravity = Math.max(this.gravity, 1);
+        this.softGravity = Math.max(this.gravity, this.ars ? ACE_ARS_SOFT : 1);
     }
 
     ghostVisible() {
@@ -60,7 +72,24 @@ class AceGame extends RuleGame {
     }
 
     spawnPosition() {
-        return [ACE_SPAWN_ROW, 3];
+        return [this.ars ? ARS_SPAWN_ROW : ACE_SPAWN_ROW, 3];
+    }
+
+    // ARS2: up is a sonic drop (no lock)
+    upKey() {
+        if (!this.ars2) return super.upKey();
+        this.sonicDrop();
+        return false;
+    }
+
+    // ARS2: soft drop locks on the ground
+    onGround() {
+        if (this.ars2 && this.held.soft) {
+            this.manualLock = true;
+            this.lock();
+            return;
+        }
+        super.onGround();
     }
 
     beforeSpawn() {
@@ -108,4 +137,4 @@ class AceGame extends RuleGame {
     }
 }
 
-registerRules([tgmAce], () => AceGame);
+registerRules([tgmAce, aceArs, aceArs2], () => AceGame);
