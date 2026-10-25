@@ -97,10 +97,10 @@ void main() {
     gl_FragColor = vec4(uGlowColor.rgb * ga + ring * (1.0 - ga), ga);
 }`;
 
-// Clear ripples (Clear rings: Ripple and Prism): the finished frame, drawn onto the screen through a
+// Clear ripples (Clear rings: Ripple): the finished frame, drawn onto the screen through a
 // wave packet on a sheet of glass. Each ripple's surface slope across its front bends the
-// lookup into the frame; nothing is added, so only the refraction shows. Prism (uSpread > 0)
-// bends red less and blue more than green, splitting the colours at the front.
+// lookup into the frame; nothing is added, so only the refraction shows. Red bends less and
+// blue more than green (uSpread), splitting the colours at the front.
 // The packet: slope = e^(-u²)·sin(3u), u = distance past the front / its width.
 const REFRACT_FS = `
 precision highp float;
@@ -109,7 +109,7 @@ uniform vec2 uSize;
 uniform vec3 uView;                              // scale, offset x, offset y of the logical view
 uniform vec4 uWave[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, packet width (logical)
 uniform float uWaveAmp[${BACKDROP_MAX_RINGS}];   // largest displacement (logical; 0: unused)
-uniform float uSpread;                           // 0, or how far red and blue bend apart from green
+uniform float uSpread;                           // how far red and blue bend apart from green
 
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
@@ -126,10 +126,8 @@ void main() {
     }
     vec2 dp = vec2(disp.x, -disp.y) * uView.x / uSize; // render targets are stored bottom up
     vec2 uv = gl_FragCoord.xy / uSize;
-    if (uSpread > 0.0) {
-        gl_FragColor = vec4(texture2D(uScene, uv + dp * (1.0 - uSpread)).r, texture2D(uScene, uv + dp).g,
-            texture2D(uScene, uv + dp * (1.0 + uSpread)).b, 1.0);
-    } else gl_FragColor = vec4(texture2D(uScene, uv + dp).rgb, 1.0);
+    gl_FragColor = vec4(texture2D(uScene, uv + dp * (1.0 - uSpread)).r, texture2D(uScene, uv + dp).g,
+        texture2D(uScene, uv + dp * (1.0 + uSpread)).b, 1.0);
 }`;
 
 // Clear flares (Clear rings: Flare), added over the finished frame like light on the lens: a
@@ -312,9 +310,9 @@ class GLBackdrop {
 
     // The frame drawn into layer (a render target the size of the screen) onto the screen,
     // through the clear ripples: [{x, y, r, width, amp}] (view logical, see
-    // Engine.rippleShapes). view: [scale, offX, offY] of the logical view. spread: Prism's
-    // colour split (0: none).
-    refract(layer, view, waves, spread = 0) {
+    // Engine.rippleShapes). view: [scale, offX, offY] of the logical view. spread: how far red
+    // and blue bend apart from green (0: no colour split).
+    refract(layer, view, waves, spread) {
         const gl = this.gl;
         this.r.flush();
         waves = waves.slice(-BACKDROP_MAX_RINGS);

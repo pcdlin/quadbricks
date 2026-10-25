@@ -72,13 +72,12 @@ const TILT_LEVELS = [
 ];
 const DEFAULT_TILT = 2;
 
-// Line clear shockwaves: off, glowing rings, a ripple refracting the whole screen, the ripple
-// splitting the colours at its front (prism), or a lens flare along the cleared rows
+// Line clear shockwaves: off, glowing rings, a ripple refracting the whole screen (splitting the
+// colours at its front), or a lens flare along the cleared rows
 const RING_MODES = [
     { id: "off", name: "Off" },
     { id: "rings", name: "Rings" },
     { id: "ripple", name: "Ripple" },
-    { id: "prism", name: "Prism" },
     { id: "flare", name: "Flare" },
 ];
 const RING_MODE_IDS = RING_MODES.map(m => m.id);
@@ -129,7 +128,7 @@ class Options {
         this.confetti = "glow"; // line clear confetti, an id from CONFETTI_STYLES
         this.effects = DEFAULT_EFFECTS;
         this.backdrop = true; // animated backdrop: colour wash and drifting lights
-        this.rings = "ripple"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
+        this.rings = "flare"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
         this.tilt = DEFAULT_TILT; // playing field tilt: index into TILT_LEVELS
         this.shake = true; // playing field shakes on hard drops
         this.trail = true; // streaks behind hard drops and rows falling into clears (only with effects on)

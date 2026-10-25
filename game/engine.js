@@ -119,10 +119,10 @@ const OPTIONS_ITEMS = [
 const VISUAL_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "confetti", name: "Confetti", accent: tetS },
+    { id: "rings", name: "Clear rings", accent: tetZ },
     { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
     { id: "backdrop", name: "Backdrop", accent: tetJ },
-    { id: "rings", name: "Clear rings", accent: tetZ },
     { id: "tilt", name: "3D tilt", accent: tetI },
     { id: "shake", name: "Drop shake", accent: tetS },
     { id: "trail", name: "Drop trail", accent: tetT },
@@ -264,11 +264,10 @@ const HUE_DEFAULT = 232; // the backdrop's blue at start, and again at each new 
 const RING_LIFE = 46; // frames a clear shockwave expands
 const RING_ALPHA = 0.8; // ring opacity at the Normal effects level
 const RING_CHAIN_MAX = 8; // combo length after which rings stop getting brighter
-const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple and Prism)
+const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
-const RIPPLE_AMP = 1.55; // refraction strength at the Normal effects level
-const PRISM_AMP = 1.25; // Prism's refraction, relative to Ripple's
-const PRISM_SPREAD = 0.5; // Prism: red bends this much less than green, blue this much more
+const RIPPLE_AMP = 1.94; // refraction strength at the Normal effects level
+const RIPPLE_SPREAD = 0.5; // red bends this much less than green, blue this much more
 const FLARE_LIFE = 34; // frames a clear flare lasts (Clear rings: Flare)
 const FLARE_ALPHA = 1.2; // flare brightness at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
@@ -611,8 +610,8 @@ class Engine {
         this.motion = this.boardMotion();
         this.updateSheen(this.motion);
         // Clear ripples: the frame is drawn into a layer, then onto the screen through them
-        const mode = this.ringMode(), prism = mode === "prism";
-        const ripples = (mode === "ripple" || prism) && this.rings.length ? this.rippleShapes(prism) : null;
+        const mode = this.ringMode();
+        const ripples = mode === "ripple" && this.rings.length ? this.rippleShapes() : null;
         if (ripples) {
             this.sceneLayer = this.sceneLayer || r.renderTarget();
             r.setScreen(this.sceneLayer);
@@ -630,7 +629,7 @@ class Engine {
         }
         if (ripples) {
             r.setScreen(null);
-            this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples, prism ? PRISM_SPREAD : 0);
+            this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples, RIPPLE_SPREAD);
         }
 
         // Version and FPS in the view's top corners, kept unobtrusive. Drawn at the fit size (the
@@ -1117,7 +1116,7 @@ class Engine {
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
             const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
             const mode = this.options.rings;
-            const span = mode === "ripple" || mode === "prism" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
+            const span = mode === "ripple" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
             this.rings.push({
                 y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
                 life: span, span, power: rows.size,
@@ -1539,9 +1538,10 @@ class Engine {
     }
 
     // Clear ripples: a wave packet spreading from the cleared rows through the whole view,
-    // bending the light of what is under it (no glow or tint of its own). Centre, radius and packet width in logical
-    // units; amp is the largest displacement, in logical units. Prism's bends harder.
-    rippleShapes(prism) {
+    // bending the light of what is under it, red less and blue more, so its front splits into a
+    // rainbow fringe (no glow or tint of its own). Centre, radius and packet width in logical
+    // units; amp is the largest displacement (green's), in logical units.
+    rippleShapes() {
         return this.rings.map(ring => {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const fade = Math.pow(1 - k, 2.5); // strong at first, gone well before the end
@@ -1549,7 +1549,7 @@ class Engine {
                 x: BOARD_X + BOARD_W / 2, y: ring.y,
                 r: 20 + (1 - Math.pow(1 - k, 1.6)) * RIPPLE_REACH,
                 width: (14 + 4 * ring.power) * (1 + 1.5 * k), // spreads as it goes
-                amp: fade * (4 + 2.5 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * RIPPLE_AMP * (prism ? PRISM_AMP : 1),
+                amp: fade * (4 + 2.5 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * RIPPLE_AMP,
             };
         });
     }
