@@ -476,6 +476,11 @@ class RuleGame {
         this.endSub = sub;
     }
 
+    // More lines for the game over banner, under endSub (TGM: the secret grade, TGM3's exam)
+    endNotes() {
+        return [];
+    }
+
     // Clear messages for the engine: kind is "clear", "tspin", "b2b", "combo", "pc" or "grade";
     // value is the number of lines for clears and T-spins, the chain length for combos
     addAction(text, kind, value = 0) {

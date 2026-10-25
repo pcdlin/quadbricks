@@ -290,6 +290,7 @@ const COMBO_COLORS = [INK, INK, "#fff1a8", MESSAGE_GOLD, "#ffb35c", "#ff8a4c", "
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
 const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
+const BANNER_LINE_H = 18; // the game over banner's lines under its sub-title (secret grade, exam)
 
 // letterSpacing adds trailing space; this shift keeps centred and right-aligned text in place
 function spacingShift(align, spacing) {
@@ -1899,7 +1900,7 @@ class Engine {
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
                 : title === "COMPLETE" ? PIECE_COLORS[tetI].base : PIECE_COLORS[tetZ].base;
             const sub = game.endSub || "ESC — BACK TO MENU";
-            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew);
+            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew, game.endNotes());
         }
     }
 
@@ -2265,12 +2266,13 @@ class Engine {
     }
 
     // Horizontal banner across the well (GAME OVER and other endings)
-    // note: a third line under the sub-title (the game over's record); highlight: a record was set,
-    // so the note gets a pulsing gold pill
-    boardBanner(title, sub, alpha, accent = INK, note = null, highlight = false) {
+    // note: a line under the sub-title (the game over's record); highlight: a record was set,
+    // so the note gets a pulsing gold pill; lines: more lines between them (the game's endNotes)
+    boardBanner(title, sub, alpha, accent = INK, note = null, highlight = false, lines = []) {
         const r = this.r;
         const cy = this.bandY();
-        const noteH = note ? (highlight ? 30 : 16) : 0;
+        const linesH = BANNER_LINE_H * lines.length;
+        const noteH = (note ? (highlight ? 30 : 16) : 0) + linesH;
         r.save();
         r.globalAlpha = alpha;
         this.drawBand(cy + noteH / 2, sub ? 96 + noteH : 70, accent);
@@ -2278,14 +2280,18 @@ class Engine {
         const size = Math.min(34, Math.floor(34 * (BOARD_W - 16) / this.measureText(title, 34, 900, 8)));
         this.text(title, BOARD_X + BOARD_W / 2, cy - (sub ? 12 : 0), { size, weight: 900, color: accent === INK ? INK : accent, align: "center", spacing: 8 });
         if (sub) this.text(sub, BOARD_X + BOARD_W / 2, cy + 26, { size: 11, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
+        lines.forEach((line, n) => {
+            const lineSize = Math.min(11, Math.floor(11 * (BOARD_W - 16) / this.measureText(line, 11, 800, 3)));
+            this.text(line, BOARD_X + BOARD_W / 2, cy + 26 + BANNER_LINE_H * (n + 1), { size: lineSize, weight: 800, color: INK, align: "center", spacing: 3 });
+        });
         if (note && highlight) {
             const pulse = 0.5 + 0.5 * Math.sin(this.clock / 14);
-            const w = this.measureText(note, 15, 900, 5) + 32, h = 26, y = cy + 52;
+            const w = this.measureText(note, 15, 900, 5) + 32, h = 26, y = cy + 52 + linesH;
             r.shape(BOARD_X + (BOARD_W - w) / 2, y - h / 2, w, h, {
                 radius: h / 2, fill: goldAlpha(0.12 + 0.1 * pulse), stroke: goldAlpha(0.55 + 0.45 * pulse), lineWidth: 1.5,
             });
             this.text(note, BOARD_X + BOARD_W / 2, y, { size: 15, weight: 900, color: MESSAGE_GOLD, align: "center", spacing: 5 });
-        } else if (note) this.text(note, BOARD_X + BOARD_W / 2, cy + 46, { size: 11, weight: 800, color: MESSAGE_GOLD, align: "center", spacing: 3 });
+        } else if (note) this.text(note, BOARD_X + BOARD_W / 2, cy + 46 + linesH, { size: 11, weight: 800, color: MESSAGE_GOLD, align: "center", spacing: 3 });
         r.restore();
     }
 }

@@ -393,6 +393,12 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   `TGM_REGRET_TIME` (the last one judged at 999) drops one boost and zeroes the points.
   Both messages use action kind `grade`, as do STAFF ROLL / INVISIBLE ROLL. Times are read as seconds.
   Displayed grade = boosts + COOLs + roll grade, capped at MasterM until the roll is survived.
+- Secret grade (TGM1, TAP Master and Death, TGM3 Master and Shirase; tetris.wiki, the check as in
+  NullpoMino's `Field.getSecretGrade`): when the game ends (`endGame()`), the rows of the ">" pattern from
+  the bottom (`secretGradeRows()`: one hole per row, in column 9 − |10 − k| in row k, under a block, every
+  other cell filled; the 19th row's hole covered) give 9…S9, GM (`SECRET_GRADE_LABELS`; Shirase's S1…S9,
+  m1…m9, GM). Shown from 5 rows (`SECRET_GRADE_MIN_ROWS`, NullpoMino's) in the game over banner
+  (`endNotes()`, lines under its sub-title), not in the records.
 
 ### TGM3 Classic (Master mode, Classic rule)
 - Same timing, levels, randomizer and scoring as TGM3 World, but:
@@ -613,7 +619,7 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   2 minutes.
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's; the DAS
-  charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it. No secret grade.
+  charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it.
   Hidden modes: Rev is drawn as the well turned upside down with upright blocks (the wiki only says
   pieces spawn at the bottom and rise); Mono's colour is a neutral grey-white (palette index 8);
   Uki (a voice for line clears) isn't there; codes don't keep scores off a table (there is none).

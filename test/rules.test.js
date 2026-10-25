@@ -2261,5 +2261,45 @@ function startedTgm1With(options, variant = "standard") {
         [fired, g.takeFireworks(), g.takeFireworks(), g.hanabi], [3, 5, 0, 8]);
 }
 
+// ---------------------------------------------------------------- Secret grade
+function startedWith(mode, variant, options) {
+    const g = createGame(mode, variant, 0, 0, {}, options);
+    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+// The ">" pattern, rows high from the bottom: row k's hole in column 9 - |10 - k|; cover: a block
+// above the top row's hole
+function buildSecret(g, rows, cover = true) {
+    for (let r = 0; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, 0);
+    const hole = k => 9 - Math.abs(10 - k);
+    for (let k = 1; k <= rows; k++) for (let c = 0; c < WIDTH; c++) g.setCell(HEIGHT - k, c, c === hole(k) ? 0 : 1);
+    if (cover) g.setCell(HEIGHT - rows - 1, hole(rows), 1);
+}
+function secretAt(g, rows, cover = true) {
+    buildSecret(g, rows, cover);
+    g.endGame("GAME OVER", "");
+    return g.secretGrade;
+}
+{
+    check("Secret grade: rows of the > pattern from the bottom, 9 ... S9, GM for all 19 (TGM1)",
+        [secretAt(startedMode(tgmOriginal, "standard"), 5), secretAt(startedMode(tgmOriginal, "standard"), 18),
+            secretAt(startedMode(tgmOriginal, "standard"), 19)], ["5", "S9", "GM"]);
+    check("  ...the top hole must be covered (19 rows, uncovered: S9), fewer than 5 rows aren't shown",
+        [secretAt(startedMode(tgmTap, "standard"), 19, false), secretAt(startedMode(tgmTap, "standard"), 4)], ["S9", null]);
+    const broken = startedMode(arika, "standard");
+    buildSecret(broken, 12);
+    broken.setCell(HEIGHT - 3, 0, 0); // a second hole in the third row
+    broken.endGame("GAME OVER", "");
+    check("  ...a row with another hole ends the count (TGM3: two rows, not shown)", broken.secretGrade, null);
+    const tgm3 = startedMode(arika, "standard");
+    secretAt(tgm3, 19);
+    check("  ...TGM3 Master and TAP Death have it, in the game over banner's notes", [tgm3.endNotes(), secretAt(startedMode(tgmTap, "death"), 9)],
+        [["SECRET GRADE GM"], "1"]);
+    check("  ...Shirase's run S1 ... S9, m1 ... m9, GM", [secretAt(startedMode(arika, "shirase"), 9), secretAt(startedMode(arika, "shirase"), 10),
+        secretAt(startedMode(arika, "shirase"), 19)], ["S9", "m1", "GM"]);
+    check("  ...none in TGM+, TAP Normal and Easy (no grades)", [secretAt(startedMode(tgmTap, "plus"), 19),
+        secretAt(startedMode(tgmTap, "normal"), 19), secretAt(startedMode(arika, "easy"), 19)], [null, null, null]);
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

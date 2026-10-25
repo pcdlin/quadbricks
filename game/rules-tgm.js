@@ -116,6 +116,19 @@ const TGM_COOL_SLACK = 2; // after a COOL section, the next may reach *70 at mos
 const TGM_COOL_SPEEDUP = 100; // a COOL moves the speed level 100 ahead once its section is finished
 
 // ----------------------------------------------------------
+// The secret grade (TGM1, TAP Master and Death, TGM3 Master and Shirase): the ">" pattern built from
+// the bottom, a row with a single hole each, the hole under a block, the holes going from the left
+// wall to the right one at the tenth row and back to the left at the nineteenth, whose hole must
+// be covered too (tetris.wiki: Secret_Grade_Techniques; the check as in NullpoMino's
+// Field.getSecretGrade). Judged when the game ends, by rows of the pattern counted from the bottom.
+const SECRET_GRADE_LABELS = ["9", "8", "7", "6", "5", "4", "3", "2", "1",
+    "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "GM"]; // by rows, 1-19
+// Shirase's start at S grades and go through the m grades (tetris.wiki)
+const SHIRASE_SECRET_LABELS = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9",
+    "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "GM"];
+const SECRET_GRADE_MIN_ROWS = 5; // shown from this many rows (NullpoMino: fewer happen by chance)
+
+// ----------------------------------------------------------
 // TGM3 Shirase: 20G throughout, levels to 1300
 
 // [from level, ARE, line ARE, DAS, lock delay, line clear delay] in frames
@@ -283,6 +296,35 @@ class TgmGame extends RuleGame {
         this.rollLength = TGM_ROLL_FRAMES;
         this.rollHide = TGM_ROLL_HIDE; // frames until locked blocks hide, by roll
         this.lockTime = null; // per cell, rollFrames when it locked (during the roll)
+        this.secretGrade = null; // judged when the game ends (secretGradeLabels), if high enough to show
+    }
+
+    // ----------------------------------------------------------
+    // Secret grade
+
+    secretGradeLabels() { return null; } // by rows of the pattern; null: the mode has none
+
+    // Rows of the ">" pattern from the bottom: one hole each, in column 0 in the bottom row, 9 in the
+    // tenth and 0 again in the nineteenth, with a block above it and every other cell filled
+    secretGradeRows() {
+        let rows = 0;
+        for (let r = HEIGHT - 1; r > VISIBLE_TOP; r--) {
+            const hole = WIDTH - 1 - Math.abs(r - VISIBLE_TOP - WIDTH);
+            if (this.getCell(r, hole) || !this.getCell(r - 1, hole)) break;
+            if (!this.field[r - FIELD_TOP].every((v, c) => c === hole || v)) break;
+            rows++;
+        }
+        return rows;
+    }
+
+    endGame(title, sub) {
+        super.endGame(title, sub);
+        const labels = this.secretGradeLabels(), rows = labels ? this.secretGradeRows() : 0;
+        this.secretGrade = rows >= SECRET_GRADE_MIN_ROWS ? labels[rows - 1] : null;
+    }
+
+    endNotes() {
+        return this.secretGrade ? [`SECRET GRADE ${this.secretGrade}`] : [];
     }
 
     // Opacity of a settled block: during the staff roll they fade or vanish after locking,
@@ -609,6 +651,8 @@ class Tgm1Game extends TgmGame {
         return ["TGM1", VARIANT_NAMES[this.variant] || "MASTER"];
     }
 
+    secretGradeLabels() { return SECRET_GRADE_LABELS; }
+
     // From the score; GM for meeting the checkpoints
     gradeLabel() {
         if (this.finalGrade) return this.finalGrade;
@@ -708,6 +752,9 @@ class TapGame extends TgmGame {
     statsName() {
         return ["TGM2 TAP", VARIANT_NAMES[this.variant] || "MASTER"];
     }
+
+    // Master and Death (the modes with grades)
+    secretGradeLabels() { return this.tapPlus || this.normal ? null : SECRET_GRADE_LABELS; }
 
     tgmStats(mode, level, time) {
         if (this.tapPlus || this.normal) return [mode, level, time, ["SCORE", this.scoreText()]]; // no grades
@@ -951,6 +998,8 @@ class TiGame extends TgmGame {
         return ["TGM3 TI", variantName ? `${rule} ${variantName}` : rule];
     }
 
+    secretGradeLabels() { return SECRET_GRADE_LABELS; }
+
     // Displayed grade: boosts + COOLs + roll grade; Grand Master only for surviving the invisible roll
     gradeIndex() {
         const i = TGM_GRADES[this.internalGrade][0] + this.cools + Math.floor(this.rollPoints / 100);
@@ -1122,6 +1171,8 @@ class TiEasyGame extends TiGame {
         return [mode, ["HANABI", String(this.hanabi)], level, time];
     }
 
+    secretGradeLabels() { return null; } // no grades
+
     // The fireworks (those still waiting are counted when the game ends)
     record() {
         return { key: [this.hanabi], text: `${this.hanabi} HANABI` };
@@ -1274,6 +1325,8 @@ class TiShiraseGame extends TiGame {
     gradeRank() {
         return Math.max(0, this.sectionsDone - this.regrets);
     }
+
+    secretGradeLabels() { return SHIRASE_SECRET_LABELS; }
 
     delayRow(speedLevel) {
         return tableLookup(SHIRASE_DELAYS, speedLevel);
