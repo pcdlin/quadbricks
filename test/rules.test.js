@@ -2262,6 +2262,22 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
     check("ACE SRS is unchanged", [srs.ars, srs.softGravity, srs.getStats()[0]], [false, 1, ["ACE", "NORMAL"]]);
 }
 
+{
+    // ACE's lock delay is reset by rotations as well as moves, with every rule (tetris.wiki)
+    const resting = mode => {
+        const g = createGame(mode, "normal");
+        while (g.phase !== "active") g.advanceFrame(0);
+        clearField(g);
+        place(g, tetT, 0, mode === tgmAce ? 20 : 19, 3); // flat on the floor
+        for (let f = 0; f < 10; f++) g.advanceFrame(0);
+        const before = g.curPiece_lockDelay;
+        g.advanceFrame(ROTR_PUSH);
+        return [before, g.curPiece_lockDelay, g.moveResets];
+    };
+    check("ACE: a rotation on the ground resets the lock delay (SRS, ARS, ARS2)",
+        [resting(tgmAce), resting(aceArs), resting(aceArs2)], [[10, 1, 1], [10, 1, 1], [10, 1, 1]]);
+}
+
 // ---------------------------------------------------------------- Guideline Sprint, Ultra and Marathon options
 {
     const stats = (variant, start = 0) => createGame(guideline, variant, start).getStats();

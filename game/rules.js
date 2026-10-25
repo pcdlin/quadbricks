@@ -885,6 +885,7 @@ class RuleGame {
         this.curPiece_rotation = to;
         if (this.curPiece_row > this.lowestRow) this.onFall();
         this.lastRotation = true;
+        this.onMoveReset(true); // move reset rules (ACE's ARS); TGM's step reset ignores it
         this.setShadow();
         this.sounds.push("rotate");
         return true;
