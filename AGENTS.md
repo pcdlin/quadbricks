@@ -84,12 +84,12 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 - Hidden TGM1, TGM3 and TAP test keys (`TEST_KEYS`, nowhere in the UI), during a game: Ctrl+Shift+1 straight
   to the staff roll the player has earned, 2 to the invisible roll, 3 to an invisible roll that
   ends in Grand Master if survived (TAP Master: 2 and 3 both go to the M-roll), 4 to the last 5 s
-  of the roll, 5 to 10 s before the 15-minute speed-up (TGM3 only), 6 sends up five fireworks (TGM3 Easy
+  of the roll, 5 to 10 s before the 15-minute speed-up (TGM3 Master and Easy), 6 sends up five fireworks (TGM3 Easy
   only), 7 fills the well with the full secret grade pattern and ends the game (the modes with a secret
   grade: the banner shows SECRET GRADE GM). They call
   `RuleGame.testSetup()`, which refuses during READY, after game over, in the Guideline, and for
   setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4; TGM+,
-  TAP Normal, Shirase and Easy: 1 and 4; 5 is TGM3 Master's only).
+  TAP Normal and Shirase: 1 and 4; Easy: 1, 4, 5 and 6; 5 is TGM3 Master's and Easy's only).
 - Game keys come from `options.keys` (rebindable): each action has a list of one or two key codes
   (`MAX_KEYS_PER_ACTION`). On the Controls screen, Enter then a new key adds it (a third replaces
   the action's oldest); a key the action already has is removed, unless it is its only one
@@ -178,7 +178,7 @@ configuration fields set in their constructors and hooks they override:
   drop by default) / `onGround()` / `onHardDrop()`, `beforeLock()` / `onBlockLocked()`,
   `scoreClear(n, rows)`, `onCollapse()`, `afterClear()`, `ghostVisible()`, `getStats()`,
   `setupField()`, `setHandling()`, `testSetup()`.
-- Inside a family, its own flags stay local: `TgmGame` has `internalGrading` (grade points and decay: TGM3 and TAP Master), `hasKill` (TGM3 Master's 15-minute
+- Inside a family, its own flags stay local: `TgmGame` has `internalGrading` (grade points and decay: TGM3 and TAP Master), `hasKill` (TGM3 Master's and Easy's 15-minute
   speed-up), `maxLevel` (999; Shirase 1300, Easy 200) and its own hooks (`delayRow()`, `gravityAt()`,
   `scoreLines()`, `scoreRollClear()`, `onMiss()`, `rollKind()`, `onRollBegin()`, `prepareTestRoll()`,
   `finishRoll()`, `statsName()`, `tgmStats()`, `gradeComboMultiplier()`); TGM3's Easy and Shirase
@@ -392,8 +392,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   earn only roll grade (`TGM_ROLL_POINTS`, hundredths: 0.04/0.08/0.12/0.26 fading,
   0.1/0.2/0.3/1.0 invisible, +0.5/+1.6 for surviving), added to the displayed grade. Surviving
   ends with "COMPLETE", or "GRAND MASTER" at grade 32 after the invisible roll.
-- After 15:00 (`TGM_KILL_FRAMES`) the game runs at 20G with ARE 2, line ARE 1, DAS 5, lock 13,
-  line clear 3, to stop overlong games.
+- After 15:00 (`TGM_KILL_FRAMES`) Master and Easy run at 20G with Shirase's 600-1099 delays (ARE 6,
+  line ARE 5, DAS 6, lock 12, line clear 3; tetris.wiki), to stop overlong games.
 - Master gravity table (1/65536 G, 20G from level 500) and delay table
   (ARE, line ARE, DAS, lock, line clear by level); ARR 1.
 - Lock reset limits: 8 rotations, 10 moves; soft drop non-locking at 1G; hard drop locks.
@@ -627,7 +627,7 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   "touching the stack" condition; the T floor kick is tried after failed wall kicks
   (NullpoMino behaviour).
 - Staff roll timings (3238-frame roll, row-by-row field clear, fade over the last 10 of 300
-  frames, invisible after 2) and the 15-minute speeds follow NullpoMino's `GradeMania3Mode`.
+  frames, invisible after 2) follow NullpoMino's `GradeMania3Mode`.
   With the Exams card Off, surviving the invisible roll at displayed grade 32 gives Grand Master
   directly (NullpoMino with exams off); the fading roll caps at MasterM. Exams (TGM3 Master, below):
   the qualified grade lives in the browser (`Exams`) instead of a player card; an exam needs seven

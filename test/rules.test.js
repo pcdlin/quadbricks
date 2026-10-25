@@ -1123,12 +1123,19 @@ for (const mode of [arika, tgmClassic]) {
     g.advanceFrame(0);
     const before = [g.gravity, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay];
     g.advanceFrame(0);
-    check(`${mode === arika ? "World" : "Classic"}: at 15:00 the game speeds up to 20G, ARE 2, line ARE 1, DAS 5, lock 13, line clear 3`,
+    check(`${mode === arika ? "World" : "Classic"}: at 15:00 the game speeds up to Shirase 600-1099: 20G, ARE 6, line ARE 5, DAS 6, lock 12, line clear 3`,
         [before, [g.gravity, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]],
-        [[1024 / 65536, 27, 27, 16, 30, 40], [20, 2, 1, 5, 13, 3]]);
+        [[1024 / 65536, 27, 27, 16, 30, 40], [20, 6, 5, 6, 12, 3]]);
     g.level = 50;
     g.updateTimings();
-    check("  ...and stays so after level changes", [g.gravity, g.lockDelayMax], [20, 13]);
+    check("  ...and stays so after level changes", [g.gravity, g.lockDelayMax], [20, 12]);
+}
+{
+    const g = createGame(arika, "easy");
+    while (g.phase !== "active") g.advanceFrame(0);
+    g.frames = 15 * 3600 - 1;
+    g.advanceFrame(0);
+    check("  ...Easy speeds up too (tetris.wiki)", [g.gravity, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay], [20, 6, 5, 6, 12, 3]);
 }
 
 // ---------------------------------------------------------------- TAP (TGM2 The Absolute Plus)

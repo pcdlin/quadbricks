@@ -57,9 +57,9 @@ const TGM_GHOST_UNTIL = 100; // ghost piece shown below level 100
 const TGM_ROTATION_RESETS = 8, TGM_MOVE_RESETS = 10; // World rule move reset limits
 const TGM_SPAWN_ROW = 2; // spawn in the top visible rows
 const TGM_NEXT = 3; // TGM3 shows three next pieces
-// After 15 minutes the game speeds up to keep players from playing too long:
-// 20G, [ARE, line ARE, DAS, lock delay, line clear delay] as in NullpoMino's TGM3 mode
-const TGM_KILL_FRAMES = 15 * 60 * 60, TGM_KILL_DELAYS = [2, 1, 5, 13, 3];
+// After 15 minutes Master and Easy speed up to keep players from playing too long: 20G with Shirase's
+// 600-1099 delays (tetris.wiki), [ARE, line ARE, DAS, lock delay, line clear delay]
+const TGM_KILL_FRAMES = 15 * 60 * 60, TGM_KILL_DELAYS = [6, 5, 6, 12, 3];
 
 // Staff roll after level 999: the field clears one row every ROLL_ROW_FRAMES from the bottom,
 // then play goes on for ROLL_FRAMES with blocks hiding after they lock. Fading roll: they fade
@@ -319,7 +319,7 @@ class TgmGame extends RuleGame {
         this.maxLevel = TGM_MAX_LEVEL;
         this.sectionStops = true; // a new piece doesn't pass x99 (TAP Normal: only the last stop)
         this.internalGrading = false; // grade points and their decay (TGM3 and TAP Master)
-        this.hasKill = false; // the 15-minute speed-up (TGM3 Master)
+        this.hasKill = false; // the 15-minute speed-up (TGM3 Master and Easy)
         this.invisibleRollName = "INVISIBLE ROLL";
 
         // Grading (TGM3 and TAP Master)
@@ -1292,7 +1292,6 @@ class TiEasyGame extends TiGame {
     constructor(mode, variant) {
         super(mode, variant);
         this.internalGrading = false;
-        this.hasKill = false;
         this.maxLevel = EASY_MAX_LEVEL;
         this.rollLength = EASY_ROLL_FRAMES;
         this.rollHide = VISIBLE_ROLL_HIDE;
