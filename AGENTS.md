@@ -16,7 +16,7 @@ node build.js [outDir]
 ```
 
 `build.js` joins all scripts of `game/index.html` (in page order, plus the inline bootstrap) into one
-esbuild-minified `game.<hash>.js`, minifies the inline CSS and copies `favicon.svg` and `gfx/`.
+esbuild-minified `game.<hash>.js`, minifies the inline CSS and copies `favicon.svg` and `gfx/` under content-hashed names (`favicon.<hash>.svg`, `gfx.<hash>/`; the bundle's `gfx/` paths are rewritten). Every built file is therefore cache-busted by name; only `index.html` must be served with `Cache-Control: no-cache`.
 esbuild comes from `npx` (pinned in `build.js`, needs network the first time); top-level names are
 kept because the scripts share globals. A new script in `index.html` is picked up automatically.
 
