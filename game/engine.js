@@ -292,6 +292,18 @@ const LAMP_STEPS = 5; // spot positions per axis in the atlas, drawn blended bet
 const LAMP_LOCKED = 0.7; // the stack's light relative to the falling piece's
 const LAMP_TILT_ALPHA = 0.6; // the other styles' lamp at Normal tilt and above (none at Off)
 const BOARD_LAYER_MARGIN = 18; // room around the frame in the tilted layer for block glows
+// 3D blocks (block styles with mesh, tiles.js): lit from up front left, their shadows on the
+// well's floor; drawn into a layer at BLOCK_SUPERSAMPLE times the resolution, then scaled down
+// (the canvas has no antialiasing)
+const BLOCK_LIGHT = (() => { const v = [-0.38, -0.56, 0.74], l = Math.hypot(...v); return v.map(c => c / l); })();
+const BLOCK_SHADOW_ALPHA = 0.5, BLOCK_SHADOW_BLUR = 5; // the shadow's opacity and blur (logical units)
+const BLOCK_SUPERSAMPLE = 2;
+const BLOCK_PASS_MARGIN = 40; // room around the frame in the blocks' layer for tilt and shake
+// A locked piece squashes and springs back: its height scales by 1 - amp × e^(−t/decay) × cos(t × freq)
+// (t in frames), its width the other way by SQUASH_BULGE of that; amp SQUASH_LOCK, or for a hard
+// drop SQUASH_DROP from one row to SQUASH_DROP_ROWS or more (times the effects level)
+const SQUASH_LIFE = 40, SQUASH_DECAY = 7, SQUASH_FREQ = 0.42, SQUASH_BULGE = 0.45;
+const SQUASH_LOCK = 0.12, SQUASH_DROP = [0.18, 0.38], SQUASH_DROP_ROWS = 16;
 const BOARD_GLOW_BLUR = [44, 74]; // board glow blur (device px) at rest and at full pulse
 
 // Timing: a game frame may run this many ms early, so a display refresh landing just
@@ -566,6 +578,12 @@ class Engine {
                         // from the event, not the dropped cells: those a clear removed aren't listed
                         if (s === "harddrop" && this.options.shake) this.kickShake(this.game.hardDropDistance);
                     }
+                    const locked = this.game.takeLockedCells();
+                    if (locked.length && this.options.effects) {
+                        const dist = locked[0].dist;
+                        const amp = dist ? SQUASH_DROP[0] + (SQUASH_DROP[1] - SQUASH_DROP[0]) * Math.min(1, (dist - 1) / (SQUASH_DROP_ROWS - 1)) : SQUASH_LOCK;
+                        this.squashes.push({ cells: locked, amp: amp * this.options.effectScale, life: SQUASH_LIFE });
+                    }
                     for (const dir of this.game.takeBumps()) if (this.options.shake) this.bumpShake(dir);
                     const fireworks = this.game.takeFireworks();
                     if (this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
@@ -694,6 +712,7 @@ class Engine {
         this.particles = [];
         this.flashes = [];
         this.dropFlashes = [];
+        this.squashes = []; // 3D blocks: locked pieces squashing
         this.rings = [];
         this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 }; // px, py: before the last step
     }
@@ -816,20 +835,24 @@ class Engine {
         r.setTarget(null);
         r.restore();
 
-        const cx = BOARD_X + BOARD_W / 2, cy = this.boardY + this.boardH / 2;
-        const cosX = Math.cos(m.rx), sinX = Math.sin(m.rx), cosY = Math.cos(m.ry), sinY = Math.sin(m.ry);
-        const project = (x, y) => {
-            const X = x - cx, Y = y - cy;
-            const z = -X * sinY;
-            const yr = Y * cosX - z * sinX, zr = Y * sinX + z * cosX + m.dz;
-            const f = TILT_DISTANCE / (TILT_DISTANCE - zr);
-            return [cx + X * cosY * f + m.dx, cy + yr * f + m.dy, f];
-        };
         const x1 = x0 + w / ps, y1 = y0 + h / ps;
         r.save();
         r.globalAlpha = m.alpha;
-        r.imageQuad(this.boardLayer, [project(x0, y0), project(x1, y0), project(x0, y1), project(x1, y1)]);
+        r.imageQuad(this.boardLayer, [this.boardProject(m, x0, y0), this.boardProject(m, x1, y0),
+            this.boardProject(m, x0, y1), this.boardProject(m, x1, y1)]);
         r.restore();
+    }
+
+    // Where the field's point x, y at height z (towards the camera) is drawn in the motion m:
+    // [x, y, perspective scale]. GLRenderer.block() projects the same way.
+    boardProject(m, x, y, z = 0) {
+        const cx = BOARD_X + BOARD_W / 2, cy = this.boardY + this.boardH / 2;
+        const cosX = Math.cos(m.rx), sinX = Math.sin(m.rx), cosY = Math.cos(m.ry), sinY = Math.sin(m.ry);
+        const X = x - cx, Y = y - cy;
+        const z1 = -X * sinY + z * cosY;
+        const yr = Y * cosX - z1 * sinX, zr = Y * sinX + z1 * cosX + m.dz;
+        const f = TILT_DISTANCE / (TILT_DISTANCE - zr);
+        return [cx + (X * cosY + z * sinY) * f + m.dx, cy + yr * f + m.dy, f];
     }
 
     // -----------------------------------
@@ -1136,6 +1159,7 @@ class Engine {
         this.rings = age(this.rings);
         this.flashes = age(this.flashes);
         this.dropFlashes = age(this.dropFlashes);
+        this.squashes = age(this.squashes);
     }
 
     // Effects strength for the soft, large ones (backdrop wash, trails): never quite off, and
@@ -1168,6 +1192,7 @@ class Engine {
         for (const f of this.dropFlashes) {
             if (this.options.trail) this.drawDropTrail(f);
             const t = Math.max(0, f.life / DROP_FLASH_LIFE);
+            if (this.meshStyle()) continue; // 3D blocks flash in their own shader
             for (const cell of f.cells) {
                 if (cell.row < this.wellTop || cell.cleared) continue; // hidden rows; cleared: nothing left to light up
                 const x = this.cellX(cell.col), y = this.cellY(cell.row);
@@ -1525,6 +1550,10 @@ class Engine {
     // drawing it in a pass of its own after many blocks (drawLights())
     drawBlock(type, x, y, size, style = "locked", tileset = this.options.tileset, lights = true) {
         if (!type) return;
+        if (TILESETS[tileset].mesh && style !== "ghost") {
+            this.drawFlatBlocks([[0, 0]], type, x, y, size, style, TILESETS[tileset].mesh);
+            return;
+        }
         const atlas = this.blockAtlas(size, tileset);
         const sp = atlas.sprites[style][type];
         const w = size + sp.pad * 2;
@@ -1621,6 +1650,11 @@ class Engine {
         const minR = Math.min(...rows), minC = Math.min(...cols);
         const ox = cx - ((Math.max(...cols) - minC + 1) * size) / 2;
         const oy = cy - ((Math.max(...rows) - minR + 1) * size) / 2;
+        const mesh = style !== "ghost" && this.meshStyle();
+        if (mesh) {
+            this.drawFlatBlocks(cells.map(([i, j]) => [i - minR, j - minC]), color, ox, oy, size, style, mesh);
+            return;
+        }
         for (const [i, j] of cells) this.drawBlock(color, ox + (j - minC) * size, oy + (i - minR) * size, size, style);
     }
 
@@ -1970,6 +2004,7 @@ class Engine {
         const m = this.motion;
         if (m.rx || m.ry || m.dx || m.dy || m.dz) this.drawBoardInMotion(m);
         else this.drawBoard(); // straight onto the screen, pixel-sharp
+        if (this.meshStyle()) this.drawBoardBlocks(m); // 3D blocks over it, in the same perspective
         this.drawParticles();  // confetti flies off the field: never tilted
         if (this.layout.compact) this.drawCompactPanels();
         else this.drawSidePanels();
@@ -2034,6 +2069,14 @@ class Engine {
 
         // Draw Field
         if (this.options.effects && this.options.trail) this.drawLineDropTrails(firstRow);
+        if (this.meshStyle()) {
+            // 3D blocks: only their shadows on the floor here (drawBoardBlocks() draws them)
+            this.drawBlockShadows(this.collectBlocks());
+            r.restore();
+            this.drawDropFlashes();
+            this.drawFlashes();
+            return;
+        }
         for (let i = firstRow; i < HEIGHT; i++) {
             const y = this.cellY(i + game.getDropOffset(i, this.tickPhase)); // rows fall into place during a line clear
             for (let j = 0; j < WIDTH; j++) {
@@ -2114,6 +2157,216 @@ class Engine {
             }
         }
         r.globalAlpha = 1;
+    }
+
+    // -----------------------------------
+    // 3D BLOCKS (block styles with mesh, tiles.js)
+
+    // The block style's mesh shape when it draws 3D blocks, else null
+    meshStyle() {
+        return TILESETS[this.options.tileset].mesh || null;
+    }
+
+    // Colour index to the 3D blocks' colours: base and light as [r, g, b]
+    meshColor(index) {
+        this.meshColors = this.meshColors || [];
+        return this.meshColors[index] || (this.meshColors[index] = {
+            base: new Float32Array(parseColor(PIECE_COLORS[index].base).slice(0, 3)),
+            light: new Float32Array(parseColor(PIECE_COLORS[index].light).slice(0, 3)),
+        });
+    }
+
+    // The nth reusable block record of a pool (GLRenderer.block() reads them)
+    blockRecord(pool, n) {
+        return pool[n] || (pool[n] = {
+            x: 0, y: 0, size: 0, open: new Float32Array(4), notch: new Float32Array(4), squash: new Float32Array(2),
+            base: null, light: null, glow: 0, flash: 0, alpha: 1, key: 0,
+        });
+    }
+
+    // Which sides of the block in row i, column j merge with their neighbour: same(i, j, i2, j2)
+    // says whether the block at i2, j2 joins it; up is the row drawn above (Rev: upside down)
+    setJoins(b, same, i, j, up) {
+        const l = !same(i, j, i, j - 1), r = !same(i, j, i, j + 1), t = !same(i, j, i + up, j), d = !same(i, j, i - up, j);
+        b.open[0] = +l; b.open[1] = +r; b.open[2] = +t; b.open[3] = +d;
+        b.notch[0] = +(!l && !t && !same(i, j, i + up, j - 1));
+        b.notch[1] = +(!r && !t && !same(i, j, i + up, j + 1));
+        b.notch[2] = +(!r && !d && !same(i, j, i - up, j + 1));
+        b.notch[3] = +(!l && !d && !same(i, j, i - up, j - 1));
+    }
+
+    // The well's blocks for this frame (this.meshBlocks): the stack, joined with neighbours of its
+    // colour falling with it, and the falling piece, joined only within itself, with their flash,
+    // squash and the piece's highlight fading over the lock delay
+    collectBlocks() {
+        const game = this.game, pal = game.palette, firstRow = game.firstDrawnRow, up = this.rev ? 1 : -1;
+        const list = this.meshBlocks = this.meshBlocks || [];
+        const pool = this.meshPool = this.meshPool || [];
+        list.length = 0;
+        const flash = new Map(), squash = new Map();
+        for (const f of this.dropFlashes) {
+            const t = Math.min(1, Math.max(0, f.life / DROP_FLASH_LIFE));
+            for (const c of f.cells) if (!c.cleared) flash.set(c.row * WIDTH + c.col, Math.max(t, flash.get(c.row * WIDTH + c.col) || 0));
+        }
+        for (const q of this.squashes) {
+            const age = SQUASH_LIFE - q.life;
+            const e = q.amp * Math.exp(-age / SQUASH_DECAY) * Math.cos(age * SQUASH_FREQ);
+            for (const c of q.cells) squash.set(c.row * WIDTH + c.col, e + (squash.get(c.row * WIDTH + c.col) || 0));
+        }
+        const add = (i, j, x, y, color, alpha, glow) => {
+            const b = this.blockRecord(pool, list.length);
+            const k = i * WIDTH + j, e = squash.get(k) || 0, t = flash.get(k) || 0;
+            const col = this.meshColor(color);
+            b.x = x; b.y = y; b.size = CELL; b.base = col.base; b.light = col.light; b.alpha = alpha;
+            b.glow = Math.max(glow, t); b.flash = t * t;
+            b.squash[0] = 1 + e * SQUASH_BULGE; b.squash[1] = 1 - e;
+            list.push(b);
+            return b;
+        };
+
+        const offs = this.rowOffsets = this.rowOffsets || [];
+        for (let i = firstRow; i < HEIGHT; i++) offs[i] = game.getDropOffset(i, this.tickPhase);
+        const shown = (i, j) => i >= firstRow && i < HEIGHT && j >= 0 && j < WIDTH && game.getCell(i, j) && game.getCellAlpha(i, j) > 0;
+        const stackJoins = (i, j, i2, j2) => shown(i2, j2) && pal[game.getCell(i2, j2)] === pal[game.getCell(i, j)] && offs[i2] === offs[i];
+        for (let i = firstRow; i < HEIGHT; i++) {
+            for (let j = 0; j < WIDTH; j++) {
+                if (!shown(i, j)) continue;
+                const b = add(i, j, this.cellX(j), this.cellY(i + offs[i]), pal[game.getCell(i, j)], game.getCellAlpha(i, j), 0);
+                this.setJoins(b, stackJoins, i, j, up);
+            }
+        }
+
+        const type = game.getCurPiece_type();
+        if (!type) return list;
+        const cells = game.curCells[type][game.getCurPiece_rotation()];
+        const row = game.getCurPiece_row(), col = game.getCurPiece_col();
+        const lockLeft = 1 - Math.min(1, game.curPiece_lockDelay / game.lockDelayMax);
+        const pieceJoins = (i, j, i2, j2) => i2 >= firstRow && cells.some(([a, c]) => row + a === i2 && col + c === j2);
+        for (const [a, c] of cells) {
+            if (row + a < firstRow) continue;
+            const b = add(row + a, col + c, this.cellX(col + c), this.cellY(row + a), pal[type], 1, lockLeft);
+            this.setJoins(b, pieceJoins, row + a, col + c, up);
+        }
+        return list;
+    }
+
+    // Soft shadow sprite of a block of the given size, with its padding (logical units)
+    blockShadowSprite(size) {
+        const key = "shadow:" + size;
+        let sprite = this.blockCache.get(key);
+        if (sprite) return sprite;
+        const s = this.pixelScale, pad = BLOCK_SHADOW_BLUR * 2;
+        const c = document.createElement("canvas");
+        c.width = c.height = Math.ceil((size + pad * 2) * s);
+        const g = c.getContext("2d");
+        const away = c.width * 2; // the shape is drawn off the canvas: only its shadow lands on it
+        g.shadowColor = "rgba(0,0,0,1)";
+        g.shadowBlur = BLOCK_SHADOW_BLUR * 2 * s;
+        g.shadowOffsetX = away;
+        g.beginPath();
+        g.roundRect((pad + 1) * s - away, (pad + 1) * s, (size - 2) * s, (size - 2) * s, size * 0.3 * s);
+        g.fill();
+        sprite = { tex: this.r.texture(c), pad, w: c.width / s };
+        this.blockCache.set(key, sprite);
+        return sprite;
+    }
+
+    // The blocks' shadows on the floor below them, cast away from the light
+    drawBlockShadows(list) {
+        const mesh = this.meshStyle(), r = this.r;
+        if (!list.length) return;
+        const sprite = this.blockShadowSprite(list[0].size);
+        const lift = mesh.height * list[0].size;
+        const ox = -BLOCK_LIGHT[0] / BLOCK_LIGHT[2] * lift, oy = -BLOCK_LIGHT[1] / BLOCK_LIGHT[2] * lift;
+        const a = r.globalAlpha;
+        for (const b of list) {
+            r.globalAlpha = a * BLOCK_SHADOW_ALPHA * b.alpha * b.squash[1];
+            r.image(sprite.tex, b.x + ox * b.squash[1] - sprite.pad, b.y + oy * b.squash[1] - sprite.pad, sprite.w, sprite.w);
+        }
+        r.globalAlpha = a;
+    }
+
+    // Draws 3D blocks into a layer covering lx, ly, lw, lh (logical units) at BLOCK_SUPERSAMPLE
+    // times the resolution, then onto the screen at `alpha`; draw() issues the blocks. One layer
+    // per key, so each keeps its size from frame to frame.
+    meshPass(key, lx, ly, lw, lh, alpha, draw) {
+        const r = this.r, k = this.pixelScale * BLOCK_SUPERSAMPLE;
+        const w = Math.ceil(lw * k), h = Math.ceil(lh * k);
+        this.meshLayers = this.meshLayers || new Map();
+        let t = this.meshLayers.get(key);
+        if (!t) this.meshLayers.set(key, t = r.renderTarget());
+        const a = r.globalAlpha * alpha;
+        r.save();
+        r.clipRect = null; // a clip is in screen pixels: not for the layer
+        r.applyClip();
+        r.setTarget(t, w, h);
+        r.setTransform(k, -lx * k, -ly * k);
+        r.globalAlpha = 1;
+        draw();
+        r.setTarget(null);
+        r.restore();
+        r.save();
+        r.globalAlpha = a;
+        r.image(t, lx, ly, w / k, h / k);
+        r.restore();
+    }
+
+    // Sorts blocks to be drawn from the farthest from the point under the camera (fx, fy) to the
+    // nearest, so a block's side is drawn before the neighbours that hide its foot
+    sortBlocks(list, fx, fy) {
+        for (const b of list) {
+            const dx = b.x + b.size / 2 - fx, dy = b.y + b.size / 2 - fy;
+            b.key = dx * dx + dy * dy;
+        }
+        list.sort((a, b) => b.key - a.key);
+    }
+
+    // The well's 3D blocks (collected by drawBoard()), standing on the field in the motion m
+    drawBoardBlocks(m) {
+        const list = this.meshBlocks, mesh = this.meshStyle();
+        if (!list || !list.length) return;
+        const cx = BOARD_X + BOARD_W / 2, cy = this.boardY + this.boardH / 2;
+        const zc = TILT_DISTANCE - m.dz; // the camera, seen from the field: above (fx, fy)
+        this.sortBlocks(list, cx - zc * Math.cos(m.rx) * Math.sin(m.ry), cy + zc * Math.sin(m.rx));
+        const cam = this.blockCam = this.blockCam || {};
+        cam.cx = cx; cam.cy = cy; cam.dist = TILT_DISTANCE; cam.rx = m.rx; cam.ry = m.ry;
+        cam.dz = m.dz; cam.dx = m.dx; cam.dy = m.dy;
+        cam.clipY0 = this.boardY - 8; cam.clipY1 = this.boardY + this.boardH + 8; // cut off by the frame
+        const M = BLOCK_PASS_MARGIN;
+        this.meshPass("board", BOARD_X - 8 - M, this.boardY - 8 - M, BOARD_W + 16 + 2 * M, this.boardH + 16 + 2 * M, m.alpha, () => {
+            this.r.beginBlocks(cam, mesh, BLOCK_LIGHT);
+            for (const b of list) this.r.block(b.x, b.y, b.size, b);
+            this.r.endBlocks();
+        });
+    }
+
+    // 3D blocks outside the well (HOLD, NEXT, menus): cells [row, col] from ox, oy, joined with
+    // each other, seen from straight above their middle, with their shadows
+    drawFlatBlocks(cells, color, ox, oy, size, style, mesh) {
+        const pool = this.flatPool = this.flatPool || [], list = this.flatBlocks = this.flatBlocks || [];
+        list.length = 0;
+        let rows = 0, cols = 0;
+        const joins = (i, j, i2, j2) => cells.some(([a, c]) => a === i2 && c === j2);
+        const col = this.meshColor(color);
+        for (const [i, j] of cells) {
+            const b = this.blockRecord(pool, list.length);
+            b.x = ox + j * size; b.y = oy + i * size; b.size = size; b.base = col.base; b.light = col.light;
+            b.alpha = 1; b.glow = style === "active" ? 1 : 0; b.flash = 0; b.squash[0] = b.squash[1] = 1;
+            this.setJoins(b, joins, i, j, -1);
+            list.push(b);
+            rows = Math.max(rows, i + 1);
+            cols = Math.max(cols, j + 1);
+        }
+        this.drawBlockShadows(list);
+        const cam = this.flatCam = this.flatCam || { dist: TILT_DISTANCE, rx: 0, ry: 0, dz: 0, dx: 0, dy: 0, clipY0: -1e6, clipY1: 1e6 };
+        cam.cx = ox + cols * size / 2; cam.cy = oy + rows * size / 2;
+        this.sortBlocks(list, cam.cx, cam.cy);
+        const pad = 4;
+        this.meshPass(`flat:${cols}x${rows}:${size}`, ox - pad, oy - pad, cols * size + pad * 2, rows * size + pad * 2, 1, () => {
+            this.r.beginBlocks(cam, mesh, BLOCK_LIGHT);
+            for (const b of list) this.r.block(b.x, b.y, b.size, b);
+            this.r.endBlocks();
+        });
     }
 
     // Style of one clear message line: bigger clears and longer combos get bigger, warmer type
