@@ -13,7 +13,7 @@ const MENU_KEYS = ["Escape", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "Arro
 // Menu keys the OS key repeat applies to while held (fast scrolling); games ignore it
 const MENU_REPEAT_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
 // Hidden TGM1, TGM3 and TAP test setups on Ctrl+Shift+digit, not shown anywhere in the game
-const TEST_KEYS = { Digit1: "roll", Digit2: "invisible", Digit3: "gm", Digit4: "rollend", Digit5: "kill" };
+const TEST_KEYS = { Digit1: "roll", Digit2: "invisible", Digit3: "gm", Digit4: "rollend", Digit5: "kill", Digit6: "fireworks", Digit7: "secret" };
 
 // Input bitmap bits per bound action
 const PUSH_BITS = { left: LEFT_PUSH, right: RIGHT_PUSH, hard: HARD_PUSH, soft: SOFT_PUSH, rotl: ROTL_PUSH, rotr: ROTR_PUSH, rot180: ROT180_PUSH, hold: HOLD_PUSH };

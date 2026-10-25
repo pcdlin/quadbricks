@@ -1842,6 +1842,13 @@ function startedMode(mode, variant) {
     check("  ...monochrome blocks from level 1000", [colours.every(c => c === 8), h.palette.slice(1).every(c => c === 8)], [false, true]);
 }
 {
+    const g = startedMode(arika, "easy"), m = startedMode(arika, "master");
+    check("Test setup fireworks: Easy only, five fireworks", [m.testSetup("fireworks"), g.testSetup("fireworks"), g.fireworks, g.takeFireworks()], [false, true, 5, 5]);
+    const s = startedMode(arika, "shirase");
+    check("Test setup secret: the full pattern ends the game with the top secret grade",
+        [g.testSetup("secret"), m.testSetup("secret"), m.isGameOver(), m.secretGrade, s.testSetup("secret"), s.secretGrade], [false, true, true, "GM", true, "GM"]);
+}
+{
     const g = startedMode(arika, "shirase");
     check("Shirase test setup: only the roll", [g.testSetup("invisible"), g.testSetup("kill"), g.testSetup("roll")], [false, false, true]);
     for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);

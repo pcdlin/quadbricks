@@ -74,7 +74,7 @@ const TGM_ROLL_POINTS = { fading: [0, 4, 8, 12, 26], invisible: [0, 10, 20, 30, 
 const TGM_ROLL_CLEAR = { fading: 50, invisible: 160 };
 
 // Hidden test setups (testSetup): how close to the end of the roll and to 15:00 they jump
-const TEST_ROLL_LEAD = 5 * 60, TEST_KILL_LEAD = 10 * 60;
+const TEST_ROLL_LEAD = 5 * 60, TEST_KILL_LEAD = 10 * 60, TEST_FIREWORKS = 5;
 const TEST_GM_ROLL_POINTS = 440; // 17 boosts + 9 COOLs + 4.4, surviving the roll's 1.6 makes 32
 
 // ----------------------------------------------------------
@@ -634,6 +634,8 @@ class TgmGame extends RuleGame {
     //              M-roll; TGM1: the GM roll)
     //  "rollend"   in the roll: to its last 5 seconds
     //  "kill"      10 seconds before the 15-minute speed-up (TGM3 Master only)
+    //  "fireworks" TGM3 Easy: a volley of fireworks
+    //  "secret"    the modes with a secret grade: the full ">" pattern, and the game over that shows it
     // Returns whether the setup applied.
     testSetup(name) {
         if (this.gameover || this.phase === "ready") return false;
@@ -646,6 +648,8 @@ class TgmGame extends RuleGame {
             this.tested = true;
             return true;
         }
+        if (name === "fireworks") return this.testFireworks();
+        if (name === "secret") return this.testSecretGrade();
         if (name === "rollend") {
             if (!this.roll) return false;
             this.rollFrames = Math.max(this.rollFrames, this.rollLength - TEST_ROLL_LEAD);
@@ -663,6 +667,27 @@ class TgmGame extends RuleGame {
         this.timerStopped = true;
         this.updateTimings();
         this.startRollStart();
+        return true;
+    }
+
+    testFireworks() { return false; } // only Easy has fireworks
+
+    // Fills the well with the secret grade's pattern (the highest grade) and ends the game
+    testSecretGrade() {
+        if (!this.secretGradeLabels()) return false;
+        if (this.phase === "lineclear") this.collapse(this.pendingRows);
+        this.pendingRows = [];
+        for (const row of this.field) row.fill(0);
+        for (let r = HEIGHT - 1; r > VISIBLE_TOP; r--) {
+            const hole = WIDTH - 1 - Math.abs(r - VISIBLE_TOP - WIDTH);
+            this.field[r - FIELD_TOP].fill(1);
+            this.field[r - FIELD_TOP][hole] = 0;
+        }
+        this.field[VISIBLE_TOP - FIELD_TOP][0] = 1; // covers the top row's hole
+        this.tested = true;
+        this.curPiece_type = 0;
+        this.shadowRow = -100;
+        this.endGame("TEST", this.formatTime());
         return true;
     }
 
@@ -1379,6 +1404,13 @@ class TiEasyGame extends TiGame {
         if (!this.roll && this.fieldEmpty()) this.bravoPending += EASY_BRAVO;
         this.sinceClear = 0;
         this.clearAre = true;
+    }
+
+    testFireworks() {
+        if (this.gameover || this.phase === "ready") return false;
+        this.fire(TEST_FIREWORKS);
+        this.tested = true;
+        return true;
     }
 
     // A firework goes up: counted, and drawn by the engine (takeFireworks)

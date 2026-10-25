@@ -82,7 +82,9 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 - Hidden TGM1, TGM3 and TAP test keys (`TEST_KEYS`, nowhere in the UI), during a game: Ctrl+Shift+1 straight
   to the staff roll the player has earned, 2 to the invisible roll, 3 to an invisible roll that
   ends in Grand Master if survived (TAP Master: 2 and 3 both go to the M-roll), 4 to the last 5 s
-  of the roll, 5 to 10 s before the 15-minute speed-up (TGM3 only). They call
+  of the roll, 5 to 10 s before the 15-minute speed-up (TGM3 only), 6 sends up five fireworks (TGM3 Easy
+  only), 7 fills the well with the full secret grade pattern and ends the game (the modes with a secret
+  grade: the banner shows SECRET GRADE GM). They call
   `RuleGame.testSetup()`, which refuses during READY, after game over, in the Guideline, and for
   setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4; TGM+,
   TAP Normal, Shirase and Easy: 1 and 4; 5 is TGM3 Master's only).
