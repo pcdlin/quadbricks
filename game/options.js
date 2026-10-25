@@ -92,6 +92,15 @@ const TILT_LEVELS = [
 ];
 const DEFAULT_TILT = 2;
 
+// How hard hard drops, clears and border bumps shake the playing field (kick multiplier)
+const SHAKE_LEVELS = [
+    { name: "Off", scale: 0 },
+    { name: "Subtle", scale: 0.5 },
+    { name: "Normal", scale: 1 },
+    { name: "Strong", scale: 1.7 },
+];
+const DEFAULT_SHAKE = 2;
+
 // Line clear shockwaves: off, glowing rings, a ripple refracting the whole screen (splitting the
 // colours at its front), or a lens flare along the cleared rows
 const RING_MODES = [
@@ -127,6 +136,7 @@ const OPTION_CHOICES = {
     effects: EFFECT_LEVELS.map((_, i) => i), // 0 off, then an index into EFFECT_LEVELS
     rings: RING_MODE_IDS,
     tilt: TILT_LEVELS.map((_, i) => i),
+    shake: SHAKE_LEVELS.map((_, i) => i),
     scale: SCALE_STEPS,
     das: frameRange(1, 20),
     arr: frameRange(0, 5),
@@ -134,7 +144,7 @@ const OPTION_CHOICES = {
     sdf: SDF_STEPS,
     previews: frameRange(0, GUIDELINE_NEXT),
 };
-const OPTION_TOGGLES = ["flash", "backdrop", "shake", "trail", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
+const OPTION_TOGGLES = ["flash", "backdrop", "trail", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
 
 // Index i stepped by dir through n values: wraps around, or stops at the ends (held keys)
 function stepIndex(i, dir, n, wrap = true) {
@@ -151,7 +161,7 @@ class Options {
         this.backdrop = true; // animated backdrop: colour wash and drifting lights
         this.rings = "flare"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
         this.tilt = DEFAULT_TILT; // playing field tilt: index into TILT_LEVELS
-        this.shake = true; // playing field shakes on hard drops
+        this.shake = DEFAULT_SHAKE; // playing field shake on hard drops, clears and bumps: index into SHAKE_LEVELS
         this.flash = true; // cleared rows light up as they go (only with effects on)
         this.trail = true; // streaks behind hard drops and rows falling into clears (only with effects on)
         this.border = false; // TGM-style light outline around the settled stack
@@ -176,6 +186,7 @@ class Options {
                 }
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
+            if (typeof saved.shake === "boolean") saved.shake = saved.shake ? DEFAULT_SHAKE : 0; // once on/off
             for (const [id, values] of Object.entries(OPTION_CHOICES)) {
                 if (values.includes(saved[id])) this[id] = saved[id];
             }
@@ -239,8 +250,8 @@ class Options {
     // Multiplier of the playing field's tilt angles (0 when off, or with effects off)
     get tiltAngle() { return this.effects ? TILT_LEVELS[this.tilt].angle : 0; }
 
-    // Whether hard drops, clears and bumps shake the field (never with effects off)
-    get shakeOn() { return !!(this.effects && this.shake); }
+    // Multiplier of the field's shake on hard drops, clears and bumps (0 when off, or with effects off)
+    get shakeScale() { return this.effects ? SHAKE_LEVELS[this.shake].scale : 0; }
 
     // Strength multiplier of the visual effects (0 when off)
     get effectScale() { return EFFECT_LEVELS[this.effects].scale; }

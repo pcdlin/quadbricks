@@ -607,15 +607,15 @@ class Engine {
                     const cleared = this.game.takeClearedCells().map(toColor);
                     this.explodeCells(cleared, this.game.chain);
                     // no jolt for each row the field loses before the staff roll
-                    if (cleared.length && this.options.shakeOn && !this.game.inRollStart()) this.clearShake(cleared, this.game.chain);
+                    if (cleared.length && this.options.shakeScale && !this.game.inRollStart()) this.clearShake(cleared, this.game.chain);
                     const dropped = this.game.takeHardDropCells().map(toColor);
                     if (dropped.length && this.options.effects) this.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 });
                     for (const s of this.game.takeSounds()) {
                         this.sound.play(s);
                         // from the event, not the dropped cells: those a clear removed aren't listed
-                        if (s === "harddrop" && this.options.shakeOn) this.kickShake(this.game.hardDropDistance);
+                        if (s === "harddrop" && this.options.shakeScale) this.kickShake(this.game.hardDropDistance);
                     }
-                    for (const dir of this.game.takeBumps()) if (this.options.shakeOn) this.bumpShake(dir);
+                    for (const dir of this.game.takeBumps()) if (this.options.shakeScale) this.bumpShake(dir);
                     const fireworks = this.game.takeFireworks();
                     if (this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
                     if (this.game.isGameOver() && !this.recordDone) this.submitRecord();
@@ -778,21 +778,21 @@ class Engine {
 
     // A hard drop knocks the field down, harder for longer drops, with a little sideways jolt
     kickShake(dist) {
-        const kick = SHAKE_KICK * (0.5 + 0.5 * Math.min(1, dist / 16));
+        const kick = SHAKE_KICK * this.options.shakeScale * (0.5 + 0.5 * Math.min(1, dist / 16));
         this.shake.vy += kick;
         this.shake.vx += (Math.random() - 0.5) * kick * 0.5;
     }
 
     // A piece pushed against the left or right border nudges the field that way
     bumpShake(dir) {
-        this.shake.vx += dir * SHAKE_BUMP;
+        this.shake.vx += dir * SHAKE_BUMP * this.options.shakeScale;
     }
 
     // A line clear jolts the field in a random direction (mostly down), harder for more
     // lines and longer combos (chain 0 = no combo)
     clearShake(cells, chain) {
         const lines = new Set(cells.map(c => c.row)).size;
-        const kick = SHAKE_CLEAR_KICK * (1 + SHAKE_CLEAR_LINE * (lines - 1))
+        const kick = SHAKE_CLEAR_KICK * this.options.shakeScale * (1 + SHAKE_CLEAR_LINE * (lines - 1))
             * (1 + SHAKE_CLEAR_CHAIN * Math.min(Math.max(0, chain), RING_CHAIN_MAX));
         const angle = Math.PI / 2 + (Math.random() - 0.5) * 2.2; // within ~63° of straight down
         this.shake.vx += Math.cos(angle) * kick;
@@ -1026,6 +1026,7 @@ class Engine {
             case "effects": return EFFECT_LEVELS[o.effects].name;
             case "rings": return RING_MODES[RING_MODE_IDS.indexOf(o.rings)].name;
             case "tilt": return TILT_LEVELS[o.tilt].name;
+            case "shake": return SHAKE_LEVELS[o.shake].name;
             case "scale": return Math.round(o.scale * 100) + "%";
             case "tileset": return TILESETS[o.tileset].name;
             case "confetti": return CONFETTI_STYLES[CONFETTI_STYLE_IDS.indexOf(o.confetti)].name;
