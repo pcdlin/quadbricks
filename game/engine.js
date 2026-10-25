@@ -24,6 +24,7 @@ const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONT
 const MENU_DEPTH = [0, 1, 2, 1, 2, 2, 2, 3];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
+const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", accent: tetI, resume: true };
 const RESTART_ITEM = { name: "Restart", desc: "Start the current game over", accent: tetL, restart: true };
 const MAIN_ITEMS = [
     { name: "New Game", desc: "Choose a rule set and mode", accent: tetT, screen: MENU_RULES },
@@ -593,9 +594,9 @@ class Engine {
         this.boardY = BOARD_Y + (BOARD_H - this.boardH) / 2;
     }
 
-    // The main menu's items: Restart comes first while there is a game to restart
+    // The main menu's items: Continue and Restart come first while there is a game
     mainItems() {
-        return this.game !== null ? [RESTART_ITEM, ...MAIN_ITEMS] : MAIN_ITEMS;
+        return this.game !== null ? [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS] : MAIN_ITEMS;
     }
 
     initGame(mode, variant, startLevel = 0, height = 0) {
@@ -738,7 +739,7 @@ class Engine {
                 if (code === "Escape") {
                     this.GAMESTATE = STATE_MENU;
                     this.menuStep = MENU_MAIN; // so Esc in the menu resumes straight away
-                    this.mainpos = 0;           // on Restart, the first item
+                    this.mainpos = 0;           // on Continue (or Restart), the first item
                     this.menuShown = null;      // no slide when the menu opens
                     return;
                 }
@@ -781,7 +782,11 @@ class Engine {
             } else if ((code === "ArrowLeft" || code === "ArrowRight") && settings && !settings[pos].action) {
                 this.changeOption(settings[pos].id, code === "ArrowLeft" ? -1 : 1, !repeat);
             } else if (code === "Enter") {
-                if (this.menuStep === MENU_MAIN && this.mainItems()[pos].restart) {
+                if (this.menuStep === MENU_MAIN && this.mainItems()[pos].resume) {
+                    this.GAMESTATE = STATE_GAME;
+                    this.syncKeys = true;
+                    return;
+                } else if (this.menuStep === MENU_MAIN && this.mainItems()[pos].restart) {
                     this.initGame(...this.lastGameArgs);
                     this.GAMESTATE = STATE_GAME;
                     return;
