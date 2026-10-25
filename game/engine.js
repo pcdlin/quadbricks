@@ -6,7 +6,7 @@
 
 const STATE_MENU = 0, STATE_GAME = 1;
 
-const VERSION = "0.4"; // shown in the top left corner
+const VERSION = "0.5"; // shown in the top left corner
 
 // Game keys are bound in options.js; menus always use these (KeyboardEvent.code)
 const MENU_KEYS = ["Escape", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
