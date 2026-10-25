@@ -234,7 +234,9 @@ Pieces are 4×4 boxes; `curPiece_row/col` is the box's top-left.
 `timerStopped` is set)
 A lock delay of N frames counts the landing frame as the first and locks on the frame after the
 Nth (the piece rests in view for N frames, as in NullpoMino and Cambridge).
-DAS charges in every phase (TGM: not on the frame a piece enters). In the TGM series a piece's first
+DAS charges in every phase. TGM (`TgmGame.dasCharges()`, tetris.wiki): not during the line clear delay,
+the first frames of an ARE after a piece that cleared nothing (`dasFreezeAre`: TGM1 4, else 1), the
+last frame of ARE, nor on the frame a piece enters. In the TGM series a piece's first
 frame takes only IRS and gravity (`moveOnSpawn` false, as NullpoMino's Classic rules and Cambridge):
 shifts and up pressed on it act on the next frame if still held (`deferredPush`), and soft drop waits
 too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
@@ -654,8 +656,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   respect. The Guideline's extra goals and times are this game's choice; the sources name 40 lines and
   2 minutes.
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
-  (length from NullpoMino) only follows GM and empties the field row by row like TGM3's; the DAS
-  charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it.
+  (length from NullpoMino) only follows GM and empties the field row by row like TGM3's. TGM3's DAS
+  freezes are taken as TAP's (the wiki doesn't know them).
   Hidden modes: Rev is drawn as the well turned upside down with upright blocks (the wiki only says
   pieces spawn at the bottom and rise); Mono's colour is a neutral grey-white (palette index 8);
   Uki (a voice for line clears) isn't there; codes don't keep scores off a table (there is none).

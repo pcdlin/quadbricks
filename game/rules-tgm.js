@@ -309,6 +309,7 @@ class TgmGame extends RuleGame {
         this.tgm = true;
         this.dasInclusive = true; // the delay tables are tetris.wiki's, with DAS counted inclusively
         this.moveOnSpawn = false; // a piece's first frame takes only IRS and gravity (NullpoMino, Cambridge)
+        this.dasFreezeAre = 1; // frames at the start of an ARE without a clear that don't charge DAS
         this.level = 0;
         this.combo = 1; // TGM's combo: a score multiplier
         this.bufferTop = TGM_BUFFER_TOP;
@@ -449,8 +450,16 @@ class TgmGame extends RuleGame {
         if (this.internalGrading && !this.roll) this.decayGrade();
     }
 
-    // DAS doesn't charge on the frame a piece enters (tetris.wiki: TGM1, TAP)
+    // DAS doesn't charge (tetris.wiki: TGM1, TAP; TGM3 taken as TAP) during the line clear delay (and
+    // the staff roll's start), the first frames of an ARE after a piece that cleared nothing
+    // (dasFreezeAre: the lock flash), the last frame of ARE and the frame a piece enters
     dasCharges() {
+        if (this.phase === "lineclear" || this.phase === "rollstart") return false;
+        if (this.phase === "are") {
+            const frame = this.phaseCounter + 1; // this frame's place in the ARE
+            if (frame >= this.phaseLength - 1) return false;
+            if (this.chain < 0 && frame <= this.dasFreezeAre) return false;
+        }
         return !this.entersThisFrame();
     }
 
@@ -731,6 +740,7 @@ class Tgm1Game extends TgmGame {
         this.useArs(true);
         this.hasHold = false;
         this.nextCount = TAP_NEXT;
+        this.dasFreezeAre = 4; // tetris.wiki: the first 4 frames of ARE
         this.randomizer = new Tgm1Randomizer(Date.now());
         this.rollLength = TGM1_ROLL_FRAMES;
         this.rollHide = VISIBLE_ROLL_HIDE;

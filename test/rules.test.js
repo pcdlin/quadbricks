@@ -382,6 +382,35 @@ for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 1
     check("  ...the Guideline's pieces still move on their first frame", guide.curPiece_col, 2);
 }
 
+{
+    // DAS doesn't charge during the line clear delay, the first frames of an ARE without a clear
+    // (TGM1 4, TAP 1), the last frame of ARE and the frame a piece enters (tetris.wiki)
+    const areCharging = mode => {
+        const g = createGame(mode);
+        while (g.phase !== "active") g.advanceFrame(0);
+        clearField(g);
+        g.advanceFrame(RIGHT_PUSH);
+        g.hardDrop(); // nothing cleared: ARE
+        g.das = 99; // never fully charged, so every charging frame shows
+        const steps = [];
+        while (g.phase === "are") { const before = g.dasCounter; g.advanceFrame(0); steps.push(g.dasCounter - before); }
+        return steps.join("");
+    };
+    const tap = areCharging(tgmTap), tgm1 = areCharging(tgmOriginal);
+    check("TGM DAS in ARE: TAP skips its first, last and entering frames; TGM1 its first four too",
+        [tap, tgm1], ["0" + "1".repeat(24) + "00", "0000" + "1".repeat(24) + "00"]);
+    const g = createGame(tgmTap);
+    while (g.phase !== "active") g.advanceFrame(0);
+    clearField(g);
+    fill(g, ["######    "]);
+    place(g, tetI, 0, 20, 6); // the ARS I lies in its box's row 1: columns 6-9 of the bottom row
+    g.advanceFrame(RIGHT_PUSH);
+    g.hardDrop();
+    const clearing = g.phase, before = g.dasCounter;
+    while (g.phase === "lineclear") g.advanceFrame(0);
+    check("  ...nor during the line clear delay", [clearing, g.dasCounter], ["lineclear", before]);
+}
+
 // ---------------------------------------------------------------- Guideline handling options
 function handlingGame(handling, variant = "test") {
     const g = createGame(guideline, variant, 0, 0, handling);
