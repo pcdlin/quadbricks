@@ -153,6 +153,14 @@ function touchWords(s) {
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
 const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals and mode cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
+const HANDLING_ROWS = { rowH: 44, gap: 4 }; // the Guideline handling cards, a little tighter still
+const HANDLING_LIST_H = 7 * 48 - 4; // seven cards show; the help for the selected one goes under them
+// Setting lists that scroll to keep the selection in view: by screen, the items, the position
+// field, the cards' size and the height shown (menuScroll keeps how far each is scrolled)
+const SCROLLED_LISTS = {
+    [MENU_VISUALS]: { items: VISUAL_ITEMS, pos: "visualspos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
+    [MENU_HANDLING]: { items: HANDLING_ITEMS, pos: "handlingpos", ...HANDLING_ROWS, listH: HANDLING_LIST_H },
+};
 // Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
 const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
 const PREVIEW_GAP = 6;
@@ -332,8 +340,8 @@ class Engine {
         this.layoutBoard(VISIBLE_TOP);
         this.layout = LAYOUT_FULL; // full or compact, by window (resize())
         this.setupChoices = {}; // setup card choices ("rule set.mode.card": label index), kept for the session
-        this.visualsScroll = 0;       // Visuals list scrolled out above (logical units), eased
-        this.visualsScrollTarget = 0;
+        // per scrolled list (SCROLLED_LISTS): logical units scrolled out above, eased toward target
+        this.menuScroll = Object.fromEntries(Object.keys(SCROLLED_LISTS).map(step => [step, { at: 0, target: 0 }]));
         this.controlspos = 0; // key action, or "reset" after the last one
         this.capturing = null; // action waiting for a new key
         this.options = new Options();
@@ -864,7 +872,7 @@ class Engine {
                     const next = (this.menuStep === MENU_MAIN ? this.mainItems() : OPTIONS_ITEMS)[pos].screen;
                     this.menuStep = next;
                     if (next !== MENU_RULES) this[screens[next].pos] = 0; // the rule set list remembers its place
-                    if (next === MENU_VISUALS) this.visualsScroll = this.visualsScrollTarget = 0;
+                    if (this.menuScroll[next]) this.menuScroll[next] = { at: 0, target: 0 };
                 } else if (this.menuStep === MENU_RULES) {
                     this.menuStep = MENU_MODES;
                     this.menupos = 0;
@@ -1754,25 +1762,19 @@ class Engine {
                 const items = this.settingCards(VISUAL_ITEMS);
                 // Tighter cards leave room for the hint above the shared controls row; the list
                 // shows VISUALS_LIST_H of them, scrolled to keep the selection in view
-                const { rowH, gap } = VISUALS_ROWS, listH = VISUALS_LIST_H;
-                const r = this.r;
-                r.save();
-                r.clip(-VIEW_W, top - 1, VIEW_W * 3, listH + 2);
-                this.drawMenuList(items, this.visualspos, top, rowH, gap, this.visualsScroll);
-                r.restore();
-                this.drawScrollbar(VIEW_W / 2 + 210 + 10, top, listH, this.visualsScroll, menuListHeight(items, rowH, gap));
-                hintY = top + listH + 22;
+                this.drawScrolledList(MENU_VISUALS, items, top);
+                hintY = top + VISUALS_LIST_H + 22;
                 hint = "← →  CHANGE      ESC  BACK";
                 break;
             }
             case MENU_HANDLING: {
-                // Compact cards like Visuals, heading in the tagline's place; below them what the selected
-                // setting does, with its abbreviation spelled out (cards a little tighter, to fit the reset card)
-                const top = 236, rowH = 44, gap = 4;
+                // Compact cards like Visuals, scrolling the same way, heading in the tagline's place; below
+                // them what the selected setting does, with its abbreviation spelled out
+                const top = 236;
                 heading("OPTIONS  ·  GUIDELINE HANDLING", INK_DIM, 220);
-                this.drawMenuList(this.settingCards(HANDLING_ITEMS), this.handlingpos, top, rowH, gap);
+                this.drawScrolledList(MENU_HANDLING, this.settingCards(HANDLING_ITEMS), top);
                 const [title, help] = HANDLING_ITEMS[this.handlingpos].help;
-                const y = top + HANDLING_ITEMS.length * (rowH + gap) + 10;
+                const y = top + HANDLING_LIST_H + 14;
                 this.text(title.toUpperCase(), cx, y, { size: 11, weight: 700, color: INK, align: "center", spacing: 3 });
                 this.text(help, cx, y + 19, { size: 13, weight: 500, color: INK_DIM, align: "center" });
                 hintY = y + 44;
@@ -1852,19 +1854,32 @@ class Engine {
         r.shape(x, top + h * scroll / total, 3, h * h / total, { radius: 1.5, fill: "rgba(244,236,220,0.4)" });
     }
 
-    // Eases the Visuals list's scroll toward keeping the selected card in view
+    // A scrolled list (SCROLLED_LISTS) of the menu screen step: its cards from top, clipped to the
+    // height shown, with a scrollbar beside them
+    drawScrolledList(step, items, top) {
+        const { pos, rowH, gap, listH } = SCROLLED_LISTS[step], scroll = this.menuScroll[step].at;
+        const r = this.r;
+        r.save();
+        r.clip(-VIEW_W, top - 1, VIEW_W * 3, listH + 2);
+        this.drawMenuList(items, this[pos], top, rowH, gap, scroll);
+        r.restore();
+        this.drawScrollbar(VIEW_W / 2 + 210 + 10, top, listH, scroll, menuListHeight(items, rowH, gap));
+    }
+
+    // Eases the scrolled lists toward keeping their selected card in view
     updateMenuScroll(dt) {
-        const { rowH, gap } = VISUALS_ROWS;
-        const pos = this.visualspos;
-        const y = pos ? menuListHeight(VISUAL_ITEMS.slice(0, pos), rowH, gap) + gap : 0; // selected card's top
-        const h = menuRowHeight(VISUAL_ITEMS[pos], rowH);
-        let target = this.visualsScrollTarget;
-        if (y < target) target = y;
-        else if (y + h > target + VISUALS_LIST_H) target = y + h - VISUALS_LIST_H;
-        const max = Math.max(0, menuListHeight(VISUAL_ITEMS, rowH, gap) - VISUALS_LIST_H);
-        this.visualsScrollTarget = Math.max(0, Math.min(target, max));
-        this.visualsScroll += (this.visualsScrollTarget - this.visualsScroll) * (1 - Math.pow(0.7, dt));
-        if (Math.abs(this.visualsScrollTarget - this.visualsScroll) < 0.05) this.visualsScroll = this.visualsScrollTarget;
+        for (const [step, { items, pos: posField, rowH, gap, listH }] of Object.entries(SCROLLED_LISTS)) {
+            const s = this.menuScroll[step], pos = this[posField];
+            const y = pos ? menuListHeight(items.slice(0, pos), rowH, gap) + gap : 0; // selected card's top
+            const h = menuRowHeight(items[pos], rowH);
+            let target = s.target;
+            if (y < target) target = y;
+            else if (y + h > target + listH) target = y + h - listH;
+            const max = Math.max(0, menuListHeight(items, rowH, gap) - listH);
+            s.target = Math.max(0, Math.min(target, max));
+            s.at += (s.target - s.at) * (1 - Math.pow(0.7, dt));
+            if (Math.abs(s.target - s.at) < 0.05) s.at = s.target;
+        }
     }
 
     // Cards with an accent piece, name and description; the selected one is highlighted. Cards
