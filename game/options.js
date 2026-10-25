@@ -72,11 +72,14 @@ const TILT_LEVELS = [
 ];
 const DEFAULT_TILT = 2;
 
-// Line clear shockwaves: off, glowing rings, or a ripple refracting the whole screen
+// Line clear shockwaves: off, glowing rings, a ripple refracting the whole screen, the ripple
+// splitting the colours at its front (prism), or a lens flare along the cleared rows
 const RING_MODES = [
     { id: "off", name: "Off" },
     { id: "rings", name: "Rings" },
     { id: "ripple", name: "Ripple" },
+    { id: "prism", name: "Prism" },
+    { id: "flare", name: "Flare" },
 ];
 const RING_MODE_IDS = RING_MODES.map(m => m.id);
 

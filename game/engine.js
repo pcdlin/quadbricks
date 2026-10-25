@@ -264,9 +264,13 @@ const HUE_DEFAULT = 232; // the backdrop's blue at start, and again at each new 
 const RING_LIFE = 46; // frames a clear shockwave expands
 const RING_ALPHA = 0.8; // ring opacity at the Normal effects level
 const RING_CHAIN_MAX = 8; // combo length after which rings stop getting brighter
-const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple)
+const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple and Prism)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
 const RIPPLE_AMP = 1.55; // refraction strength at the Normal effects level
+const PRISM_AMP = 1.25; // Prism's refraction, relative to Ripple's
+const PRISM_SPREAD = 0.5; // Prism: red bends this much less than green, blue this much more
+const FLARE_LIFE = 34; // frames a clear flare lasts (Clear rings: Flare)
+const FLARE_ALPHA = 1.2; // flare brightness at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
 const STACK_BORDER_W = 3; // TGM-style stack border: width of the line, drawn on the blocks' edges
 const STACK_BORDER_COLOR = "rgba(222,222,232,0.9)";
@@ -607,7 +611,8 @@ class Engine {
         this.motion = this.boardMotion();
         this.updateSheen(this.motion);
         // Clear ripples: the frame is drawn into a layer, then onto the screen through them
-        const ripples = this.ringMode() === "ripple" && this.rings.length ? this.rippleShapes() : null;
+        const mode = this.ringMode(), prism = mode === "prism";
+        const ripples = (mode === "ripple" || prism) && this.rings.length ? this.rippleShapes(prism) : null;
         if (ripples) {
             this.sceneLayer = this.sceneLayer || r.renderTarget();
             r.setScreen(this.sceneLayer);
@@ -617,9 +622,15 @@ class Engine {
 
         if (this.GAMESTATE === STATE_GAME) this.drawGame();
         else this.drawMenu();
+        // Clear flares: light on the lens, over everything
+        if (mode === "flare" && this.rings.length) {
+            this.backdrop.flares([this.pixelScale, this.offX, this.offY], this.flareShapes().map(f => ({
+                ...f, rgb: hslToRgb(f.hue, 60, 92), glowRgb: hslToRgb(f.hue, 95, 65),
+            })));
+        }
         if (ripples) {
             r.setScreen(null);
-            this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples);
+            this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples, prism ? PRISM_SPREAD : 0);
         }
 
         // Version and FPS in the view's top corners, kept unobtrusive. Drawn at the fit size (the
@@ -1103,7 +1114,8 @@ class Engine {
         for (const row of rows) this.flashes.push({ row, life: FLASH_LIFE });
         if (rows.size) {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
-            const span = this.options.rings === "ripple" ? RIPPLE_LIFE : RING_LIFE;
+            const mode = this.options.rings;
+            const span = mode === "ripple" || mode === "prism" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
             this.rings.push({
                 y: this.cellY(mid) + CELL / 2, life: span, span, power: rows.size,
                 chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
@@ -1499,15 +1511,31 @@ class Engine {
         });
     }
 
-    // The Clear rings mode in effect: "off", "rings" or "ripple" (only in a game, with effects on)
+    // Clear flares: a short anamorphic lens flare through the cleared rows, a horizontal streak
+    // with a white-hot core, a soft bloom and three small ghosts, widening as it fades. Centre,
+    // streak length (its exponential falloff's scale) and core thickness in logical units.
+    flareShapes() {
+        return this.rings.map(ring => {
+            const k = 1 - ring.life / ring.span; // 0 -> 1
+            const ease = 1 - Math.pow(1 - k, 3);
+            return {
+                x: BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue + 20,
+                r: 200 + 700 * ease,
+                width: (3 + 2.5 * ring.power) * (1 - k) + 1.5,
+                a: (1 - k) * (1 - k) * (0.5 + 0.12 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * FLARE_ALPHA,
+            };
+        });
+    }
+
+    // The Clear rings mode in effect: an id from RING_MODES, "off" outside a game or with effects off
     ringMode() {
         return this.GAMESTATE === STATE_GAME && this.options.effects ? this.options.rings : "off";
     }
 
     // Clear ripples: a wave packet spreading from the cleared rows through the whole view,
     // bending the light of what is under it (no glow or tint of its own). Centre, radius and packet width in logical
-    // units; amp is the largest displacement, in logical units.
-    rippleShapes() {
+    // units; amp is the largest displacement, in logical units. Prism's bends harder.
+    rippleShapes(prism) {
         return this.rings.map(ring => {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const fade = Math.pow(1 - k, 2.5); // strong at first, gone well before the end
@@ -1515,7 +1543,7 @@ class Engine {
                 x: BOARD_X + BOARD_W / 2, y: ring.y,
                 r: 20 + (1 - Math.pow(1 - k, 1.6)) * RIPPLE_REACH,
                 width: (14 + 4 * ring.power) * (1 + 1.5 * k), // spreads as it goes
-                amp: fade * (4 + 2.5 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * RIPPLE_AMP,
+                amp: fade * (4 + 2.5 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * RIPPLE_AMP * (prism ? PRISM_AMP : 1),
             };
         });
     }

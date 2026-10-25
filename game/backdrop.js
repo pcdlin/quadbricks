@@ -97,9 +97,10 @@ void main() {
     gl_FragColor = vec4(uGlowColor.rgb * ga + ring * (1.0 - ga), ga);
 }`;
 
-// Clear ripples (Clear rings: Ripple): the finished frame, drawn onto the screen through a
+// Clear ripples (Clear rings: Ripple and Prism): the finished frame, drawn onto the screen through a
 // wave packet on a sheet of glass. Each ripple's surface slope across its front bends the
-// lookup into the frame; nothing is added, so only the refraction shows.
+// lookup into the frame; nothing is added, so only the refraction shows. Prism (uSpread > 0)
+// bends red less and blue more than green, splitting the colours at the front.
 // The packet: slope = e^(-u²)·sin(3u), u = distance past the front / its width.
 const REFRACT_FS = `
 precision highp float;
@@ -108,6 +109,7 @@ uniform vec2 uSize;
 uniform vec3 uView;                              // scale, offset x, offset y of the logical view
 uniform vec4 uWave[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, packet width (logical)
 uniform float uWaveAmp[${BACKDROP_MAX_RINGS}];   // largest displacement (logical; 0: unused)
+uniform float uSpread;                           // 0, or how far red and blue bend apart from green
 
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
@@ -123,7 +125,42 @@ void main() {
         disp += off / max(d, 0.001) * env * sin(3.0 * u) * uWaveAmp[i];
     }
     vec2 dp = vec2(disp.x, -disp.y) * uView.x / uSize; // render targets are stored bottom up
-    gl_FragColor = vec4(texture2D(uScene, gl_FragCoord.xy / uSize + dp).rgb, 1.0);
+    vec2 uv = gl_FragCoord.xy / uSize;
+    if (uSpread > 0.0) {
+        gl_FragColor = vec4(texture2D(uScene, uv + dp * (1.0 - uSpread)).r, texture2D(uScene, uv + dp).g,
+            texture2D(uScene, uv + dp * (1.0 + uSpread)).b, 1.0);
+    } else gl_FragColor = vec4(texture2D(uScene, uv + dp).rgb, 1.0);
+}`;
+
+// Clear flares (Clear rings: Flare), added over the finished frame like light on the lens: a
+// streak falling off exponentially along x and as a Gaussian across it, its white-hot core,
+// a round bloom and three ghosts along the streak. Premultiplied, for blending with ONE, ONE.
+const FLARE_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uView;                               // scale, offset x, offset y of the logical view
+uniform vec4 uFlare[${BACKDROP_MAX_RINGS}];       // centre x, y, streak length, core thickness (logical)
+uniform vec4 uFlareColor[${BACKDROP_MAX_RINGS}];  // core rgb, alpha (0: unused)
+uniform vec3 uFlareGlow[${BACKDROP_MAX_RINGS}];   // glow rgb
+
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uView.yz) / uView.x;
+    vec3 light = vec3(0.0);
+    for (int i = 0; i < ${BACKDROP_MAX_RINGS}; i++) {
+        if (uFlareColor[i].a <= 0.0) continue;
+        vec2 o = q - uFlare[i].xy;
+        float len = uFlare[i].z;
+        float sx = abs(o.x) / len, sy = o.y / uFlare[i].w;
+        float streak = exp(-3.0 * sx - 0.2 * sy * sy); // a halo about twice the core's thickness
+        float core = exp(-5.0 * sx - 2.0 * sy * sy);
+        float b = 0.25 * len;
+        float bloom = 0.5 * exp(-dot(o, o) / (b * b));
+        vec2 g1 = o - vec2(-0.15 * len, 0.0), g2 = o - vec2(0.22 * len, 0.0), g3 = o - vec2(0.38 * len, 0.0);
+        float ghosts = exp(-dot(g1, g1) / 324.0) + exp(-dot(g2, g2) / 100.0) + exp(-dot(g3, g3) / 676.0);
+        light += uFlareColor[i].a * (uFlareGlow[i] * (0.6 * streak + bloom + 0.25 * ghosts) + uFlareColor[i].rgb * core);
+    }
+    gl_FragColor = vec4(light, 0.0);
 }`;
 
 class GLBackdrop {
@@ -148,6 +185,7 @@ class GLBackdrop {
         this.orbProgram = this.r.program(ORB_VS, ORB_FS, [["aPos", 2], ["aOrb", 3], ["aColor", 4]]);
         this.board = this.r.program(FULLSCREEN_VS, BOARD_FS, [["aPos", 2]]);
         this.refraction = this.r.program(FULLSCREEN_VS, REFRACT_FS, [["aPos", 2]]);
+        this.flare = this.r.program(FULLSCREEN_VS, FLARE_FS, [["aPos", 2]]);
         // one triangle covering the screen
         this.fullscreen = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreen);
@@ -273,8 +311,9 @@ class GLBackdrop {
 
     // The frame drawn into layer (a render target the size of the screen) onto the screen,
     // through the clear ripples: [{x, y, r, width, amp}] (view logical, see
-    // Engine.rippleShapes). view: [scale, offX, offY] of the logical view.
-    refract(layer, view, waves) {
+    // Engine.rippleShapes). view: [scale, offX, offY] of the logical view. spread: Prism's
+    // colour split (0: none).
+    refract(layer, view, waves, spread = 0) {
         const gl = this.gl;
         this.r.flush();
         waves = waves.slice(-BACKDROP_MAX_RINGS);
@@ -294,8 +333,47 @@ class GLBackdrop {
         }
         gl.uniform4fv(p.u("uWave"), wave);
         gl.uniform1fv(p.u("uWaveAmp"), amp);
+        gl.uniform1f(p.u("uSpread"), spread);
         this.drawFullscreen(p);
         gl.enable(gl.BLEND);
+    }
+
+    // The clear flares, added over what is drawn: [{x, y, r, width, a, rgb, glowRgb}] (view
+    // logical; r is the streak's length, width its core's thickness, see Engine.flareShapes).
+    // view: [scale, offX, offY] of the logical view.
+    flares(view, flares) {
+        const gl = this.gl;
+        this.r.flush();
+        flares = flares.slice(-BACKDROP_MAX_RINGS);
+        const [s, ox, oy] = view;
+        let y0 = Infinity, y1 = -Infinity;
+        const p = this.flare;
+        gl.useProgram(p.prog);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.uniform2f(p.u("uSize"), this.r.width, this.r.height);
+        gl.uniform3fv(p.u("uView"), view);
+        const flare = this.ring, color = this.ringColor, glow = this.ringGlow;
+        color.fill(0); // alpha 0: slot unused
+        for (let i = 0; i < flares.length; i++) {
+            const f = flares[i];
+            flare[i * 4] = f.x; flare[i * 4 + 1] = f.y; flare[i * 4 + 2] = f.r; flare[i * 4 + 3] = f.width;
+            color.set(f.rgb, i * 4);
+            color[i * 4 + 3] = f.a;
+            glow.set(f.glowRgb, i * 3);
+            // the bloom and ghosts end well inside 2.5 bloom radii, the streak's halo in 7 core thicknesses
+            const reach = Math.max(7 * f.width, 2.5 * 0.25 * f.r) * s, cy = oy + f.y * s;
+            if (f.a > 0) { y0 = Math.min(y0, cy - reach); y1 = Math.max(y1, cy + reach); }
+        }
+        y0 = Math.max(0, Math.floor(y0)); y1 = Math.min(this.r.height, Math.ceil(y1));
+        if (y1 <= y0) return;
+        gl.uniform4fv(p.u("uFlare"), flare);
+        gl.uniform4fv(p.u("uFlareColor"), color);
+        gl.uniform3fv(p.u("uFlareGlow"), glow);
+        gl.enable(gl.SCISSOR_TEST);
+        gl.scissor(0, this.r.height - y1, this.r.width, y1 - y0); // the streak crosses the screen; GL counts from the bottom
+        this.drawFullscreen(p);
+        gl.disable(gl.SCISSOR_TEST);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     }
 
     // Device-pixel box [x0, y0, x1, y1] around the board glow and the rings, 4 sigma past
