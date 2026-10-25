@@ -5,6 +5,7 @@
 
 const OPTIONS_STORAGE_KEY = "quadbricks.options";
 const RECORDS_STORAGE_KEY = "quadbricks.records";
+const EXAMS_STORAGE_KEY = "quadbricks.exams";
 
 // Rebindable actions, in the order the controls screen lists them
 const KEY_ACTIONS = [
@@ -211,6 +212,32 @@ class Options {
     actionFor(code) {
         for (const { id } of KEY_ACTIONS) if (this.keys[id].includes(code)) return id;
         return null;
+    }
+}
+
+// TGM3 Master's qualified grade, per rule ("world", "classic"): the promotional and demotional exams'
+// state (TGM3_EXAM_START; see tgm3ExamFor and tgm3ExamAfter in rules-tgm.js). Kept in localStorage.
+class Exams {
+    constructor() {
+        this.state = {};
+        try {
+            const saved = JSON.parse(localStorage.getItem(EXAMS_STORAGE_KEY) || "{}");
+            for (const [rule, s] of Object.entries(saved)) {
+                if (s && Number.isInteger(s.qualified) && Number.isInteger(s.demotion) && Array.isArray(s.history)
+                    && s.history.every(Number.isInteger)) this.state[rule] = s;
+            }
+        } catch (e) { /* storage unavailable or corrupt: everyone starts at 9 */ }
+    }
+
+    get(rule) {
+        return this.state[rule] || { ...TGM3_EXAM_START, history: [] };
+    }
+
+    set(rule, state) {
+        this.state[rule] = state;
+        try {
+            localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(this.state));
+        } catch (e) { /* not remembered */ }
     }
 }
 

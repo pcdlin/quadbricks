@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -2299,6 +2299,55 @@ function secretAt(g, rows, cover = true) {
         secretAt(startedMode(arika, "shirase"), 19)], ["S9", "m1", "GM"]);
     check("  ...none in TGM+, TAP Normal and Easy (no grades)", [secretAt(startedMode(tgmTap, "plus"), 19),
         secretAt(startedMode(tgmTap, "normal"), 19), secretAt(startedMode(arika, "easy"), 19)], [null, null, null]);
+}
+
+// ---------------------------------------------------------------- TGM3 qualified grade and exams
+{
+    const state = (qualified, history, demotion = 0) => ({ qualified, history, demotion });
+    const h = [10, 12, 11, 9, 8, 13, 5];
+    check("TGM3 exams: the promotional grade is the 2nd-4th best of the last 7 averaged, rounded down; none before 7 games",
+        [tgm3PromotionGrade(state(0, h)), tgm3PromotionGrade(state(0, h.slice(0, 6))), TGM3_EXAM_HISTORY], [11, -1, 7]);
+    check("  ...Grand Master is tested only once qualified as MasterM",
+        [tgm3PromotionGrade(state(30, Array(7).fill(32))), tgm3PromotionGrade(state(31, Array(7).fill(32)))], [31, 32]);
+    check("  ...a 1 in 3 chance per game: a promotion above the qualified grade, else a demotion from 30 points",
+        [tgm3ExamFor(state(5, h), 0.5), tgm3ExamFor(state(5, h), 0.1), tgm3ExamFor(state(11, h, 30), 0.1), tgm3ExamFor(state(11, h, 29), 0.1)],
+        [null, { kind: "promotion", grade: 11 }, { kind: "demotion", grade: 11 }, null]);
+    const promo = { kind: "promotion", grade: 11 };
+    check("  ...passing qualifies at the exam grade (demotion points cleared), failing changes nothing; the grade joins the history",
+        [tgm3ExamAfter(state(5, h, 4), promo, 12), tgm3ExamAfter(state(5, h, 4), promo, 10)],
+        [{ qualified: 11, demotion: 0, history: [12, 10, 12, 11, 9, 8, 13] }, { qualified: 5, demotion: 4, history: [10, 10, 12, 11, 9, 8, 13] }]);
+    check("  ...a game 8 or more grades below the qualified one adds the excess over 7 to the demotion points",
+        [tgm3ExamAfter(state(20, []), null, 13).demotion, tgm3ExamAfter(state(20, []), null, 12).demotion, tgm3ExamAfter(state(20, [], 5), null, 10).demotion],
+        [0, 1, 8]);
+    const demo = { kind: "demotion", grade: 20 };
+    check("  ...a demotional exam spends the points; short of the grade the player loses one",
+        [tgm3ExamAfter(state(20, [], 30), demo, 15), tgm3ExamAfter(state(20, [], 30), demo, 20).qualified],
+        [{ qualified: 19, demotion: 0, history: [15] }, 20]);
+
+    // Grand Master in play: with exams only for a qualified one, or passing the exam for it
+    const gmGame = (options) => {
+        const g = startedWith(arika, "standard", options);
+        g.internalGrade = TGM_GRADE_LABELS.length - 2; g.cools = 9; g.rollPoints = 600; g.roll = "invisible"; g.rollCleared = true;
+        return g;
+    };
+    check("  ...an earned GM shows as MasterM unless qualified GM or passing the GM exam; exams off: GM as before",
+        [gmGame({ exams: true }).gradeLabel(), gmGame({ exams: true }).earnedGradeIndex(), gmGame({ exams: true, qualified: 32 }).gradeLabel(),
+            gmGame({ exams: true, qualified: 31, exam: { kind: "promotion", grade: 32 } }).gradeLabel(), gmGame({}).gradeLabel()],
+        ["MasterM", 32, "Grand Master", "Grand Master", "Grand Master"]);
+    check("  ...exams only in Master without Big", [startedWith(arika, "standard", { exams: true, big: true }).exams,
+        startedWith(arika, "easy", { exams: true }).exams, startedWith(tgmClassic, "standard", { exams: true }).exams], [false, false, true]);
+
+    const g = startedWith(tgmClassic, "standard", { exams: true, qualified: 3, exam: { kind: "promotion", grade: 9 } });
+    const stats = g.getStats();
+    check("  ...a promotional exam is announced and shown in place of the score",
+        [g.actions.map(a => a.text), stats[stats.length - 1]], [["EXAM S1"], ["EXAM", "S1"]]);
+    g.endGame("GAME OVER", "");
+    const passed = startedWith(arika, "standard", { exams: true, qualified: 3, exam: { kind: "promotion", grade: 0 } });
+    passed.endGame("GAME OVER", "");
+    const demoted = startedWith(arika, "standard", { exams: true, qualified: 12, exam: { kind: "demotion", grade: 12 } });
+    demoted.endGame("GAME OVER", "");
+    check("  ...the banner reports the exam", [g.endNotes(), passed.endNotes(), demoted.endNotes()],
+        [["EXAM FAILED — S1 NOT REACHED"], ["EXAM PASSED — QUALIFIED 9"], ["DEMOTED TO S3"]]);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");

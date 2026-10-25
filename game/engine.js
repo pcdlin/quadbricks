@@ -49,13 +49,15 @@ const ULTRA_SETUP = { name: "Time", accent: tetZ, arg: "variant", labels: ["1:00
     values: ["ultra1", "ultra", "ultra3", "ultra5"], initial: 1 };
 const ACE_RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["SRS", "ARS", "ARS2"], values: [tgmAce, aceArs, aceArs2] };
 const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
-// The TGM games' hidden modes, createGame options (RuleGame.setOptions)
-const OPTION_ARGS = ["big", "rev", "mono", "tls"];
+// createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams
+const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams"];
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
 const REV_SETUP = { name: "Reverse", accent: tetZ, arg: "rev", labels: ["Off", "On"], values: [false, true] }; // the well upside down
 const MONO_SETUP = { name: "Mono", accent: tetS, arg: "mono", labels: ["Off", "On"], values: [false, true] }; // one colour
 const TLS_SETUP = { name: "Ghost", accent: tetI, arg: "tls", labels: ["To level 100", "All game"], values: [false, true] };
 const TGM1_SETUP = [BIG_SETUP, REV_SETUP, MONO_SETUP, TLS_SETUP]; // TGM1's codes, which combine
+// TGM3 Master: the qualified grade and its exams (Exams, tgm3ExamFor); none with Big
+const EXAMS_SETUP = { name: "Exams", accent: tetJ, arg: "exams", labels: ["On", "Off"], values: [true, false] };
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
@@ -82,7 +84,7 @@ const RULESETS = [
       ] },
     { name: "TGM3 TI", accent: tetL, desc: "World rule (Arika SRS) or Classic (ARS), with hold",
       modes: [
-          { name: "Master", mode: arika, variant: "standard", setup: [RULE_SETUP, BIG_SETUP], accent: tetL, desc: "Up to level 999, COOLs and REGRETs, grades to GM" },
+          { name: "Master", mode: arika, variant: "standard", setup: [RULE_SETUP, EXAMS_SETUP, BIG_SETUP], accent: tetL, desc: "Up to level 999, COOLs and REGRETs, grades to GM" },
           { name: "Easy", mode: arika, variant: "easy", setup: [RULE_SETUP, BIG_SETUP], accent: tetO, desc: "Up to level 200, scored in fireworks" },
           { name: "Shirase", mode: arika, variant: "shirase", setup: [RULE_SETUP, BIG_SETUP], accent: tetZ, desc: "20G to level 1300, rising garbage, a big staff roll" },
       ] },
@@ -335,6 +337,7 @@ class Engine {
         this.capturing = null; // action waiting for a new key
         this.options = new Options();
         this.records = new Records();
+        this.exams = new Exams(); // TGM3 Master's qualified grades
         this.recordNote = null; // the game over banner's record line
         this.recordNew = false;
         this.game = null;
@@ -650,7 +653,14 @@ class Engine {
         this.recordDone = false;
         this.recordNote = null;
         this.recordNew = false;
-        this.game = createGame(mode, variant, startLevel, height, this.options.handling, options);
+        // TGM3 Master with exams: the player's qualified grade, and maybe an exam this game
+        this.examRule = options.exams && variant === "standard" && !options.big ? this.examRuleFor(mode) : null;
+        const gameOptions = { ...options };
+        if (this.examRule) {
+            const state = this.exams.get(this.examRule);
+            Object.assign(gameOptions, { qualified: state.qualified, exam: tgm3ExamFor(state) });
+        }
+        this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
@@ -966,10 +976,21 @@ class Engine {
         return JSON.stringify([mode, variant, startLevel, height, OPTION_ARGS.filter(id => options[id])]);
     }
 
-    // The game just ended: its result goes to the records; the banner says whether it beat them
+    // TGM3's rule for a mode, which keeps its own qualified grade (Exams); null for other modes
+    examRuleFor(mode) {
+        return mode === arika ? "world" : mode === tgmClassic ? "classic" : null;
+    }
+
+    // The game just ended: its result goes to the records; the banner says whether it beat them.
+    // TGM3 Master with exams: the grade goes into the player's history and settles the exam (not
+    // after a hidden test setup)
     submitRecord() {
         this.recordDone = true;
-        const result = this.game.record();
+        const game = this.game;
+        if (this.examRule && !game.tested) {
+            this.exams.set(this.examRule, tgm3ExamAfter(this.exams.get(this.examRule), game.exam, game.earnedGradeIndex()));
+        }
+        const result = game.record();
         if (!result) return;
         const old = this.records.get(this.recordSetup);
         this.recordNew = this.records.submit(this.recordSetup, result);
@@ -977,9 +998,14 @@ class Engine {
     }
 
     // Under a mode list or setup cards: the best result with the current choices, if any
+    // (TGM3 Master with exams: the qualified grade with it)
     drawBest(y) {
-        const best = this.records.get(this.recordKey(this.chosenArgs()));
-        if (best) this.text(`BEST  ${best.text}`, VIEW_W / 2, y, { size: 12, weight: 700, color: MESSAGE_GOLD, align: "center", spacing: 3 });
+        const args = this.chosenArgs(), [mode, variant, , , options] = args;
+        const best = this.records.get(this.recordKey(args));
+        const parts = best ? [`BEST  ${best.text}`] : [];
+        const rule = options.exams && variant === "standard" && !options.big ? this.examRuleFor(mode) : null;
+        if (rule) parts.push(`QUALIFIED  ${TGM_GRADE_LABELS[this.exams.get(rule).qualified]}`);
+        if (parts.length) this.text(parts.join("   ·   "), VIEW_W / 2, y, { size: 12, weight: 700, color: MESSAGE_GOLD, align: "center", spacing: 3 });
     }
 
     // In a game, at the foot of the NEXT column: the best result for this setup, if any
@@ -1917,12 +1943,14 @@ class Engine {
         const fx = this.options.effects;
         const frame = [BOARD_X - 8, this.boardY - 8, BOARD_W + 16, this.boardH + 16];
         r.shape(...frame, { radius: 12, fill: [6 / 255, 8 / 255, 22 / 255, fx ? 0.55 : 0.92] });
-        // glass sheen: lighter toward the top, tinted by the backdrop colour
+        // glass sheen: lighter toward the top, tinted by the backdrop colour; a gold frame for a
+        // TGM3 promotional exam, as in the arcade
+        const exam = game.exam && game.exam.kind === "promotion";
         r.shape(...frame, {
             radius: 12,
             fill: [hsla(this.hue, 80, 70, 0.10), hsla(this.hue, 80, 50, 0.02)],
             fillY: [this.boardY, this.boardY + this.boardH],
-            stroke: fx ? hsla(this.hue, 90, 82, 0.45 + 0.4 * this.pulse) : "rgba(244,236,220,0.22)",
+            stroke: exam ? goldAlpha(0.6 + 0.35 * this.pulse) : fx ? hsla(this.hue, 90, 82, 0.45 + 0.4 * this.pulse) : "rgba(244,236,220,0.22)",
             lineWidth: 1.5,
         });
 

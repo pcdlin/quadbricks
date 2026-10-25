@@ -99,9 +99,10 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or a hidden mode's option
-  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, gathered into `options`) (the label's entry in
+  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, gathered into `options`) (the label's entry in
   `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
-  but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
+  but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; TGM3 Master's Exams,
+  On / Off; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
   Time, 1:00 / 2:00 / 3:00 / 5:00), or `"startLevel"` / `"height"` (the label's index: Level 0–19 for
   NES, 0–9 for GB, M1–M30 for Master, 1–15 for Marathon; Height 0–5 for B-Type; Rows 5/10/18 for Dig).
   `initial`: the label chosen at first (Sprint 40, Ultra 2:00), else the first.
@@ -393,6 +394,19 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   `TGM_REGRET_TIME` (the last one judged at 999) drops one boost and zeroes the points.
   Both messages use action kind `grade`, as do STAFF ROLL / INVISIBLE ROLL. Times are read as seconds.
   Displayed grade = boosts + COOLs + roll grade, capped at MasterM until the roll is survived.
+- Exams (the Exams card, On by default; Master without Big, each rule its own; tetris.wiki, demotion
+  points from NullpoMino's `GradeMania3Mode`): the qualified grade starts at 9. Each game has a 1 in 3
+  chance (`TGM3_EXAM_CHANCE`, `tgm3ExamFor()`) of a promotional exam at the average of the 2nd–4th best
+  of the last 7 grades, rounded down, if that is above the qualified grade (`tgm3PromotionGrade()`; GM
+  only once qualified MasterM), else of a demotional exam at the qualified grade once the demotion
+  points reach 30. A game 8+ grades below the qualified one adds the excess over 7 to those points
+  (`tgm3ExamAfter()`). Passing a promotion qualifies at its grade; failing a demotion costs one grade.
+  A promotional exam is announced as the first piece comes ("EXAM S5", kind `grade`), shown in place of
+  SCORE and draws the well's frame gold; the banner reports the result. With exams, Grand Master shows
+  only for a qualified GM or in the GM exam (else MasterM: `gradeIndex()` vs `earnedGradeIndex()`, the
+  latter going to the history). The engine passes `qualified` and `exam` in the options
+  (`initGame()`), saves the result when the game ends (`submitRecord()`) and shows QUALIFIED beside
+  BEST under the cards.
 - Secret grade (TGM1, TAP Master and Death, TGM3 Master and Shirase; tetris.wiki, the check as in
   NullpoMino's `Field.getSecretGrade`): when the game ends (`endGame()`), the rows of the ">" pattern from
   the bottom (`secretGradeRows()`: one hole per row, in column 9 − |10 − k| in row k, under a block, every
@@ -591,8 +605,11 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (NullpoMino behaviour).
 - Staff roll timings (3238-frame roll, row-by-row field clear, fade over the last 10 of 300
   frames, invisible after 2) and the 15-minute speeds follow NullpoMino's `GradeMania3Mode`.
-  There are no player accounts, so no promotion exam: surviving the invisible roll at displayed
-  grade 32 gives Grand Master directly (NullpoMino with exams off); the fading roll caps at MasterM.
+  With the Exams card Off, surviving the invisible roll at displayed grade 32 gives Grand Master
+  directly (NullpoMino with exams off); the fading roll caps at MasterM. Exams (TGM3 Master, below):
+  the qualified grade lives in the browser (`Exams`) instead of a player card; an exam needs seven
+  games in the history; the demotion points follow NullpoMino (the wiki only says "routinely"); games
+  with a hidden test setup (`tested`) don't count.
 - Grading: the level multiplier uses the level before the clear; the first clear of 2+ lines
   in a combo counts as combo 1 (NullpoMino); the 2 s COOL rule applies only right after a
   COOL section (NullpoMino); "controls a piece" for decay means the active phase (not ARE or line clears).
@@ -679,6 +696,8 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 - `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound} (lists of key codes; a plain string from older versions is read as one key), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
+- `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
+  qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).
 - `localStorage["quadbricks.records"]`: `{ [recordKey]: { key: [numbers], text } }`, the best result per
   game setup (invalid entries are dropped on load).
 - Every access is wrapped in try/catch; the game must work with storage unavailable.

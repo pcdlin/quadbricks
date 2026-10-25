@@ -104,7 +104,7 @@ const TGM_GRADE_LABELS = [
     "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9",
     "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9",
     "Master", "MasterK", "MasterV", "MasterO", "MasterM",
-    "Grand Master", // only by surviving the invisible roll (there's no promotion exam here)
+    "Grand Master", // only by surviving the invisible roll (with exams: once qualified, or in its exam)
 ];
 const TGM_MAX_GRADE = 31; // MasterM: the highest grade before the end of the roll
 const TGM_GRADE_POINTS = 100; // points for the next internal grade
@@ -127,6 +127,53 @@ const SECRET_GRADE_LABELS = ["9", "8", "7", "6", "5", "4", "3", "2", "1",
 const SHIRASE_SECRET_LABELS = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9",
     "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "GM"];
 const SECRET_GRADE_MIN_ROWS = 5; // shown from this many rows (NullpoMino: fewer happen by chance)
+
+// ----------------------------------------------------------
+// TGM3 Master's qualified grade and exams (tetris.wiki; demotion points as in NullpoMino's
+// GradeMania3Mode). The player's qualified grade starts at 9. Each Master game (not Big) has a chance
+// of an exam. A promotional exam tests the average of the 2nd, 3rd and 4th best of the last seven
+// grades (rounded down) when it is above the qualified grade, which becomes the exam grade if it is
+// reached. A game ending 8 or more grades below the qualified one adds the excess over 7 to demotion
+// points; from 30 the next exam is a demotional one at the qualified grade, and falling short of it
+// costs a grade. Grand Master can only be tested once qualified as MasterM, and is shown in normal
+// play only once qualified as Grand Master (else MasterM).
+const TGM3_EXAM_CHANCE = 1 / 3;
+const TGM3_EXAM_HISTORY = 7;
+const TGM3_DEMOTION_GAP = 7, TGM3_DEMOTION_POINTS = 30;
+const TGM3_EXAM_START = { qualified: 0, demotion: 0 }; // and an empty history: grade indices, latest first
+
+// The exam for a new Master game, from the player's state, or null: { kind: "promotion" or
+// "demotion", grade }. roll: a random number in [0, 1)
+function tgm3ExamFor(state, roll = Math.random()) {
+    if (roll >= TGM3_EXAM_CHANCE) return null;
+    const grade = tgm3PromotionGrade(state);
+    if (grade > state.qualified) return { kind: "promotion", grade };
+    if (state.demotion >= TGM3_DEMOTION_POINTS) return { kind: "demotion", grade: state.qualified };
+    return null;
+}
+
+// What a promotional exam would test: the average of the 2nd, 3rd and 4th best of the last seven
+// grades, rounded down (-1 before seven games); Grand Master only for a qualified MasterM
+function tgm3PromotionGrade({ history, qualified }) {
+    if (history.length < TGM3_EXAM_HISTORY) return -1;
+    const best = [...history].sort((a, b) => b - a);
+    const grade = Math.floor((best[1] + best[2] + best[3]) / 3);
+    return qualified < TGM_MAX_GRADE ? Math.min(grade, TGM_MAX_GRADE) : grade;
+}
+
+// The player's state after a Master game that ended with grade (the grade earned, before the cap
+// on Grand Master) and had exam (or null)
+function tgm3ExamAfter(state, exam, grade) {
+    let { qualified, demotion } = state;
+    if (exam && exam.kind === "demotion") demotion = 0; // spent on this exam
+    if (grade < qualified - TGM3_DEMOTION_GAP) demotion += qualified - grade - TGM3_DEMOTION_GAP;
+    if (exam && exam.kind === "promotion" && grade >= exam.grade) {
+        qualified = exam.grade;
+        demotion = 0;
+    }
+    if (exam && exam.kind === "demotion" && grade < exam.grade) qualified = Math.max(0, exam.grade - 1);
+    return { qualified, demotion, history: [grade, ...state.history].slice(0, TGM3_EXAM_HISTORY) };
+}
 
 // ----------------------------------------------------------
 // TGM3 Shirase: 20G throughout, levels to 1300
@@ -297,6 +344,7 @@ class TgmGame extends RuleGame {
         this.rollHide = TGM_ROLL_HIDE; // frames until locked blocks hide, by roll
         this.lockTime = null; // per cell, rollFrames when it locked (during the roll)
         this.secretGrade = null; // judged when the game ends (secretGradeLabels), if high enough to show
+        this.tested = false; // a hidden test setup was used (testSetup)
     }
 
     // ----------------------------------------------------------
@@ -595,15 +643,18 @@ class TgmGame extends RuleGame {
             if (this.timerStopped || skip <= 0) return false;
             this.frames += skip;
             this.sectionStart += skip; // the section isn't slower for it (no REGRET)
+            this.tested = true;
             return true;
         }
         if (name === "rollend") {
             if (!this.roll) return false;
             this.rollFrames = Math.max(this.rollFrames, this.rollLength - TEST_ROLL_LEAD);
+            this.tested = true;
             return true;
         }
         if (this.roll || this.phase === "rollstart" || !["roll", "invisible", "gm"].includes(name)) return false;
         if (!this.prepareTestRoll(name)) return false;
+        this.tested = true;
         if (this.phase === "lineclear") this.collapse(this.pendingRows);
         this.pendingRows = [];
         this.curPiece_type = 0;
@@ -989,6 +1040,19 @@ class TiGame extends TgmGame {
         if (mode === tgmClassic) this.useArs(false);
         this.internalGrading = true;
         this.hasKill = true;
+        this.exams = false; // the qualified grade and its exams (Master, not Big)
+        this.qualified = 0;
+        this.exam = null;
+    }
+
+    // Exams (the Exams card): exams on, the player's qualified grade and this game's exam
+    // (tgm3ExamFor), for Master without Big
+    setOptions(options = {}) {
+        super.setOptions(options);
+        const { exams = false, qualified = 0, exam = null } = options;
+        this.exams = exams && this.variant === "standard" && !this.big;
+        this.qualified = this.exams ? qualified : 0;
+        this.exam = this.exams ? exam : null;
     }
 
     statsName() {
@@ -1000,11 +1064,41 @@ class TiGame extends TgmGame {
 
     secretGradeLabels() { return SECRET_GRADE_LABELS; }
 
-    // Displayed grade: boosts + COOLs + roll grade; Grand Master only for surviving the invisible roll
+    // A promotional exam takes the score's place
+    tgmStats(mode, level, time) {
+        const stats = super.tgmStats(mode, level, time);
+        if (this.exam && this.exam.kind === "promotion") stats[stats.length - 1] = ["EXAM", TGM_GRADE_LABELS[this.exam.grade]];
+        return stats;
+    }
+
+    // Displayed grade: the one earned, but with exams Grand Master only for a player qualified as
+    // one or passing the exam for it (MasterM otherwise)
     gradeIndex() {
+        const i = this.earnedGradeIndex();
+        const gm = this.qualified > TGM_MAX_GRADE || (this.exam && this.exam.kind === "promotion" && this.exam.grade > TGM_MAX_GRADE);
+        return this.exams && !gm ? Math.min(i, TGM_MAX_GRADE) : i;
+    }
+
+    // Boosts + COOLs + roll grade; Grand Master only for surviving the invisible roll
+    earnedGradeIndex() {
         const i = TGM_GRADES[this.internalGrade][0] + this.cools + Math.floor(this.rollPoints / 100);
         const max = this.rollCleared && this.roll === "invisible" ? TGM_GRADE_LABELS.length - 1 : TGM_MAX_GRADE;
         return Math.min(i, max);
+    }
+
+    // The exam is announced with the first piece
+    afterSpawn(newPiece) {
+        if (this.firstPiece && this.exam && this.exam.kind === "promotion") this.addAction(`EXAM ${TGM_GRADE_LABELS[this.exam.grade]}`, "grade");
+        super.afterSpawn(newPiece);
+    }
+
+    endNotes() {
+        const notes = super.endNotes(), exam = this.exam;
+        if (!exam) return notes;
+        const label = TGM_GRADE_LABELS[exam.grade], passed = this.earnedGradeIndex() >= exam.grade;
+        if (exam.kind === "promotion") notes.unshift(passed ? `EXAM PASSED — QUALIFIED ${label}` : `EXAM FAILED — ${label} NOT REACHED`);
+        else notes.unshift(passed ? `QUALIFIED ${label} KEPT` : `DEMOTED TO ${TGM_GRADE_LABELS[Math.max(0, exam.grade - 1)]}`);
+        return notes;
     }
 
     gradeLabel() {
