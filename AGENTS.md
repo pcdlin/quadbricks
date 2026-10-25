@@ -225,7 +225,7 @@ rows 4..21 (`GB_WELL_TOP`, 18 rows); its pieces can't occupy rows above it (`pie
 can turn up into rows 0..1, no higher.
 Pieces are 4×4 boxes; `curPiece_row/col` is the box's top-left.
 
-**Phases:** `ready` (countdown 3, 2, 1, `COUNTDOWN_STEP_FRAMES` = 30 each; frame 91 is the first to take input) → `active` → `are` / `lineclear` → `active` … (TGM3 and TAP at
+**Phases:** `ready` (countdown 3, 2, 1, `COUNTDOWN_STEP_FRAMES` = 60 each, one second; frame 181 is the first to take input) → `active` → `are` / `lineclear` → `active` … (TGM3 and TAP at
 999, TAP Death at a late 500: `lineclear` → `rollstart` → `active` in the roll; it starts once
 `timerStopped` is set)
 DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
@@ -308,6 +308,10 @@ DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn
 - The version (`VERSION` in `engine.js`, "0.2") shows faintly in the top left, the FPS in the top right.
 - The READY countdown (`drawCountdown()`) shows each digit sliding in and fading out in its own
   colour (`COUNTDOWN_COLORS`); band and digit are gone on the first frame that takes input.
+  Meanwhile the field flies in from afar (`flyIn()`, `FLY_*`): it starts `FLY_DEPTH` behind its place,
+  turned (`FLY_TURN`, either way, `flySide`) and faded out, and eases into place by `FLY_FRAMES`. It is
+  part of `boardMotion()` (`dz`, `alpha`; drawn through `drawBoardInMotion()`), the board glow scales
+  and fades with it (`flyScale()`); none with effects Off.
 - Font: Archivo from Google Fonts with a system fallback (only network dependency).
 - The backdrop pass (`backdrop.js`) draws the large soft effects per pixel in shaders:
   the static backdrop picture (rendered by `renderBackground()` and uploaded on resize),

@@ -36,7 +36,7 @@ const VARIANT_NAMES = { test: "TEST", death: "DEATH", marathon: "MARATHON", spri
 const FIELD_TOP = -18;  // the highest row kept: 20 visible rows + 20-row buffer
 
 // Start countdown 3, 2, 1, half a second each; the frame after it is the first to take input
-const COUNTDOWN_STEPS = 3, COUNTDOWN_STEP_FRAMES = 30;
+const COUNTDOWN_STEPS = 3, COUNTDOWN_STEP_FRAMES = 60;
 
 // Rows per frame the stack falls into cleared rows during a line clear delay (presentation)
 const LINE_DROP_SPEED = 0.5;

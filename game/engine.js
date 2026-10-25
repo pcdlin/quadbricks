@@ -265,6 +265,10 @@ const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 const TILT_MAX = [2.8, 4.8]; // playing field tilt in degrees about the x and y axes, at Normal
 const TILT_SPEED = 0.75; // pace of the tilt drift (1 = waves of 0.15-0.7 rad/s)
 const TILT_DISTANCE = 1100; // camera distance for the tilt's perspective (logical units)
+const FLY_FRAMES = 20; // frames the field takes to fly in from afar during the countdown
+const FLY_DEPTH = 10000; // how far behind its place it starts (logical units; about 1/10 its size)
+const FLY_TURN = [-16, 28]; // degrees it starts turned about the x and y axes, unwinding as it comes
+const FLY_FADE = 0.2; // part of the flight over which it fades in
 const SHAKE_KICK = 1.8; // downward speed a long hard drop gives the field (logical units per frame)
 const SHAKE_CLEAR_KICK = 1.4; // speed a single-line clear gives the field, in a random direction
 const SHAKE_CLEAR_LINE = 0.4, SHAKE_CLEAR_CHAIN = 0.08; // extra per further line, per combo step
@@ -622,14 +626,17 @@ class Engine {
         const ambient = this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
         const color = (s) => ({ ...s, rgb: hslToRgb(s.h, s.s, s.l) });
         const ps = this.pixelScale;
-        const gx = this.offX + this.motion.dx * ps, gy = this.offY + this.motion.dy * ps; // follows the shake
+        const m = this.motion;
+        const gx = this.offX + m.dx * ps, gy = this.offY + m.dy * ps; // follows the shake
+        // and the fly-in: scaled about the board's centre
+        const fs = this.flyScale(m), hw = (BOARD_W / 2 + 8) * fs, hh = (this.boardH / 2 + 8) * fs;
+        const bcx = BOARD_X + BOARD_W / 2, bcy = this.boardY + this.boardH / 2;
         const glow = inGame ? {
-            rect: [gx + (BOARD_X - 8) * ps, gy + (this.boardY - 8) * ps,
-                gx + (BOARD_X + BOARD_W + 8) * ps, gy + (this.boardY + this.boardH + 8) * ps],
+            rect: [gx + (bcx - hw) * ps, gy + (bcy - hh) * ps, gx + (bcx + hw) * ps, gy + (bcy + hh) * ps],
             // blur given like canvas shadowBlur: twice the Gaussian's sigma
-            sigma: (BOARD_GLOW_BLUR[0] + (BOARD_GLOW_BLUR[1] - BOARD_GLOW_BLUR[0]) * Math.min(1, this.pulse)) / 2,
+            sigma: (BOARD_GLOW_BLUR[0] + (BOARD_GLOW_BLUR[1] - BOARD_GLOW_BLUR[0]) * Math.min(1, this.pulse)) / 2 * fs,
             rgb: hslToRgb(this.hue, 90, 62),
-            a: this.boardGlowAlpha(),
+            a: this.boardGlowAlpha() * m.alpha * m.alpha,
         } : null;
         const rings = this.ringMode() === "rings" ? this.ringShapes().map(r => ({
             ...r, rgb: hslToRgb(r.hue, 90, 75), glowRgb: hslToRgb(r.hue, 95, 65),
@@ -679,6 +686,7 @@ class Engine {
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
         this.newTiltWaves();
+        this.flySide = Math.random() < 0.5 ? -1 : 1; // which way the field comes in turned
     }
 
     // Confetti, flashes, rings and the field's shake: none left over from another game
@@ -768,7 +776,29 @@ class Engine {
         const rad = Math.PI / 180;
         const s = this.shake;
         const dx = s.px + (s.x - s.px) * s.t, dy = s.py + (s.y - s.py) * s.t;
-        return { rx: (ax + dy * SHAKE_TIP) * rad, ry: ay * rad, dx, dy };
+        const fly = this.flyIn();
+        return {
+            rx: (ax + dy * SHAKE_TIP + fly.rx) * rad, ry: (ay + fly.ry) * rad, dx, dy,
+            dz: fly.dz, alpha: fly.alpha,
+        };
+    }
+
+    // The countdown's fly-in: the field starts FLY_DEPTH away, turned and faded out, and comes
+    // at the camera, slowing as it settles into place by FLY_FRAMES (none with effects off)
+    flyIn() {
+        const game = this.GAMESTATE === STATE_GAME && this.game;
+        if (!game || !game.inStartDelay() || !this.options.effects) return { rx: 0, ry: 0, dz: 0, alpha: 1 };
+        const p = Math.min(1, (game.startdelayCounter + this.tickPhase) / FLY_FRAMES);
+        const rest = Math.pow(1 - p, 4); // ease out: what is left of the way
+        return {
+            rx: FLY_TURN[0] * rest, ry: FLY_TURN[1] * this.flySide * rest,
+            dz: -FLY_DEPTH * rest, alpha: Math.min(1, p / FLY_FADE),
+        };
+    }
+
+    // How big the field's centre is drawn at its depth in the motion m (1 in its place)
+    flyScale(m) {
+        return TILT_DISTANCE / (TILT_DISTANCE - m.dz);
     }
 
     // The field drawn into a layer, then onto the screen in perspective: rotated about its
@@ -791,12 +821,15 @@ class Engine {
         const project = (x, y) => {
             const X = x - cx, Y = y - cy;
             const z = -X * sinY;
-            const yr = Y * cosX - z * sinX, zr = Y * sinX + z * cosX;
+            const yr = Y * cosX - z * sinX, zr = Y * sinX + z * cosX + m.dz;
             const f = TILT_DISTANCE / (TILT_DISTANCE - zr);
             return [cx + X * cosY * f + m.dx, cy + yr * f + m.dy, f];
         };
         const x1 = x0 + w / ps, y1 = y0 + h / ps;
+        r.save();
+        r.globalAlpha = m.alpha;
         r.imageQuad(this.boardLayer, [project(x0, y0), project(x1, y0), project(x0, y1), project(x1, y1)]);
+        r.restore();
     }
 
     // -----------------------------------
@@ -1935,7 +1968,7 @@ class Engine {
         const game = this.game;
 
         const m = this.motion;
-        if (m.rx || m.ry || m.dx || m.dy) this.drawBoardInMotion(m);
+        if (m.rx || m.ry || m.dx || m.dy || m.dz) this.drawBoardInMotion(m);
         else this.drawBoard(); // straight onto the screen, pixel-sharp
         this.drawParticles();  // confetti flies off the field: never tilted
         if (this.layout.compact) this.drawCompactPanels();
@@ -2285,7 +2318,7 @@ class Engine {
         this.drawClearMessage(this.boardY + this.boardH * 0.3);
     }
 
-    // Start countdown 3, 2, 1: each digit slides in and fades out within its half second, the
+    // Start countdown 3, 2, 1: each digit slides in and fades out within its second, the
     // band fades with the last one, so both are gone on the first frame that takes input
     drawCountdown(game) {
         const digit = game.countdown();
