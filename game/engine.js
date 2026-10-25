@@ -226,6 +226,9 @@ const CONFETTI_PER_CELL = 2;
 const CONFETTI_GRAVITY = 0.06;
 const CONFETTI_LIFE = 50; // frames
 const CONFETTI_ALPHA = 0.45;
+// TGM3 Easy's fireworks: bursts of confetti around the well, at most FIREWORK_MAX_BURSTS a frame
+// (a stream fires one every 10 frames; the end can fire dozens at once)
+const FIREWORK_SPARKS = 26, FIREWORK_SPEED = 3.2, FIREWORK_LIFE = 70, FIREWORK_MAX_BURSTS = 6;
 const GLOW_SPRITE = 64; // texels per confetti glow sprite
 const ORB_COUNT = 46; // drifting lights in the backdrop
 const HUE_STEP = 28; // backdrop hue shift per line clear
@@ -527,6 +530,8 @@ class Engine {
                         if (s === "harddrop" && this.options.shake) this.kickShake(this.game.hardDropDistance);
                     }
                     for (const dir of this.game.takeBumps()) if (this.options.shake) this.bumpShake(dir);
+                    const fireworks = this.game.takeFireworks();
+                    if (this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
                     if (this.game.isGameOver() && !this.recordDone) this.submitRecord();
                 }
                 break;
@@ -1103,6 +1108,25 @@ class Engine {
                 if (i > firstRow && game.getCell(i - 1, j) && game.getDropDistance(i - 1) === dist) continue; // not the run's top
                 this.drawTrail(j, y0, y1, game.palette[cell], y1, alpha);
             }
+        }
+    }
+
+    // A firework: a ring of sparks in one colour bursting somewhere over the view, falling as it fades
+    launchFirework() {
+        const [vx, vy, vw, vh] = this.layout.view;
+        const x = vx + vw * (0.1 + Math.random() * 0.8), y = vy + vh * (0.12 + Math.random() * 0.4);
+        const colors = [...PIECE_COLORS.slice(1).map(c => c.light), ...CONFETTI_EXTRA];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const count = Math.max(8, Math.round(FIREWORK_SPARKS * this.options.effectScale));
+        const turn = Math.random() * Math.PI * 2;
+        for (let n = 0; n < count; n++) {
+            const angle = turn + n / count * Math.PI * 2;
+            const speed = FIREWORK_SPEED * (0.85 + Math.random() * 0.3);
+            this.particles.push({
+                x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                size: 3 + Math.random() * 3, twinkle: Math.random() * Math.PI * 2,
+                color, life: FIREWORK_LIFE - Math.floor(Math.random() * 15),
+            });
         }
     }
 

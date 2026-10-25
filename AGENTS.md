@@ -46,7 +46,7 @@ when WebGL is unavailable).
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for the rule sets (~390 checks). |
+| `test/rules.test.js` | Spec checks for the rule sets (~395 checks). |
 
 ## History in one paragraph
 
@@ -453,7 +453,9 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   ×(level − active frames)/120 over 120; spins ×2 (T ×3, T triple ×4, O never); a perfect clear +6 in
   its own stream. Level 200: a 3265-frame 20G staff roll (blocks visible) with a free firework every
   ⌊3265 / fireworks fired⌋ frames, the combo frozen and mapped (9 to the lowest, the game's bug);
-  surviving it: EXCELLENT and +24. Fireworks still waiting count at the end. Stats: HANABI, LEVEL, TIME.
+  surviving it: EXCELLENT and +24. Fireworks still waiting count at the end. Stats: HANABI, LEVEL, TIME. Each firework fired
+  (`fire()`) is reported through `takeFireworks()` (a count); the engine draws a burst for each
+  (`launchFirework()`, `FIREWORK_*`, up to 6 a frame; not with effects off).
 - Shirase: 20G, levels to 1300 (stops at x99), `SHIRASE_DELAYS` by level, no ghost, TGM3 score. Grade
   S1…S13 = sections finished − REGRETs (a section over 60 s in the first two, 50 s after). Level stops
   (`SHIRASE_TORIKAN`): 500 after 3:03 (World) / 2:28 (Classic), 1000 after 6:06 / 4:56 end the game.

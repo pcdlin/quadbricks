@@ -2249,5 +2249,17 @@ function startedTgm1With(options, variant = "standard") {
         [4, { key: [77], text: "77 HANABI" }, { key: [35, -120], text: "35 LINES · 0:02.00" }, { key: [5000], text: "5,000" }]);
 }
 
+// ---------------------------------------------------------------- Easy's fireworks
+{
+    const g = startedMode(arika, "easy");
+    g.hanabiPending = 3;
+    for (let f = 0; f < 40; f++) g.advanceFrame(0);
+    const fired = g.takeFireworks();
+    g.hanabiPending = 5;
+    g.flushHanabi();
+    check("Easy fireworks are reported as they fire (the engine draws them), the end's all at once",
+        [fired, g.takeFireworks(), g.takeFireworks(), g.hanabi], [3, 5, 0, 8]);
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

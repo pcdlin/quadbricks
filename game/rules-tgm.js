@@ -1175,7 +1175,7 @@ class TiEasyGame extends TiGame {
     }
 
     finishRoll() {
-        this.hanabi += EASY_COMPLETE;
+        this.fire(EASY_COMPLETE);
         this.flushHanabi();
         this.endGame("EXCELLENT", `HANABI ${this.hanabi} — ${this.formatTime()}`);
     }
@@ -1187,16 +1187,16 @@ class TiEasyGame extends TiGame {
         if (this.easyClock % EASY_STREAM_FRAMES === 0) {
             if (this.hanabiPending > 0) {
                 this.hanabiPending--;
-                this.hanabi++;
+                this.fire();
                 this.fireTimer = EASY_FIXED_SPEED_FRAMES;
             }
             if (this.bravoPending > 0) {
                 this.bravoPending--;
-                this.hanabi++;
+                this.fire();
             }
         }
         if (this.fireTimer > 0) this.fireTimer--; // the frame it is set too
-        if (this.roll && this.rollInterval && this.easyClock % this.rollInterval === 0) this.hanabi++;
+        if (this.roll && this.rollInterval && this.easyClock % this.rollInterval === 0) this.fire();
         if (!this.timerStopped && this.frames % EASY_30S_FRAMES === 0) {
             if (this.level - this.levelMark30 >= EASY_30S_LEVELS) this.bonus30 = true;
             this.levelMark30 = this.level;
@@ -1236,9 +1236,15 @@ class TiEasyGame extends TiGame {
         this.clearAre = true;
     }
 
+    // A firework goes up: counted, and drawn by the engine (takeFireworks)
+    fire(n = 1) {
+        this.hanabi += n;
+        this.fireworks += n;
+    }
+
     // The fireworks still waiting in the streams count at the end
     flushHanabi() {
-        this.hanabi += this.hanabiPending + this.bravoPending;
+        this.fire(this.hanabiPending + this.bravoPending);
         this.hanabiPending = this.bravoPending = 0;
     }
 }

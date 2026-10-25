@@ -231,6 +231,7 @@ class RuleGame {
         this.bumps = [];
         this.wallBumped = false;
         this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "clear1".."clear4" (+ "c<chain>" in a combo)
+        this.fireworks = 0; // fireworks fired since the engine last looked (TGM3 Easy)
         this.queue = [];
     }
 
@@ -348,6 +349,12 @@ class RuleGame {
     takeHardDropCells() { return this.drain("hardDropCells"); }
     takeBumps() { return this.drain("bumps"); } // directions (-1 left, 1 right) pushed against the border
     takeSounds() { return this.drain("sounds"); }
+    // Fireworks fired since the last call (TGM3 Easy's are drawn as bursts)
+    takeFireworks() {
+        const n = this.fireworks;
+        this.fireworks = 0;
+        return n;
+    }
 
     drain(queue) {
         const events = this[queue];
