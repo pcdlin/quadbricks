@@ -125,7 +125,7 @@ class Options {
     constructor() {
         this.keys = defaultKeys();
         this.tileset = TILESET_IDS[0];
-        this.confetti = "glow"; // line clear confetti, an id from CONFETTI_STYLES
+        this.confetti = "sparks"; // line clear confetti, an id from CONFETTI_STYLES
         this.effects = DEFAULT_EFFECTS;
         this.backdrop = true; // animated backdrop: colour wash and drifting lights
         this.rings = "flare"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
