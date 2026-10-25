@@ -246,9 +246,10 @@ const SRS_CELLS = shapeCells(shapes);
 // Countdown digits by value: green, yellow, red as on a start light
 const COUNTDOWN_COLORS = [null, PIECE_COLORS[tetS].light, PIECE_COLORS[tetO].light, PIECE_COLORS[tetZ].light];
 
-// Confetti for cleared lines: piece colour plus a few party colours
+// Confetti for cleared lines: piece colour (the neutral grey too) plus a few party colours
 const CONFETTI_EXTRA = ["#ffffff", "#ff5fd2", "#fff27a"];
-const CONFETTI_COLORS = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFETTI_EXTRA];
+const CONFETTI_COLORS = [...PIECE_COLORS.slice(1).map(c => c.light), ...CONFETTI_EXTRA];
+const FIREWORK_COLORS = CONFETTI_COLORS.filter(c => c !== PIECE_COLORS[8].light); // no grey bursts
 // By confetti style (options.confetti, none when off; fireworks are always glow): bits per cell, size (least,
 // random extra), burst speed factor and upward lift, gravity and air drag per frame, life in
 // frames, alpha, additive blending; spin (radians per frame, at most), sideways flutter, fastest
@@ -1329,7 +1330,7 @@ class Engine {
     launchFirework() {
         const [vx, vy, vw, vh] = this.layout.view;
         const x = vx + vw * (0.1 + Math.random() * 0.8), y = vy + vh * (0.12 + Math.random() * 0.4);
-        const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+        const color = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
         const count = Math.max(8, Math.round(FIREWORK_SPARKS * this.options.effectScale));
         const turn = Math.random() * Math.PI * 2;
         for (let n = 0; n < count; n++) {
