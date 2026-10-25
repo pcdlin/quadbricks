@@ -304,7 +304,7 @@ const BLOCK_PASS_MARGIN = 40; // room around the frame in the blocks' layer for 
 // drop SQUASH_DROP from one row to SQUASH_DROP_ROWS or more (times the effects level)
 const SQUASH_LIFE = 40, SQUASH_DECAY = 7, SQUASH_FREQ = 0.42, SQUASH_BULGE = 0.45;
 const SQUASH_LOCK = 0.12, SQUASH_DROP = [0.18, 0.38], SQUASH_DROP_ROWS = 16;
-const SQUASH_JOIN = 0.015; // blocks squashing more differently than this don't merge
+const SQUASH_JOIN = 0.015; // blocks whose wobbles (amp × e^(−t/decay)) differ more than this don't merge
 
 const BOARD_GLOW_BLUR = [44, 74]; // board glow blur (device px) at rest and at full pulse
 
@@ -2205,15 +2205,19 @@ class Engine {
         const list = this.meshBlocks = this.meshBlocks || [];
         const pool = this.meshPool = this.meshPool || [];
         list.length = 0;
-        const flash = new Map(), squash = new Map();
+        const flash = new Map(), squash = new Map(), settle = new Map(); // settle: what is left of the wobble
         for (const f of this.dropFlashes) {
             const t = Math.min(1, Math.max(0, f.life / DROP_FLASH_LIFE));
             for (const c of f.cells) if (!c.cleared) flash.set(c.row * WIDTH + c.col, Math.max(t, flash.get(c.row * WIDTH + c.col) || 0));
         }
         for (const q of this.squashes) {
             const age = SQUASH_LIFE - q.life;
-            const e = q.amp * Math.exp(-age / SQUASH_DECAY) * Math.cos(age * SQUASH_FREQ);
-            for (const c of q.cells) squash.set(c.row * WIDTH + c.col, e + (squash.get(c.row * WIDTH + c.col) || 0));
+            const left = q.amp * Math.exp(-age / SQUASH_DECAY), e = left * Math.cos(age * SQUASH_FREQ);
+            for (const c of q.cells) {
+                const k = c.row * WIDTH + c.col;
+                squash.set(k, e + (squash.get(k) || 0));
+                settle.set(k, left + (settle.get(k) || 0));
+            }
         }
         const add = (i, j, x, y, color, alpha, glow) => {
             const b = this.blockRecord(pool, list.length);
@@ -2229,10 +2233,11 @@ class Engine {
         const offs = this.rowOffsets = this.rowOffsets || [];
         for (let i = firstRow; i < HEIGHT; i++) offs[i] = game.getDropOffset(i, this.tickPhase);
         const shown = (i, j) => i >= firstRow && i < HEIGHT && j >= 0 && j < WIDTH && game.getCell(i, j) && game.getCellAlpha(i, j) > 0;
-        // a squashing piece joins the stack only once it has settled, so their heights match
-        const squashOf = (i, j) => squash.get(i * WIDTH + j) || 0;
+        // a squashing piece joins the stack only once it has settled, so their heights match: judged
+        // by what is left of the wobble, which only shrinks, so they join once and stay joined
+        const settleOf = (i, j) => settle.get(i * WIDTH + j) || 0;
         const stackJoins = (i, j, i2, j2) => shown(i2, j2) && pal[game.getCell(i2, j2)] === pal[game.getCell(i, j)] &&
-            offs[i2] === offs[i] && Math.abs(squashOf(i2, j2) - squashOf(i, j)) < SQUASH_JOIN;
+            offs[i2] === offs[i] && Math.abs(settleOf(i2, j2) - settleOf(i, j)) < SQUASH_JOIN;
         for (let i = firstRow; i < HEIGHT; i++) {
             for (let j = 0; j < WIDTH; j++) {
                 if (!shown(i, j)) continue;
