@@ -1,7 +1,9 @@
 // Modern rule sets for the web port, selectable next to the original modes:
 //
-//  - Guideline: Tetris Guideline with SRS: endless, 150-line marathon, 40-line sprint, 2-minute ultra
-//    (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin)
+//  - Guideline: Tetris Guideline with SRS: endless, 150-line marathon, variable-goal marathon,
+//    40-line sprint, 2-minute ultra, dig (clear rows of garbage) and 20G master
+//    (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin; master's
+//     delays from the Tetris_Effect page; dig as NullpoMino's DigRaceMode)
 //  - Arika: Tetris The Grand Master 3 Terror-Instinct, Master mode, World rule
 //    (tetris.wiki: Tetris_The_Grand_Master_3_Terror-Instinct, Heboris_Unofficial_Expansion,
 //     randomizer from the wiki TGM_randomizer page, checked against the arcade sequence)
@@ -37,6 +39,9 @@
 //  - test:     no gravity (soft and hard drop still work)
 //  - death:    constant 20G, no ghost piece (TAP: its own Death mode, see below)
 //  - marathon: Guideline only: the game ends after 150 lines (standard is endless)
+//  - variable: Guideline only: marathon with the variable goal, levels 1-15
+//  - dig:      Guideline only: clear 5, 10 or 18 rows of garbage as fast as possible, fixed level 1
+//  - master:   Guideline only: 20G, shorter lock and line clear delays by level M1-M30, 300 lines
 //  - sprint:   Guideline only: 40 lines as fast as possible, fixed level 1
 //  - ultra:    Guideline only: highest score in 2 minutes, fixed level 1
 //  - btype:    NES and GB only: B-Type, 25 lines starting over rows of garbage
@@ -48,7 +53,8 @@
 
 const guideline = 3, arika = 4, tgmClassic = 5, tgmTap = 6, gameBoy = 7, tgmOriginal = 8, nesTetris = 9;
 // Shown under the rule set name; standard is named after the rule set instead (see getStats)
-const VARIANT_NAMES = { test: "TEST", death: "DEATH", marathon: "MARATHON", sprint: "SPRINT", ultra: "ULTRA", btype: "B-TYPE", "20g": "20G" };
+const VARIANT_NAMES = { test: "TEST", death: "DEATH", marathon: "MARATHON", sprint: "SPRINT", ultra: "ULTRA", btype: "B-TYPE", "20g": "20G",
+    variable: "VARIABLE", dig: "DIG", master: "MASTER" };
 
 const FIELD_TOP = -18;  // Guideline: 20 visible rows + 20-row buffer
 const TGM_BUFFER_TOP = 1; // TGM1, TGM3 and TAP: one buffer row, blocks locking above it are deleted
@@ -132,9 +138,22 @@ function guidelineGravity(level) {
 
 const GUIDELINE_MAX_LEVEL = 15;  // level cap; endless play continues at level 15 speed
 const GUIDELINE_LINES_PER_LEVEL = 10; // fixed goal
-const GUIDELINE_LINE_GOALS = { marathon: 150, sprint: 40 }; // variants that end on a number of lines
+const GUIDELINE_LINE_GOALS = { marathon: 150, sprint: 40, master: 300 }; // variants that end on a number of lines
 const GUIDELINE_ULTRA_FRAMES = 2 * 60 * 60; // the ultra variant ends after two minutes
-const GUIDELINE_FIXED_LEVEL = ["sprint", "ultra"]; // variants that stay at level 1
+const GUIDELINE_FIXED_LEVEL = ["sprint", "ultra", "dig"]; // variants that stay at level 1
+// Variable goal: each level needs 5 x level goal points; a clear (or T-spin) earns its base score / 100,
+// rounded down (back-to-back included), and points beyond the goal are lost. Levels 1-15.
+const GUIDELINE_VARIABLE_GOAL = 5;
+// Dig: rows of garbage by choice (the height argument), each with one hole, never in the same
+// column as the row below
+const GUIDELINE_DIG_ROWS = [5, 10, 18];
+// Master: 20G at every level; [lock delay, line clear delay] in frames for levels M1-M30, as
+// tetris.wiki gives them (rounded to whole frames in use). 10 lines per level, done at 300 lines.
+const GUIDELINE_MASTER_DELAYS = [
+    [29.5, 30], [29.5, 27], [29.5, 24], [29.5, 21], [29.5, 18], [29.5, 15], [29.5, 12], [29.5, 9], [29.5, 6], [29.5, 3],
+    [27.6, 0.6], [25.2, 0.6], [22.8, 0.6], [20.4, 0.6], [17.5, 0.6], [16.8, 0.6], [15.6, 0.6], [15, 0.6], [13.2, 0.6], [11.5, 0.6],
+    [11.4, 0.6], [10.8, 0.6], [10.2, 0.6], [9.6, 0.6], [8.5, 0.6], [8.4, 0.6], [7.8, 0.6], [7.2, 0.6], [6.6, 0.6], [5.5, 0.6],
+];
 const GUIDELINE_LOCK_DELAY = 30; // 0.5 s
 const GUIDELINE_MOVE_LIMIT = 15; // move reset limit
 const GUIDELINE_DAS = 10, GUIDELINE_ARR = 2, GUIDELINE_ARE = 6; // recommended handling
@@ -571,9 +590,14 @@ class RuleGame {
         this.field = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) this.field.push(new Array(WIDTH).fill(0));
 
-        this.startLevel = this.nintendo ? clamp(startLevel, 0, (this.nes ? NES_START_LEVELS : GB_START_LEVELS) - 1) : 0;
-        this.level = this.nintendo ? this.startLevel : this.tgm ? 0 : 1;
-        this.height = this.nintendo && variant === "btype" ? clamp(height, 0, GB_B_HEIGHTS - 1) : 0;
+        this.master = mode === guideline && variant === "master";
+        this.dig = mode === guideline && variant === "dig";
+        this.startLevel = this.nintendo ? clamp(startLevel, 0, (this.nes ? NES_START_LEVELS : GB_START_LEVELS) - 1)
+            : this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1) : 0; // master: M1 + startLevel
+        this.level = this.nintendo ? this.startLevel : this.tgm ? 0 : 1 + this.startLevel;
+        this.height = this.nintendo && variant === "btype" ? clamp(height, 0, GB_B_HEIGHTS - 1)
+            : this.dig ? clamp(height, 0, GUIDELINE_DIG_ROWS.length - 1) : 0;
+        this.goalPoints = 0; // variable goal: points towards the current level's goal
         this.lines = 0;
         this.score = 0;
         this.frames = 0;
@@ -663,7 +687,24 @@ class RuleGame {
         else this.bag = [];
         this.fillQueue();
         this.updateTimings();
-        if (this.height) this.fillGarbage(this.nes ? NES_B_ROWS[this.height] : this.height * GB_ROWS_PER_HEIGHT);
+        if (this.dig) this.fillDigGarbage(GUIDELINE_DIG_ROWS[this.height]);
+        else if (this.height) this.fillGarbage(this.nes ? NES_B_ROWS[this.height] : this.height * GB_ROWS_PER_HEIGHT);
+    }
+
+    // Dig: full rows with one hole each, the hole never above the one in the row below; isGarbage
+    // marks their rows (it falls with the field) so the clears that remove them can be counted
+    fillDigGarbage(rows) {
+        this.digRows = rows;
+        this.digCleared = 0;
+        this.isGarbage = this.field.map(() => false);
+        let hole = -1;
+        for (let r = HEIGHT - 1; r >= HEIGHT - rows; r--) {
+            let next;
+            do next = Math.floor(Math.random() * WIDTH); while (next === hole);
+            hole = next;
+            for (let c = 0; c < WIDTH; c++) this.setCell(r, c, c === hole ? 0 : 1 + Math.floor(Math.random() * 7));
+            this.isGarbage[r - FIELD_TOP] = true;
+        }
     }
 
     // NES and GB B-Type: random blocks in the bottom rows, each row with at least one block and one hole
@@ -797,6 +838,11 @@ class RuleGame {
             return [mode, ["TIME", this.formatTime(Math.max(0, GUIDELINE_ULTRA_FRAMES - this.frames))], lines, ["SCORE", score]];
         }
         if (this.variant === "btype") return [mode, ["LEVEL", String(this.level)], ["HEIGHT", String(this.height)], lines, ["SCORE", score]];
+        if (this.variant === "variable") {
+            return [mode, ["LEVEL", String(this.level)], ["GOAL", `${this.goalPoints} / ${GUIDELINE_VARIABLE_GOAL * this.level}`], lines, ["SCORE", score]];
+        }
+        if (this.dig) return [mode, ["TIME", this.formatTime()], ["GARBAGE", `${this.digCleared} / ${this.digRows}`], lines, ["SCORE", score]];
+        if (this.master) return [mode, ["LEVEL", `M${this.level}`], lines, ["TIME", this.formatTime()], ["SCORE", score]];
         return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
     }
 
@@ -869,6 +915,12 @@ class RuleGame {
             this.lineClearDelay = 0;
             this.gravity = guidelineGravity(Math.min(this.level, GUIDELINE_MAX_LEVEL));
             this.softGravity = Math.min(20, this.gravity * this.handling.sdf);
+            if (this.master) {
+                const [lock, lineClear] = GUIDELINE_MASTER_DELAYS[Math.min(this.level, GUIDELINE_MASTER_DELAYS.length) - 1];
+                this.lockDelayMax = Math.round(lock);
+                this.lineClearDelay = Math.round(lineClear);
+                this.gravity = this.softGravity = 20;
+            }
         }
 
         // Variants override gravity only; soft drop keeps the rule set's speed
@@ -889,7 +941,7 @@ class RuleGame {
     }
 
     ghostVisible() {
-        if (this.variant === "death" || this.variant === "20g" || this.nintendo || !this.handling.ghost) return false;
+        if (this.variant === "death" || this.variant === "20g" || this.master || this.nintendo || !this.handling.ghost) return false;
         return !this.tgm || this.level < TGM_GHOST_UNTIL;
     }
 
@@ -1499,7 +1551,7 @@ class RuleGame {
 
         if (this.tgm) this.scoreTgm(n);
         else if (this.nintendo) this.scoreGb(n);
-        else this.scoreGuideline(n, tspin);
+        else this.scoreGuideline(n, tspin, rows);
         if (this.gameover) return;
         if (this.nes) this.setNesDelays();
 
@@ -1550,6 +1602,10 @@ class RuleGame {
         };
         this.field = drop(this.field);
         if (this.lockTime) this.lockTime = drop(this.lockTime);
+        if (this.isGarbage) {
+            this.isGarbage = this.isGarbage.filter((_, i) => !rows.includes(i + FIELD_TOP));
+            while (this.isGarbage.length < this.field.length) this.isGarbage.unshift(false);
+        }
     }
 
     // After a line clear: the next piece, or the staff roll once the timer has stopped
@@ -1780,7 +1836,8 @@ class RuleGame {
         }
     }
 
-    scoreGuideline(n, tspin) {
+    // rows: the rows this lock cleared
+    scoreGuideline(n, tspin, rows) {
         const L = this.level;
         let base, difficult;
         if (tspin === "full") {
@@ -1799,8 +1856,9 @@ class RuleGame {
 
         const b2bBefore = this.b2b;
         let action = base * L;
+        const b2bBonus = n > 0 && difficult && b2bBefore;
         if (n > 0) {
-            if (difficult && b2bBefore) {
+            if (b2bBonus) {
                 action = action * 3 / 2;
                 this.addAction("BACK-TO-BACK", "b2b");
             }
@@ -1820,7 +1878,8 @@ class RuleGame {
                 this.addAction("PERFECT CLEAR", "pc");
             }
             this.lines += n;
-            const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) ? this.level
+            const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) || this.variant === "variable" ? this.level
+                : this.master ? Math.min(GUIDELINE_MASTER_DELAYS.length, 1 + this.startLevel + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL))
                 : Math.min(GUIDELINE_MAX_LEVEL, 1 + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL));
             if (level !== this.level) {
                 this.level = level;
@@ -1828,9 +1887,29 @@ class RuleGame {
             }
             const goal = GUIDELINE_LINE_GOALS[this.variant];
             if (goal && this.lines >= goal) this.endGame("COMPLETE", `${goal} LINES — ${this.formatTime()}`);
+            if (this.dig) {
+                this.digCleared += rows.filter(r => this.isGarbage[r - FIELD_TOP]).length;
+                if (this.digCleared >= this.digRows) this.endGame("COMPLETE", `${this.digRows} ROWS — ${this.formatTime()}`);
+            }
         } else {
             this.combo = -1;
         }
+        // variable goal: T-spins without lines count too
+        if (this.variant === "variable" && base > 0) this.addGoalPoints(Math.floor(base * (b2bBonus ? 1.5 : 1) / 100));
+    }
+
+    // Variable goal: the level goes up once its goal is met (the rest is lost), and meeting
+    // level 15's ends the marathon
+    addGoalPoints(points) {
+        this.goalPoints += points;
+        if (this.goalPoints < GUIDELINE_VARIABLE_GOAL * this.level) return;
+        this.goalPoints = 0;
+        if (this.level >= GUIDELINE_MAX_LEVEL) {
+            this.endGame("COMPLETE", `LEVEL ${GUIDELINE_MAX_LEVEL} — ${this.formatTime()}`);
+            return;
+        }
+        this.level++;
+        this.updateTimings();
     }
 
     // Grade points decay by one every so many frames while the player controls a piece,

@@ -36,16 +36,21 @@ const MAIN_ITEMS = [
 const indexLabels = count => Array.from({ length: count }, (_, i) => String(i));
 const levelSetup = count => ({ name: "Level", accent: tetT, arg: "startLevel", labels: indexLabels(count) });
 const HEIGHT_SETUP = { name: "Height", accent: tetZ, arg: "height", labels: indexLabels(GB_B_HEIGHTS) };
-const GOAL_SETUP = { name: "Goal", accent: tetO, arg: "variant", labels: ["150 lines", "Endless"], values: ["marathon", "standard"] };
+const GOAL_SETUP = { name: "Goal", accent: tetO, arg: "variant", labels: ["150 lines", "Variable", "Endless"],
+    values: ["marathon", "variable", "standard"] };
+const DIG_SETUP = { name: "Rows", accent: tetS, arg: "height", labels: GUIDELINE_DIG_ROWS.map(String) };
+const MASTER_SETUP = { name: "Level", accent: tetT, arg: "startLevel", labels: GUIDELINE_MASTER_DELAYS.map((_, i) => `M${i + 1}`) };
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
 const RULESETS = [
     { name: "Guideline", accent: tetT, desc: "SRS, 7-bag, T-spins and back-to-backs",
       modes: [
-          { name: "Marathon", mode: guideline, variant: "marathon", setup: [GOAL_SETUP], accent: tetO, desc: "Clear 150 lines, or keep going" },
+          { name: "Marathon", mode: guideline, variant: "marathon", setup: [GOAL_SETUP], accent: tetO, desc: "150 lines, a variable goal, or endless" },
           { name: "Sprint", mode: guideline, variant: "sprint", accent: tetL, desc: "Clear 40 lines as fast as you can" },
           { name: "Ultra", mode: guideline, variant: "ultra", accent: tetZ, desc: "Score as much as you can in two minutes" },
+          { name: "Dig", mode: guideline, variant: "dig", setup: [DIG_SETUP], accent: tetS, desc: "Clear rows of garbage as fast as you can" },
+          { name: "Master", mode: guideline, variant: "master", setup: [MASTER_SETUP], accent: tetJ, desc: "20G from the start, less time to lock as you go" },
       ] },
     { name: "TGM1", accent: tetZ, desc: "ARS, no hard or sonic drop, no hold",
       modes: [

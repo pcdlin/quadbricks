@@ -681,6 +681,89 @@ for (const [variant, goal] of [["marathon", 150], ["sprint", 40], ["standard", 0
     check("Ultra: the game ends with TIME UP after 7200 frames (2 minutes)", [u.isGameOver(), u.endTitle, u.getStats()[1]], [true, "TIME UP", ["TIME", "0:00.00"]]);
 }
 
+// ---------------------------------------------------------------- Guideline variable goal, master, dig
+function startedGuideline(variant, startLevel = 0, height = 0) {
+    const g = new RuleGame(guideline, variant, startLevel, height);
+    for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+{
+    const award = (n, tspin = null, b2b = false) => {
+        const g = startedGuideline("variable");
+        g.level = 10; g.b2b = b2b;
+        g.scoreGuideline(n, tspin, []);
+        return g.goalPoints;
+    };
+    check("Variable goal: base score / 100 per clear (1, 3, 5, 8), back-to-back x1.5 (12)",
+        [award(1), award(2), award(3), award(4), award(4, null, true)], [1, 3, 5, 8, 12]);
+    check("  ...T-spins: 4 with no lines, 8 / 12 / 16 with lines, 18 for a back-to-back double; minis 1 and 2",
+        [award(0, "full"), award(1, "full"), award(2, "full"), award(3, "full"), award(2, "full", true), award(0, "mini"), award(1, "mini")],
+        [4, 8, 12, 16, 18, 1, 2]);
+    const g = startedGuideline("variable");
+    check("  ...stats: mode, level, goal, lines, score",
+        g.getStats().slice(0, 3), [["GUIDELINE", "VARIABLE"], ["LEVEL", "1"], ["GOAL", "0 / 5"]]);
+    g.lines = 30;
+    g.scoreGuideline(4, null, []);
+    check("  ...a level needs 5 x level points; the rest is lost and lines don't level up",
+        [g.level, g.goalPoints, g.getStats()[2]], [2, 0, ["GOAL", "0 / 10"]]);
+    g.level = 15; g.goalPoints = 74;
+    g.scoreGuideline(1, null, []);
+    check("  ...meeting level 15's goal completes the marathon", [g.isGameOver(), g.endTitle, g.level], [true, "COMPLETE", 15]);
+}
+{
+    const timing = start => { const g = startedGuideline("master", start); return [g.level, g.gravity, g.lockDelayMax, g.lineClearDelay]; };
+    check("Master: 20G, lock and line clear delays by level (M1, M10, M11, M15, M30, rounded)",
+        [timing(0), timing(9), timing(10), timing(14), timing(29), timing(40)],
+        [[1, 20, 30, 30], [10, 20, 30, 3], [11, 20, 28, 1], [15, 20, 18, 1], [30, 20, 6, 1], [30, 20, 6, 1]]);
+    const g = startedGuideline("master");
+    check("  ...no ghost, stats show the M-level, lines to 300 and the time",
+        [g.getShadowRow(), g.getStats().map(s => s[0]), g.getStats()[1], g.getStats()[2]],
+        [-100, ["GUIDELINE", "LEVEL", "LINES", "TIME", "SCORE"], ["LEVEL", "M1"], ["LINES", "0 / 300"]]);
+    clearField(g);
+    g.lines = 9;
+    for (let c = 0; c < 8; c++) g.setCell(21, c, 1);
+    place(g, tetO, 0, 5, 7); g.hardDrop();
+    check("  ...a level every 10 lines, from the chosen start", [g.level, g.lockDelayMax, startedGuideline("master", 5).level], [2, 30, 6]);
+    check("  ...a line clear waits the level's line clear delay, then ARE", framesToNextPiece(g), 27 + 6);
+    clearField(g);
+    g.lines = 299;
+    for (let c = 0; c < 8; c++) g.setCell(21, c, 1);
+    place(g, tetO, 0, 5, 7); g.hardDrop();
+    check("  ...300 lines complete it", [g.isGameOver(), g.endTitle], [true, "COMPLETE"]);
+    const other = new RuleGame(guideline, "marathon", 7);
+    check("  ...other Guideline modes ignore the start level", other.level, 1);
+}
+{
+    const garbage = g => {
+        const holes = [];
+        let rows = 0;
+        for (let r = 2; r < HEIGHT; r++) {
+            const empty = [];
+            for (let c = 0; c < WIDTH; c++) if (!g.getCell(r, c)) empty.push(c);
+            if (empty.length < WIDTH) { rows++; holes.push(empty); }
+        }
+        return { rows, oneHole: holes.every(h => h.length === 1), apart: holes.every((h, i) => i === 0 || h[0] !== holes[i - 1][0]) };
+    };
+    const sizes = [0, 1, 2].map(h => garbage(startedGuideline("dig", 0, h)));
+    check("Dig: 5, 10 or 18 rows of garbage, one hole each, never in the same column as the row below",
+        sizes, [5, 10, 18].map(rows => ({ rows, oneHole: true, apart: true })));
+    const g = startedGuideline("dig");
+    check("  ...stats: mode, time, garbage cleared, lines, score; level 1 throughout",
+        [g.getStats()[0], g.getStats().map(s => s[0]), g.getStats()[2], g.level, new RuleGame(guideline, "dig", 0, 7).digRows],
+        [["GUIDELINE", "DIG"], ["GUIDELINE", "TIME", "GARBAGE", "LINES", "SCORE"], ["GARBAGE", "0 / 5"], 1, 18]);
+    const fillHole = r => { for (let c = 0; c < WIDTH; c++) g.setCell(r, c, g.getCell(r, c) || 1); };
+    fillHole(21);
+    place(g, tetO, 0, 5, 3); g.lock();
+    const afterOne = [g.getStats()[2], g.isGarbage.filter(x => x).length, g.isGarbage.slice(-4)];
+    for (let c = 0; c < WIDTH; c++) g.setCell(10, c, 1); // a full row that isn't garbage
+    place(g, tetO, 0, 5, 6); g.lock();
+    check("  ...only garbage rows count; the garbage marks fall with the field",
+        [afterOne, g.getStats()[2], g.isGameOver()], [[["GARBAGE", "1 / 5"], 4, [true, true, true, true]], ["GARBAGE", "1 / 5"], false]);
+    for (let r = 18; r < HEIGHT; r++) fillHole(r);
+    place(g, tetO, 0, 5, 0); g.lock();
+    check("  ...clearing the last garbage row completes it", [g.getStats()[2], g.isGameOver(), g.endTitle], [["GARBAGE", "5 / 5"], true, "COMPLETE"]);
+}
+
 // ---------------------------------------------------------------- TGM3 grading
 {
     const g = started(arika);

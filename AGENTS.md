@@ -40,7 +40,7 @@ when WebGL is unavailable).
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for `rules.js` (~300 checks). |
+| `test/rules.test.js` | Spec checks for `rules.js` (~310 checks). |
 
 ## History in one paragraph
 
@@ -82,12 +82,12 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 - Game keys come from `options.keys` (rebindable). Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
 - Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: New Game, Options; `mainItems()` adds Restart first while a game exists, restarting it with the same settings, and Esc from a game opens the menu on it). New Game → `MENU_RULES` (rule sets) →
-  `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra for the Guideline, Master/20G
+  `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master for the Guideline, Master/20G
   for TGM1, Master/Death for TAP, World/Classic for TGM3, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `RuleGame` argument (`arg`): `"variant"` (the label's entry in `values`: Marathon's
-  Goal, 150 lines / Endless), or `"startLevel"` / `"height"` (the label's index: Level 0–19 for NES,
-  0–9 for GB; Height 0–5 for B-Type).
+  Goal, 150 lines / Variable / Endless), or `"startLevel"` / `"height"` (the label's index: Level
+  0–19 for NES, 0–9 for GB, M1–M30 for Master; Height 0–5 for B-Type; Rows 5/10/18 for Dig).
   Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
   `menuAction()` turns them into arguments). The rule set and mode lists use the Visuals screen's
   tighter cards (`VISUALS_ROWS`). Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings),
@@ -116,11 +116,13 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 `new RuleGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
 `tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gameBoy` (7, GB), `tgmOriginal` (8, TGM1),
 `nesTetris` (9, NES) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus the Guideline's
-`"marathon"`, `"sprint"`, `"ultra"`, NES's and GB's `"btype"` and TGM1's `"20g"`).
+`"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"` and `"master"`, NES's and GB's `"btype"` and
+TGM1's `"20g"`).
 TAP's `"standard"` is its Master mode, `"death"` its Death mode; NES's and GB's `"standard"` is A-Type.
 A third argument, `startLevel` (NES and GB only, clamped to 0–19, `NES_START_LEVELS`, or 0–9,
-`GB_START_LEVELS`), sets the starting level;
-a fourth, `height` (their B-Type only, clamped to 0–5, `GB_B_HEIGHTS`), the garbage height; a fifth,
+`GB_START_LEVELS`; Guideline master: 0–29 for M1–M30), sets the starting level;
+a fourth, `height` (their B-Type only, clamped to 0–5, `GB_B_HEIGHTS`; Guideline dig: 0–2 for
+`GUIDELINE_DIG_ROWS`), the garbage height; a fifth,
 `handling` (Guideline only, overrides of `GUIDELINE_HANDLING`: `das`, `arr`, `sdf`, `dcd`, `ghost`,
 `dropGuard`; ignored by the others, whose timing is part of their spec).
 Flags: `this.tgm` (TGM1, TGM3 World or Classic, or TAP: levels to 999, delays, grades, staff roll),
@@ -245,6 +247,7 @@ DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn
 ## Rule sets: what is specified, and where from
 
 Primary sources: tetris.wiki pages *Tetris Guideline*, *Super Rotation System*, *Marathon*,
+*Tetris Effect* (Master mode's delays),
 *Scoring*, *T-Spin*, *Tetris The Grand Master 3 Terror-Instinct*, *Arika Rotation System*,
 *Heboris Unofficial Expansion* (rule comparison table), *List of TGM series bugs*;
 *Tetris The Absolute The Grand Master 2 PLUS*, *Grade Recognition System*, *TGM randomizer*;
@@ -252,9 +255,10 @@ github.com/raincomplex/randomizers `randos/ti.py` (TGM3 randomizer) and `randos/
 (`tgm`, TGM1's, and `tgm_tap`, TAP's, with a reference sequence);
 github.com/nullpomino/nullpomino `ClassicPlusWallkick.java` (TGM3-style ARS kick order),
 `GradeMania3Mode.java` (staff roll and 15-minute timings), `GradeMania2Mode.java` (TAP roll
-length, M-roll section rules as code) and `GradeManiaMode.java` (TGM1's GM checks and roll).
+length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks and roll) and
+`DigRaceMode.java` (the Guideline's dig).
 
-### Guideline (Endless and Marathon)
+### Guideline (Marathon, Sprint, Ultra, Dig, Master)
 - SRS with Guideline kick tables (JLSTZ and I); 7-bag; 6 next pieces (Guideline maximum).
 - Spawn in rows 21–22 (engine row 0), drop one row immediately; block out and lock out end the game.
 - Gravity: seconds/row = (0.8 − (L−1)·0.007)^(L−1); 10 lines per level, level capped at 15.
@@ -270,6 +274,17 @@ length, M-roll section rules as code) and `GradeManiaMode.java` (TGM1's GM check
   soft drop 1/cell, hard drop 2/cell; perfect clear 800/1200/1800/2000 (3200 for B2B Tetris) × level.
 - T-spin: last move a rotation, 3-corner rule; mini if only one front corner is filled,
   upgraded to full if the last rotation used kick test 5 (the 1×2 kick).
+- Variable goal (`"variable"`, Marathon's Goal card): a level needs 5 × level goal points
+  (`GUIDELINE_VARIABLE_GOAL`); a clear or T-spin earns its base score / 100 rounded down
+  (1/3/5/8, T-spin 4/8/12/16, mini 1/2/4), ×1.5 for back-to-back; points past the goal are lost
+  (`addGoalPoints()`). Meeting level 15's goal ends it with COMPLETE. Stats: LEVEL, GOAL, LINES.
+- Master (`"master"`): 20G from M1 to M30 (`GUIDELINE_MASTER_DELAYS`: lock 29.5 frames for M1–M10, then
+  down to 5.5 at M30; line clear 30 down to 3 for M1–M10, then 0.6; rounded to whole frames), a level
+  every 10 lines from the chosen start, no ghost, COMPLETE at 300 lines. Stats: LEVEL (M1…), LINES, TIME.
+- Dig (`"dig"`): 5, 10 or 18 rows of garbage (`GUIDELINE_DIG_ROWS`, `fillDigGarbage()`), one hole per
+  row, never in the same column as the row below; `isGarbage` marks their rows and falls with the
+  field (`collapse()`). Level 1 throughout; COMPLETE when every garbage row is cleared. Stats: TIME,
+  GARBAGE (cleared / total), LINES.
 
 ### TGM3 World (Master mode, World rule)
 - SRS with **Arika's I-piece kicks**; Ti randomizer (35-piece pool, 4-piece history,
@@ -405,9 +420,9 @@ length, M-roll section rules as code) and `GradeManiaMode.java` (TGM1's GM check
 
 ### Variants (all rule sets)
 - `standard`: as specified (Guideline's "Endless", Marathon's Goal card). `marathon`: Guideline only, ends with
-  COMPLETE after 150 lines (`GUIDELINE_LINE_GOALS`). `sprint`: Guideline only, COMPLETE after 40
+  COMPLETE after 150 lines (`GUIDELINE_LINE_GOALS`). `variable`, `dig`, `master`: Guideline only (above). `sprint`: Guideline only, COMPLETE after 40
   lines with a TIME row. `ultra`: Guideline only, TIME UP after 2 minutes (`GUIDELINE_ULTRA_FRAMES`)
-  with a countdown TIME row. Sprint and ultra stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
+  with a countdown TIME row. Sprint, ultra and dig stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
   assumption, the sources only give the goals). `death`: constant 20G, no ghost (for TAP it is
   TAP's own Death mode, above). `btype`: NES and GB only (above). `20g`: TGM1 only (above).
   `test`: no gravity (still implemented and tested, but hidden from the menu).
@@ -415,7 +430,12 @@ length, M-roll section rules as code) and `GradeManiaMode.java` (TGM1's GM check
 ### Documented assumptions (sources are silent or ambiguous)
 - TGM3 World pieces spawn in the top two visible rows; a normal hold doesn't count as a new piece for levelling.
 - Reset limits count only after the piece first touches down, and restart at a new lowest row.
-- Guideline has no line clear delay; hard drop counts as TGM's "sonic" distance for scoring.
+- Guideline has no line clear delay (except Master); hard drop counts as TGM's "sonic" distance for scoring.
+- Guideline variable goal: T-spins without lines earn goal points too (their base score / 100); the
+  sources speak of line clears. Master: 10 lines per level and the end at 300 lines are taken from
+  "at least 300 lines" over 30 levels; no grades (Tetris Effect grades by lines); ARE and DAS stay the
+  Guideline's. Dig: garbage cells take random piece colours (no grey block here); the timer is the
+  score, as in NullpoMino.
 - Centre-column rule scans only the rotated piece's cells; the I right-1 kick has no
   "touching the stack" condition; the T floor kick is tried after failed wall kicks
   (NullpoMino behaviour).
@@ -473,8 +493,8 @@ add new globals there.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
 - Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "NES" and "GB" (in that order;
   the rule set and mode lists use the Visuals screen's tighter cards). Guideline's
-  modes are "Marathon" (Goal: 150 lines or Endless), "Sprint" and "Ultra"; Endless moved under
-  Marathon to keep the list tidy. TGM1's "Master" and "20G", TGM3's are
+  modes are "Marathon" (Goal: 150 lines, Variable or Endless), "Sprint", "Ultra", "Dig" and "Master";
+  Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G", TGM3's are
   "World" and "Classic", TAP's "Master" and "Death", NES's and GB's "A-Type" and "B-Type". The GB
   rule set was named "1989" until the NES one came (the user's rename). GB keeps every visual style (Guideline colours,
   the usual board and effects); only its well is shorter, 18 rows as on the Game Boy (the user's request).
