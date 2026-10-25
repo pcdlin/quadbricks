@@ -629,6 +629,7 @@ class Engine {
     // options: the hidden modes' (createGame)
     initGame(mode, variant, startLevel = 0, height = 0, options = {}) {
         this.lastGameArgs = [mode, variant, startLevel, height, options];
+        this.recordSetup = this.recordKey(this.lastGameArgs);
         this.recordDone = false;
         this.recordNote = null;
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, options);
@@ -952,15 +953,31 @@ class Engine {
         this.recordDone = true;
         const result = this.game.record();
         if (!result) return;
-        const setup = this.recordKey(this.lastGameArgs);
-        const old = this.records.get(setup);
-        this.recordNote = this.records.submit(setup, result) ? (old ? "NEW BEST" : "FIRST RECORD") : `BEST  ${old.text}`;
+        const old = this.records.get(this.recordSetup);
+        this.recordNote = this.records.submit(this.recordSetup, result) ? (old ? "NEW BEST" : "FIRST RECORD") : `BEST  ${old.text}`;
     }
 
     // Under a mode list or setup cards: the best result with the current choices, if any
     drawBest(y) {
         const best = this.records.get(this.recordKey(this.chosenArgs()));
         if (best) this.text(`BEST  ${best.text}`, VIEW_W / 2, y, { size: 12, weight: 700, color: MESSAGE_GOLD, align: "center", spacing: 3 });
+    }
+
+    // In a game, at the foot of the NEXT column: the best result for this setup, if any
+    // (after the game ends, the one it may just have set); its parts (grade · level · time) stacked
+    // when the whole doesn't fit in w
+    drawGameBest(x, w, bottom, compact) {
+        const best = this.records.get(this.recordSetup);
+        if (!best) return;
+        const max = compact ? 11 : 16, lineH = compact ? 14 : 20;
+        const lines = this.measureText(best.text, max, 800, 1) > w ? best.text.split(" · ") : [best.text];
+        lines.forEach((s, n) => {
+            const size = Math.min(max, Math.floor(max * w / this.measureText(s, max, 800, 1)));
+            this.text(s, x, bottom - (lines.length - 1 - n) * lineH, { size, weight: 800, color: MESSAGE_GOLD, spacing: 1 });
+        });
+        const top = bottom - (lines.length - 1) * lineH;
+        if (compact) this.label("BEST", x, top - 24, w, 9, 2);
+        else this.label("BEST", x, top - 38, w);
     }
 
     // -----------------------------------
@@ -2035,6 +2052,7 @@ class Engine {
         } else {
             this.drawClearMessage(this.boardY + 140 + 20);
         }
+        this.drawGameBest(RIGHT_X, SIDE_W, this.boardY + this.boardH - 6, false); // level with the wordmark
     }
 
     // The compact layout's columns: HOLD over the stats on the left, NEXT and the rest of the
@@ -2080,6 +2098,7 @@ class Engine {
                 this.drawPieceCentered(game.rnd_get_queue(n), rightX + sideW / 2, listTop + 4 + spacing * (n - 0.5), rest > 2 ? 11 : 12, "locked", game);
             }
         }
+        this.drawGameBest(rightX, sideW, this.boardY + this.boardH - 6, true);
         this.drawClearMessage(this.boardY + this.boardH * 0.3);
     }
 

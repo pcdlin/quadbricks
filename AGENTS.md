@@ -205,8 +205,10 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   Master lines then time, TGM grade (`gradeRank()`: M and GM above every grade) then level then time,
   TGM+ level then time, Easy fireworks, ACE lines then time. The engine submits it once when the game
   ends (`submitRecord()`, key `recordKey()` from the game's arguments and the options that are on),
-  shows FIRST RECORD / NEW BEST / BEST … in the game over banner, and the best for the current choices
-  under the mode list and setup cards (`drawBest()`). `Records` (`options.js`) keeps them.
+  shows FIRST RECORD / NEW BEST / BEST … in the game over banner, the best for the current choices
+  under the mode list and setup cards (`drawBest()`), and in a game the best for its setup
+  (`recordSetup`) at the foot of the NEXT column, its parts stacked when the line doesn't fit
+  (`drawGameBest()`). `Records` (`options.js`) keeps them.
 - Event queues the engine drains every frame: `takeClearedCells()` (confetti),
   `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
