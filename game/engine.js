@@ -120,10 +120,11 @@ const OPTIONS_ITEMS = [
 const VISUAL_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "confetti", name: "Confetti", accent: tetS },
+    { id: "rings", name: "Clear burst", accent: tetZ },
+    { id: "flash", name: "Row flash", accent: tetI },
     { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
     { id: "backdrop", name: "Backdrop", accent: tetJ },
-    { id: "rings", name: "Clear rings", accent: tetZ },
     { id: "tilt", name: "3D tilt", accent: tetI },
     { id: "shake", name: "Drop shake", accent: tetS },
     { id: "trail", name: "Drop trail", accent: tetT },
@@ -271,9 +272,12 @@ const HUE_DEFAULT = 232; // the backdrop's blue at start, and again at each new 
 const RING_LIFE = 46; // frames a clear shockwave expands
 const RING_ALPHA = 0.8; // ring opacity at the Normal effects level
 const RING_CHAIN_MAX = 8; // combo length after which rings stop getting brighter
-const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear rings: Ripple)
+const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear burst: Ripple)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
-const RIPPLE_AMP = 1.55; // refraction strength at the Normal effects level
+const RIPPLE_AMP = 1.94; // refraction strength at the Normal effects level
+const RIPPLE_SPREAD = 0.5; // red bends this much less than green, blue this much more
+const FLARE_LIFE = 34; // frames a clear flare lasts (Clear burst: Flare)
+const FLARE_ALPHA = 1.2; // flare brightness at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
 const STACK_BORDER_W = 3; // TGM-style stack border: width of the line, drawn on the blocks' edges
 const STACK_BORDER_COLOR = "rgba(222,222,232,0.9)";
@@ -624,7 +628,8 @@ class Engine {
         this.motion = this.boardMotion();
         this.updateSheen(this.motion);
         // Clear ripples: the frame is drawn into a layer, then onto the screen through them
-        const ripples = this.ringMode() === "ripple" && this.rings.length ? this.rippleShapes() : null;
+        const mode = this.ringMode();
+        const ripples = mode === "ripple" && this.rings.length ? this.rippleShapes() : null;
         if (ripples) {
             this.sceneLayer = this.sceneLayer || r.renderTarget();
             r.setScreen(this.sceneLayer);
@@ -634,9 +639,15 @@ class Engine {
 
         if (this.GAMESTATE === STATE_GAME) this.drawGame();
         else this.drawMenu();
+        // Clear flares: light on the lens, over everything
+        if (mode === "flare" && this.rings.length) {
+            this.backdrop.flares([this.pixelScale, this.offX, this.offY], this.flareShapes().map(f => ({
+                ...f, rgb: hslToRgb(f.hue, 60, 92), glowRgb: hslToRgb(f.hue, 95, 65),
+            })));
+        }
         if (ripples) {
             r.setScreen(null);
-            this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples);
+            this.backdrop.refract(this.sceneLayer, [this.pixelScale, this.offX, this.offY], ripples, RIPPLE_SPREAD);
         }
 
         // Version and FPS in the view's top corners, kept unobtrusive. Drawn at the fit size (the
@@ -1121,12 +1132,16 @@ class Engine {
             rows.add(cell.row);
             this.explodeCell(cell);
         }
-        for (const row of rows) this.flashes.push({ row, life: FLASH_LIFE });
+        if (this.options.flash) for (const row of rows) this.flashes.push({ row, life: FLASH_LIFE });
         if (rows.size) {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
-            const span = this.options.rings === "ripple" ? RIPPLE_LIFE : RING_LIFE;
+            // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
+            const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
+            const mode = this.options.rings;
+            const span = mode === "ripple" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
             this.rings.push({
-                y: this.cellY(mid) + CELL / 2, life: span, span, power: rows.size,
+                y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
+                life: span, span, power: rows.size,
                 chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
             });
             this.hueTarget += HUE_STEP * rows.size / 2;
@@ -1520,14 +1535,34 @@ class Engine {
         });
     }
 
-    // The Clear rings mode in effect: "off", "rings" or "ripple" (only in a game, with effects on)
+    // Clear flares: a short anamorphic lens flare through the cleared rows, a horizontal streak
+    // as tall as they are with a white-hot core, a soft bloom and three small ghosts, widening as
+    // it fades. Centre, streak length (its exponential falloff's scale), half the band's height
+    // (from the top of the highest cleared row to the bottom of the lowest) and the softness of
+    // its edges in logical units.
+    flareShapes() {
+        return this.rings.map(ring => {
+            const k = 1 - ring.life / ring.span; // 0 -> 1
+            const ease = 1 - Math.pow(1 - k, 3);
+            return {
+                x: BOARD_X + BOARD_W / 2, y: (ring.top + ring.bottom) / 2, hue: ring.hue + 20,
+                r: 200 + 700 * ease,
+                half: (ring.bottom - ring.top) / 2,
+                width: 4 * (1 - k) + 2,
+                a: (1 - k) * (1 - k) * (0.5 + 0.12 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * FLARE_ALPHA,
+            };
+        });
+    }
+
+    // The Clear burst in effect: an id from RING_MODES, "off" outside a game or with effects off
     ringMode() {
         return this.GAMESTATE === STATE_GAME && this.options.effects ? this.options.rings : "off";
     }
 
     // Clear ripples: a wave packet spreading from the cleared rows through the whole view,
-    // bending the light of what is under it (no glow or tint of its own). Centre, radius and packet width in logical
-    // units; amp is the largest displacement, in logical units.
+    // bending the light of what is under it, red less and blue more, so its front splits into a
+    // rainbow fringe (no glow or tint of its own). Centre, radius and packet width in logical
+    // units; amp is the largest displacement (green's), in logical units.
     rippleShapes() {
         return this.rings.map(ring => {
             const k = 1 - ring.life / ring.span; // 0 -> 1
