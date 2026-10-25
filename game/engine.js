@@ -32,8 +32,8 @@ const MAIN_ITEMS = [
 ];
 
 // Start step 3 (MENU_SETUP), for modes with `setup`: setting cards changed with ← →, each choosing
-// one of its labels for a createGame argument: arg "mode", "variant" or "big" (the label's entry in
-// values), or "startLevel" and "height" (the label's index); initial: the label chosen at first (else
+// one of its labels for a createGame argument: arg "mode" or "variant" (the label's entry in values),
+// "startLevel" and "height" (the label's index), or one of the hidden modes' options (OPTION_ARGS); initial: the label chosen at first (else
 // the first). Remembered per mode for the session (setupChoices)
 const indexLabels = count => Array.from({ length: count }, (_, i) => String(i));
 const levelSetup = count => ({ name: "Level", accent: tetT, arg: "startLevel", labels: indexLabels(count) });
@@ -49,7 +49,13 @@ const ULTRA_SETUP = { name: "Time", accent: tetZ, arg: "variant", labels: ["1:00
     values: ["ultra1", "ultra", "ultra3", "ultra5"], initial: 1 };
 const ACE_RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["SRS", "ARS", "ARS2"], values: [tgmAce, aceArs, aceArs2] };
 const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
+// The TGM games' hidden modes, createGame options (RuleGame.setOptions)
+const OPTION_ARGS = ["big", "rev", "mono", "tls"];
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
+const REV_SETUP = { name: "Reverse", accent: tetZ, arg: "rev", labels: ["Off", "On"], values: [false, true] }; // the well upside down
+const MONO_SETUP = { name: "Mono", accent: tetS, arg: "mono", labels: ["Off", "On"], values: [false, true] }; // one colour
+const TLS_SETUP = { name: "Ghost", accent: tetI, arg: "tls", labels: ["To level 100", "All game"], values: [false, true] };
+const TGM1_SETUP = [BIG_SETUP, REV_SETUP, MONO_SETUP, TLS_SETUP]; // TGM1's codes, which combine
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
@@ -64,8 +70,8 @@ const RULESETS = [
       ] },
     { name: "TGM1", accent: tetZ, desc: "ARS, no hard or sonic drop, no hold",
       modes: [
-          { name: "Master", mode: tgmOriginal, variant: "standard", setup: [BIG_SETUP], accent: tetT, desc: "Up to level 999, grades 9 to S9, GM by checkpoints" },
-          { name: "20G", mode: tgmOriginal, variant: "20g", setup: [BIG_SETUP], accent: tetZ, desc: "Master mode at 20G from the start" },
+          { name: "Master", mode: tgmOriginal, variant: "standard", setup: TGM1_SETUP, accent: tetT, desc: "Up to level 999, grades 9 to S9, GM by checkpoints" },
+          { name: "20G", mode: tgmOriginal, variant: "20g", setup: TGM1_SETUP, accent: tetZ, desc: "Master mode at 20G from the start" },
       ] },
     { name: "TGM2 TAP", accent: tetI, desc: "ARS, sonic drop, no hold",
       modes: [
@@ -609,9 +615,11 @@ class Engine {
         return this.game !== null ? [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS] : MAIN_ITEMS;
     }
 
-    initGame(mode, variant, startLevel = 0, height = 0, big = false) {
-        this.lastGameArgs = [mode, variant, startLevel, height, big];
-        this.game = createGame(mode, variant, startLevel, height, this.options.handling, big);
+    // options: the hidden modes' (createGame)
+    initGame(mode, variant, startLevel = 0, height = 0, options = {}) {
+        this.lastGameArgs = [mode, variant, startLevel, height, options];
+        this.game = createGame(mode, variant, startLevel, height, this.options.handling, options);
+        this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
         this.newTiltWaves();
@@ -631,8 +639,17 @@ class Engine {
         return BOARD_X + CELL * col;
     }
 
+    // Rev (TGM1's hidden mode): the well upside down, the bottom row at the top and the spawn rows
+    // below; blocks themselves stay upright
     cellY(row) {
-        return this.boardY + CELL * (row - this.wellTop);
+        return this.boardY + CELL * (this.rev ? HEIGHT - 1 - row : row - this.wellTop);
+    }
+
+    // A trail's ends for a fall from row `from` to row `to`: [far end, the end at the block], at the
+    // blocks' upper edges, or their lower ones when the well is upside down
+    trailYs(from, to) {
+        const edge = this.rev ? CELL : 0;
+        return [this.cellY(from) + edge, this.cellY(to) + edge];
     }
 
     // -----------------------------------
@@ -893,12 +910,14 @@ class Engine {
     // Activation of menu item: the mode, with its setup cards' choices
     menuAction() {
         const { mode, variant, setup = [] } = this.chosenMode();
-        const args = { mode, variant, startLevel: 0, height: 0, big: false };
+        const args = { mode, variant, startLevel: 0, height: 0 }, options = {};
         setup.forEach((item, n) => {
             const i = this.setupIndex(n);
-            args[item.arg] = item.values ? item.values[i] : i;
+            const value = item.values ? item.values[i] : i;
+            if (OPTION_ARGS.includes(item.arg)) options[item.arg] = value;
+            else args[item.arg] = value;
         });
-        this.initGame(args.mode, args.variant, args.startLevel, args.height, args.big);
+        this.initGame(args.mode, args.variant, args.startLevel, args.height, options);
         this.GAMESTATE = STATE_GAME;
     }
 
@@ -985,7 +1004,8 @@ class Engine {
         const r = this.r;
         const color = parseColor(this.tileLight(index));
         r.globalAlpha = DROP_TRAIL_ALPHA * this.softEffectScale() * alpha;
-        r.shape(this.cellX(col), y0, CELL, yEnd - y0, { fill: [[color[0], color[1], color[2], 0], color], fillY: [y0, y1] });
+        // from y0 to yEnd, whichever way up (Rev)
+        r.shape(this.cellX(col), Math.min(y0, yEnd), CELL, Math.abs(yEnd - y0), { fill: [[color[0], color[1], color[2], 0], color], fillY: [y0, y1] });
         r.globalAlpha = 1;
     }
 
@@ -1022,7 +1042,7 @@ class Engine {
         for (const cell of cols.values()) {
             const top = Math.max(cell.row - cell.dist, this.wellTop);
             if (cell.dist <= 0 || cell.row <= top) continue;
-            const y1 = this.cellY(cell.row), y0 = this.cellY(top);
+            const [y0, y1] = this.trailYs(top, cell.row);
             this.drawTrail(cell.col, y0, y1, cell.type, y0 + (y1 - y0) * grown, alpha);
         }
     }
@@ -1039,9 +1059,8 @@ class Engine {
             const landed = game.getDropLandedFor(i, this.tickPhase);
             if (landed >= DROP_TRAIL_FADE) continue;
             const alpha = landed < 0 ? 1 : 1 - (landed + 1) / (DROP_TRAIL_FADE + 1);
-            const y1 = this.cellY(i + game.getDropOffset(i, this.tickPhase));
-            const y0 = this.cellY(Math.max(i, top));
-            if (y0 >= y1) continue;
+            const [y0, y1] = this.trailYs(Math.max(i, top), i + game.getDropOffset(i, this.tickPhase));
+            if (this.rev ? y0 <= y1 : y0 >= y1) continue;
             for (let j = 0; j < WIDTH; j++) {
                 const cell = game.getCell(i, j);
                 if (!cell || game.getCellAlpha(i, j) <= 0) continue;
@@ -1496,7 +1515,8 @@ class Engine {
                 // Breadcrumb: rule set and mode, then what the cards choose (e.g. level and height)
                 const ruleset = RULESETS[this.rulesetpos];
                 const items = this.setupItems();
-                const choice = "CHOOSE " + items.map(item => item.name).join(" AND ");
+                const names = items.map(item => item.name);
+                const choice = "CHOOSE " + (names.length > 1 ? names.slice(0, -1).join(", ") + " AND " : "") + names[names.length - 1];
                 heading(`${ruleset.name}  ·  ${this.chosenMode().name}  ·  ${choice}`.toUpperCase());
                 this.drawMenuList(this.settingCards(items), this.setuppos, listTop);
                 hint = "← →  CHANGE      ENTER  START      ESC  BACK";
@@ -1784,7 +1804,8 @@ class Engine {
                 if (open(i, j, off)) continue;
                 const x = this.cellX(j);
                 r.globalAlpha = game.getCellAlpha(i, j);
-                const top = open(i - 1, j, off), bottom = open(i + 1, j, off);
+                const up = this.rev ? 1 : -1; // the row drawn above (Rev: upside down)
+                const top = open(i + up, j, off), bottom = open(i - up, j, off);
                 if (top) r.rect(x, y, CELL, w, c);
                 if (bottom) r.rect(x, y + CELL - w, CELL, w, c);
                 // side lines stop short of the top and bottom lines, so corners aren't drawn twice
@@ -1794,7 +1815,7 @@ class Engine {
                 // inner corners: both neighbours filled, the cell between them empty
                 for (let di = -1; di <= 1; di += 2) {
                     if (open(i + di, j, off)) continue;
-                    const cy = di < 0 ? y : y + CELL - w;
+                    const cy = di === up ? y : y + CELL - w;
                     if (!open(i, j - 1, off) && open(i + di, j - 1, off)) r.rect(x, cy, w, w, c);
                     if (!open(i, j + 1, off) && open(i + di, j + 1, off)) r.rect(x + CELL - w, cy, w, w, c);
                 }

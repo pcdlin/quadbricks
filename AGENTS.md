@@ -46,7 +46,7 @@ when WebGL is unavailable).
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for the rule sets (~385 checks). |
+| `test/rules.test.js` | Spec checks for the rule sets (~390 checks). |
 
 ## History in one paragraph
 
@@ -98,9 +98,10 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   for TGM1, Normal/Master/Death/TGM+ for TAP, Master/Easy/Shirase for TGM3, Normal/Hi-Speed 1/Hi-Speed 2/
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
-  `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or `"big"` (the label's entry in
+  `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or a hidden mode's option
+  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, gathered into `options`) (the label's entry in
   `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
-  but TGM+; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
+  but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
   Time, 1:00 / 2:00 / 3:00 / 5:00), or `"startLevel"` / `"height"` (the label's index: Level 0–19 for
   NES, 0–9 for GB, M1–M30 for Master, 1–15 for Marathon; Height 0–5 for B-Type; Rows 5/10/18 for Dig).
   `initial`: the label chosen at first (Sprint 40, Ultra 2:00), else the first.
@@ -143,8 +144,10 @@ A third argument, `startLevel` (NES and GB only, clamped to 0–19, `NES_START_L
 a fourth, `height` (their B-Type only, clamped to 0–5, `GB_B_HEIGHTS`; Guideline dig: 0–2 for
 `GUIDELINE_DIG_ROWS`), the garbage height; a fifth,
 `handling` (Guideline only, overrides of `GUIDELINE_HANDLING`: `das`, `arr`, `sdf`, `dcd`, `ghost`,
-`dropGuard`; ignored by the others, whose timing is part of their spec); a sixth, `big`, the Big mode
-(`setBig()` before the first piece; offered for TGM1, TAP but TGM+, and TGM3; ACE's is its `"big"` variant).
+`dropGuard`; ignored by the others, whose timing is part of their spec); a sixth, `options`, the
+hidden modes (`setOptions()`, before the first piece; they combine): `big` (`setBig()`; offered for
+TGM1, TAP but TGM+, and TGM3; ACE's is its `"big"` variant), and TGM1's `rev`, `mono` (`MONO_PALETTE`)
+and `tls` (the ghost all game).
 
 Structure: each family file defines a subclass of `RuleGame` and registers its modes with
 `registerRules(modes, variant => Class)`; `createGame()` picks the class, constructs it (base
@@ -249,7 +252,10 @@ DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn
   backdrop fills letterbox areas. Board at x=250, y=70, 30 px cells (`BOARD_*` constants). The
   engine draws with `boardY`/`boardH`/`wellTop` set per game by `layoutBoard()`: a shorter well (GB's
   18 rows) is centred on the 20-row one, and HOLD/NEXT, banners, glow and the wordmark follow it; the
-  stats keep the standard position so five rows still clear the wordmark.
+  stats keep the standard position so five rows still clear the wordmark. Rev (`game.rev`, TGM1's hidden
+  mode) draws the well upside down: `cellY()` maps the bottom row to the top and the spawn rows below
+  the well, blocks stay upright; trails take their ends from `trailYs()` and the stack border swaps
+  its top and bottom edges. Anything placed by row goes through `cellY()`.
 - Layouts (`this.layout`, chosen in `resize()`): `LAYOUT_FULL` fits the whole 800×720 view;
   `LAYOUT_COMPACT` (touch devices always, other windows when it shows the well `COMPACT_GAIN` times
   bigger, i.e. narrow ones) fits only the well and a `COMPACT_SIDE_W` column each side:
@@ -482,6 +488,9 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   grade becomes GM and a 2968-frame staff roll follows with blocks visible; it ends in GRAND MASTER
   whether survived or topped out.
 - 20G (`"20g"`): the hidden 20G mode, Master at 20G from level 0 (no ghost).
+- The other codes, as setup cards that combine (tetris.wiki: "Codes may be combined"): Big; Reverse
+  (pieces enter at the bottom and "fall" upwards: the well is drawn upside down, the rules unchanged);
+  Mono (every piece one colour); Ghost all game (TLS).
 
 ### NES (1989): A-Type and B-Type
 - Sources: tetris.wiki *Tetris (NES, Nintendo)*, *Scoring*; meatfighter.com's NES Tetris AI article
@@ -583,8 +592,10 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   2 minutes.
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's; the DAS
-  charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it. No secret grade,
-  no Big, Rev, Mono or TLS modes.
+  charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it. No secret grade.
+  Hidden modes: Rev is drawn as the well turned upside down with upright blocks (the wiki only says
+  pieces spawn at the bottom and rise); Mono's colour is green (no white or grey block colour here);
+  Uki (a voice for line clears) isn't there; codes don't keep scores off a table (there is none).
 - NES: the entry delay uses the piece's rotation centre as its lock height (the wiki doesn't say which
   cell); the line clear lengthens to the next multiple of 4 frames since the game started; soft drop
   points count all rows of the last press (the NES's BCD bug is left out). No 96-frame opening delay
@@ -624,7 +635,8 @@ export names explicitly at the top; add new globals there, and new rule files to
 - Menu: main screen with New Game and Options (Continue and Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
   the rule set and mode lists use tighter cards). Guideline's
   modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master";
-  Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G", TGM3's are
+  Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,
+  Mono and Ghost cards), TGM3's are
   "Master", "Easy" and "Shirase" (each with a Rule card, World or Classic), TAP's "Normal", "Master", "Death" and
   "TGM+", ACE's "Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2" and "Big" (Big is otherwise
   a setup card, Off / On), NES's and GB's

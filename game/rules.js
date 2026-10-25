@@ -87,6 +87,7 @@ function parseShapes(pieces) {
 // Colour of each piece type, as an index into the engine's palette (cyan, purple, orange,
 // blue, green, red, yellow)
 const DEFAULT_PALETTE = [0, 1, 2, 3, 4, 5, 6, 7];
+const MONO_PALETTE = [0, 5, 5, 5, 5, 5, 5, 5]; // every piece one colour (green; there's no white or grey)
 
 // ----------------------------------------------------------
 // Arika Rotation System (TGM's Classic rule, TGM1, TAP, ACE's ARS rules)
@@ -128,13 +129,13 @@ function registerRules(modes, pick) {
 }
 
 // A new game of a mode and variant. startLevel: NES and GB (start level), Guideline Master (M1 +
-// startLevel); height: NES and GB B-Type (garbage height), Guideline Dig (rows); handling: Guideline
-// only, overrides of GUIDELINE_HANDLING (the other rule sets keep their specified timing); big: the
-// TGM games' Big mode, pieces twice the size all game
-function createGame(mode, variant = "standard", startLevel = 0, height = 0, handling = {}, big = false) {
+// startLevel), the Guideline marathons; height: NES and GB B-Type (garbage height), Guideline Dig
+// (rows); handling: Guideline only, overrides of GUIDELINE_HANDLING (the other rule sets keep their
+// specified timing); options: the TGM games' hidden modes (setOptions)
+function createGame(mode, variant = "standard", startLevel = 0, height = 0, handling = {}, options = {}) {
     const Game = RULE_CLASSES[mode](variant);
     const game = new Game(mode, variant, startLevel, height, handling);
-    if (big) game.setBig();
+    game.setOptions(options);
     game.begin();
     return game;
 }
@@ -152,6 +153,8 @@ class RuleGame {
         this.setShapes(shapes, DEFAULT_PALETTE);
         this.big = false; // pieces twice the size, moving two columns at a time (setBig)
         this.bigMode = false; // big from the start: the Big mode
+        this.rev = false; // Rev: the well drawn upside down, pieces "falling" upwards (the engine)
+        this.tls = false; // TLS: the ghost piece all game
         // First row of the well (the engine sizes the board to it), the first row the engine draws
         // (the two rows above the well too) and the highest row a piece may occupy
         this.wellTop = VISIBLE_TOP;
@@ -251,6 +254,16 @@ class RuleGame {
         this.ars = true;
         this.plainArs = plain;
         this.setShapes(ARS_SHAPES, palette);
+    }
+
+    // The hidden modes of the TGM games, before the first piece (they combine): big (pieces twice
+    // the size), rev (pieces enter at the bottom and rise: only the engine's drawing changes), mono
+    // (every piece one colour), tls (the ghost piece all game)
+    setOptions({ big = false, rev = false, mono = false, tls = false } = {}) {
+        if (big) this.setBig();
+        this.rev = rev;
+        if (mono) this.palette = MONO_PALETTE;
+        this.tls = tls;
     }
 
     setupField() {} // garbage to start over (Dig, B-Type)

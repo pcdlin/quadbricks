@@ -133,7 +133,6 @@ const SHIRASE_GARBAGE = [0, 0, 0, 0, 0, 20, 18, 10, 9, 8];
 // A section slower than this many seconds is a REGRET: 60 for the first two, then 50
 const SHIRASE_REGRET_TIME = (section) => section < 2 ? 60 : 50;
 const SHIRASE_MONO_LEVEL = 1000; // every block monochrome from here
-const MONO_PALETTE = [0, 5, 5, 5, 5, 5, 5, 5]; // green (World's; Classic's white has no colour here)
 const SHIRASE_ROLL_FRAMES = 3238; // the staff roll after 1300, with big pieces
 // Grade: sections finished less REGRETs
 const SHIRASE_GRADE_LABELS = ["1", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13"];
@@ -331,7 +330,7 @@ class TgmGame extends RuleGame {
     }
 
     ghostVisible() {
-        return super.ghostVisible() && this.level < TGM_GHOST_UNTIL;
+        return super.ghostVisible() && (this.tls || this.level < TGM_GHOST_UNTIL); // TLS: all game
     }
 
     onClock() {

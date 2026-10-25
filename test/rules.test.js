@@ -2013,7 +2013,7 @@ function startedMode(mode, variant) {
 
 // ---------------------------------------------------------------- Big modes
 function startedBig(mode, variant = "standard") {
-    const g = createGame(mode, variant, 0, 0, {}, true);
+    const g = createGame(mode, variant, 0, 0, {}, { big: true });
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -2185,6 +2185,27 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
         [createGame(guideline, "marathon", 5).level, gravity6 === createGame(guideline, "standard", 5).gravity, m.level, createGame(guideline, "marathon", 40).level],
         [6, true, 7, 15]);
     check("  ...Variable goal from a later level too", stats("variable", 2).slice(1, 3), [["LEVEL", "3"], ["GOAL", "0 / 15"]]);
+}
+
+// ---------------------------------------------------------------- TGM1's hidden modes
+function startedTgm1With(options, variant = "standard") {
+    const g = createGame(tgmOriginal, variant, 0, 0, {}, options);
+    for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+{
+    const mono = startedTgm1With({ mono: true });
+    check("TGM1 Mono: every piece one colour", [new Set(mono.palette.slice(1)).size, startedTgm1With({}).palette.slice(1).length], [1, 7]);
+    const tls = startedTgm1With({ tls: true }), plain = startedTgm1With({});
+    for (const g of [tls, plain]) { clearField(g); g.level = 300; g.updateTimings(); place(g, tetO, 0, 5, 3); }
+    check("TGM1 TLS: the ghost piece all game, not only below level 100",
+        [tls.getShadowRow() !== -100, plain.getShadowRow()], [true, -100]);
+    const rev = startedTgm1With({ rev: true });
+    check("TGM1 Rev: the rules only mark the game (the engine draws the well upside down)",
+        [rev.rev, plain.rev, rev.getStats()[0]], [true, false, ["TGM1", "MASTER"]]);
+    const all = startedTgm1With({ big: true, rev: true, mono: true, tls: true }, "20g");
+    check("  ...the codes combine", [all.big, all.rev, new Set(all.palette.slice(1)).size, all.tls, all.gravity, all.getStats()[0]],
+        [true, true, 1, true, 20, ["TGM1", "20G BIG"]]);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
