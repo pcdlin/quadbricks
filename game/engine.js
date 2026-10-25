@@ -2020,10 +2020,14 @@ class Engine {
         if (step === MENU_MAIN) this.text("WELCOME", cx, 228, { size: 12, weight: 600, color: INK_DIM, align: "center", spacing: 6 });
         let hint, hintY = 660; // the bottom of the view, lower under a long list
         switch (step) {
-            case MENU_MAIN:
-                this.drawMenuList(this.mainItems(), this.mainpos, listTop);
+            case MENU_MAIN: {
+                // five cards during a game: from a little higher up, the hint under them
+                const items = this.mainItems(), top = items.length > 4 ? listTop - 20 : listTop;
+                this.drawMenuList(items, this.mainpos, top);
+                hintY = Math.max(hintY, top + menuListHeight(items, 64, 10) + 22);
                 hint = "ENTER  SELECT" + (this.game ? "      ESC  RESUME" : "");
                 break;
+            }
             case MENU_QUICK: {
                 // tighter cards like the rule sets', the best for the selected mode and the hint under them
                 const top = listTop - 20, rowH = 44, gap = 4;
