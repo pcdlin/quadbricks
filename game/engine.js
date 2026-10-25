@@ -119,11 +119,11 @@ const OPTIONS_ITEMS = [
 // (preview: the card is a little taller and shows the block style preview at its right)
 const VISUAL_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
+    { id: "scale", name: "Scale", accent: tetL },
+    { id: "effects", name: "Effects", accent: tetT },
     { id: "confetti", name: "Confetti", accent: tetS },
     { id: "rings", name: "Clear burst", accent: tetZ },
     { id: "flash", name: "Row flash", accent: tetI },
-    { id: "scale", name: "Scale", accent: tetL },
-    { id: "effects", name: "Effects", accent: tetT },
     { id: "backdrop", name: "Backdrop", accent: tetJ },
     { id: "tilt", name: "3D tilt", accent: tetI },
     { id: "shake", name: "Drop shake", accent: tetS },
@@ -256,7 +256,7 @@ const CONFETTI_COLORS = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFE
 const CONFETTI_SPECS = {
     glow: { count: 2, size: [3, 5], speed: 1, lift: 3, gravity: 0.06, drag: 0.97, life: 50, alpha: 0.45, add: true },
     paper: { count: 2, size: [5, 4], speed: 0.8, lift: 3.4, gravity: 0.03, drag: 0.95, life: 100, alpha: 0.9, spin: 0.15, sway: 0.6, maxFall: 1.2 },
-    sparks: { count: 3, size: [3, 3], speed: 1.6, lift: 4.8, gravity: 0.1, drag: 0.97, life: 28, alpha: 0.8, add: true },
+    sparks: { count: 3, size: [3, 3], speed: 1.6, lift: 4.8, gravity: 0.1, drag: 0.97, life: 32, alpha: 0.9, add: true },
     stars: { count: 2, size: [3, 4], speed: 1, lift: 3, gravity: 0.05, drag: 0.96, life: 56, alpha: 0.7, add: true, spin: 0.05 },
     bubbles: { count: 2, size: [2, 5], speed: 0.4, lift: 2, gravity: -0.012, drag: 0.97, life: 70, alpha: 0.6, add: true, sway: 0.3 },
     pixels: { count: 2, size: [3, 3], speed: 1, lift: 3, gravity: 0.08, drag: 0.97, life: 50, alpha: 0.9, grid: 3 },
@@ -276,8 +276,8 @@ const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear burst: Ripple)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
 const RIPPLE_AMP = 1.94; // refraction strength at the Normal effects level
 const RIPPLE_SPREAD = 0.5; // red bends this much less than green, blue this much more
-const FLARE_LIFE = 34; // frames a clear flare lasts (Clear burst: Flare)
-const FLARE_ALPHA = 1.2; // flare brightness at the Normal effects level
+const FLARE_LIFE = 26; // frames a clear flare lasts (Clear burst: Flare)
+const FLARE_ALPHA = 1; // flare brightness at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
 const STACK_BORDER_W = 3; // TGM-style stack border: width of the line, drawn on the blocks' edges
 const STACK_BORDER_COLOR = "rgba(222,222,232,0.9)";
