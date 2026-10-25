@@ -97,7 +97,7 @@ void main() {
     gl_FragColor = vec4(uGlowColor.rgb * ga + ring * (1.0 - ga), ga);
 }`;
 
-// Clear ripples (Clear rings: Ripple): the finished frame, drawn onto the screen through a
+// Clear ripples (Line clear effect: Ripple): the finished frame, drawn onto the screen through a
 // wave packet on a sheet of glass. Each ripple's surface slope across its front bends the
 // lookup into the frame; nothing is added, so only the refraction shows. Red bends less and
 // blue more than green (uSpread), splitting the colours at the front.
@@ -130,7 +130,7 @@ void main() {
         texture2D(uScene, uv + dp * (1.0 + uSpread)).b, 1.0);
 }`;
 
-// Clear flares (Clear rings: Flare), added over the finished frame like light on the lens: a
+// Clear flares (Line clear effect: Flare), added over the finished frame like light on the lens: a
 // streak as tall as the cleared rows, falling off exponentially along x and as a Gaussian past
 // its top and bottom, its white-hot core, a round bloom and three ghosts along the streak. Premultiplied, for blending with ONE, ONE.
 const FLARE_FS = `
