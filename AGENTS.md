@@ -706,7 +706,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; a plain string from older versions is read as one key; an action missing from saved keys gets its default, or a `SPARE_KEYS` key, that no other action uses), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
   qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).
