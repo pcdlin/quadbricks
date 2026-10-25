@@ -313,7 +313,7 @@ const TILESETS = {
     neon: {
         name: "Neon",
         face: [2.5, 0.12],
-        pad: (style) => style === "active" ? 20 : style === "ghost" ? 0 : 10,
+        pad: (style) => style === "active" ? 20 : style === "ghost" ? 0 : 12,
         draw(g, col, size, style) {
             const [inset, round] = this.face;
             const w = size - inset * 2;
@@ -330,10 +330,11 @@ const TILESETS = {
             g.fillStyle = col.dark + (active ? "88" : "55");
             g.fill();
             g.shadowColor = col.light;
-            g.shadowBlur = active ? 22 : 10;
-            g.strokeStyle = active ? col.light : col.base;
-            g.lineWidth = active ? 2 : 1.5;
-            for (let i = active ? 3 : 2; i > 0; i--) g.stroke(); // each pass adds to the glow
+            g.shadowBlur = active ? 22 : 12;
+            // settled edges use the light colour too, a little thicker, so they read against the well
+            g.strokeStyle = col.light;
+            g.lineWidth = active ? 2.5 : 2;
+            for (let i = 3; i > 0; i--) g.stroke(); // each pass adds to the glow
             g.shadowBlur = 0;
         },
     },
