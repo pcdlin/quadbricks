@@ -1225,7 +1225,7 @@ const cellsOf = g => {
 {
     const g = startedGb();
     check("GB: no hold, one next piece, no ghost, starts at level 0", [g.hasHold, g.nextCount, g.getShadowRow(), g.level], [false, 1, -100, 0]);
-    check("  ...stats name the rule set and mode", [g.getStats()[0], startedGb("btype").getStats()[0]], [["1989", "A-TYPE"], ["1989", "B-TYPE"]]);
+    check("  ...stats name the rule set and mode", [g.getStats()[0], startedGb("btype").getStats()[0]], [["GB", "A-TYPE"], ["GB", "B-TYPE"]]);
     clearField(g);
     g.curPiece_type = 0;
     g.spawn(tetT, false);
@@ -1345,7 +1345,7 @@ const garbageRows = g => {
     const rows = garbageRows(g);
     check("GB B-Type height 3: six rows of garbage, each with a hole", rows.lastIndexOf(false), HEIGHT - 2 - 6 - 1);
     check("  ...rows above are empty", rows.slice(0, HEIGHT - 2 - 6).every(x => !x), true);
-    check("  ...the stats show the height", g.getStats().map(s => s[0]), ["1989", "LEVEL", "HEIGHT", "LINES", "SCORE"]);
+    check("  ...the stats show the height", g.getStats().map(s => s[0]), ["GB", "LEVEL", "HEIGHT", "LINES", "SCORE"]);
     check("GB B-Type height 0: no garbage; height 5: ten rows",
         [garbageRows(startedGb("btype")).some(x => x), garbageRows(startedGb("btype", 0, 5)).filter(x => x).length], [false, 10]);
     check("  ...height stays within 0-5, and A-Type ignores it",

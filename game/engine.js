@@ -51,7 +51,7 @@ const RULESETS = [
           { name: "World", mode: arika, variant: "standard", accent: tetL, desc: "Arika SRS, hard drop, limited lock resets" },
           { name: "Classic", mode: tgmClassic, variant: "standard", accent: tetJ, desc: "Arika Rotation System, sonic drop" },
       ] },
-    { name: "1989", accent: tetO, desc: "1989 — no hard drop, no hold, no kicks",
+    { name: "GB", accent: tetO, desc: "Game Boy (1989) — no hard drop, no hold, no kicks",
       modes: [
           { name: "A-Type", mode: gameBoy, variant: "standard", startLevels: GB_START_LEVELS, accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
           { name: "B-Type", mode: gameBoy, variant: "btype", startLevels: GB_START_LEVELS, startHeights: GB_B_HEIGHTS, accent: tetS, desc: "Clear 25 lines, starting over garbage" },

@@ -413,7 +413,8 @@ add new globals there.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
 - Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TAP", "TGM3" and "GB" (in that order). Guideline's
   modes are "Endless", "Marathon", "Sprint" and "Ultra", TGM3's are "World" and "Classic", TAP's
-  "Master" and "Death", GB's "A-Type" and "B-Type". GB keeps every visual style (Guideline colours,
+  "Master" and "Death", GB's "A-Type" and "B-Type" (the GB rule set was named "1989" until
+  the user renamed it). GB keeps every visual style (Guideline colours,
   the usual board and effects); only its well is shorter, 18 rows as on the Game Boy (the user's request).
   The stats panel shows the rule set and the mode (`getStats()[0]`), never "STANDARD". The generic
   death variant is hidden from the menu for Guideline and TGM3 (still in `rules.js`); TAP's Death is offered. The title tagline reads "WELCOME" (the user's own edit; keep it) and shows only on the main screen; the Visuals screen puts its heading in its place.

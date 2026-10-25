@@ -685,7 +685,7 @@ class RuleGame {
         // Guideline's standard mode is endless
         const rule = this.ars ? "CLASSIC" : "WORLD";
         const variantName = VARIANT_NAMES[this.variant];
-        const mode = this.gb ? ["1989", variantName || "A-TYPE"]
+        const mode = this.gb ? ["GB", variantName || "A-TYPE"]
             : this.tap ? ["TGM2 TAP", variantName || "MASTER"]
             : this.tgm ? ["TGM3 TI", variantName ? `${rule} ${variantName}` : rule]
             : ["GUIDELINE", variantName || "ENDLESS"];
