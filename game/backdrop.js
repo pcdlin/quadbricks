@@ -133,13 +133,14 @@ void main() {
 }`;
 
 // Clear flares (Clear rings: Flare), added over the finished frame like light on the lens: a
-// streak falling off exponentially along x and as a Gaussian across it, its white-hot core,
-// a round bloom and three ghosts along the streak. Premultiplied, for blending with ONE, ONE.
+// streak as tall as the cleared rows, falling off exponentially along x and as a Gaussian past
+// its top and bottom, its white-hot core, a round bloom and three ghosts along the streak. Premultiplied, for blending with ONE, ONE.
 const FLARE_FS = `
 precision highp float;
 uniform vec2 uSize;
 uniform vec3 uView;                               // scale, offset x, offset y of the logical view
-uniform vec4 uFlare[${BACKDROP_MAX_RINGS}];       // centre x, y, streak length, core thickness (logical)
+uniform vec4 uFlare[${BACKDROP_MAX_RINGS}];       // centre x, y, streak length, edge softness (logical)
+uniform float uFlareHalf[${BACKDROP_MAX_RINGS}];  // half the streak's height (logical)
 uniform vec4 uFlareColor[${BACKDROP_MAX_RINGS}];  // core rgb, alpha (0: unused)
 uniform vec3 uFlareGlow[${BACKDROP_MAX_RINGS}];   // glow rgb
 
@@ -151,9 +152,9 @@ void main() {
         if (uFlareColor[i].a <= 0.0) continue;
         vec2 o = q - uFlare[i].xy;
         float len = uFlare[i].z;
-        float sx = abs(o.x) / len, sy = o.y / uFlare[i].w;
-        float streak = exp(-3.0 * sx - 0.2 * sy * sy); // a halo about twice the core's thickness
-        float core = exp(-5.0 * sx - 2.0 * sy * sy);
+        float sx = abs(o.x) / len, sy = max(abs(o.y) - uFlareHalf[i], 0.0) / uFlare[i].w;
+        float streak = exp(-3.0 * sx - 0.2 * sy * sy); // a halo reaching about twice as far past the edges as the core
+        float core = exp(-5.0 * sx - 2.0 * sy * sy) * 30.0 / (30.0 + uFlareHalf[i]); // dimmer as it gets taller
         float b = 0.25 * len;
         float bloom = 0.5 * exp(-dot(o, o) / (b * b));
         vec2 g1 = o - vec2(-0.15 * len, 0.0), g2 = o - vec2(0.22 * len, 0.0), g3 = o - vec2(0.38 * len, 0.0);
@@ -338,8 +339,9 @@ class GLBackdrop {
         gl.enable(gl.BLEND);
     }
 
-    // The clear flares, added over what is drawn: [{x, y, r, width, a, rgb, glowRgb}] (view
-    // logical; r is the streak's length, width its core's thickness, see Engine.flareShapes).
+    // The clear flares, added over what is drawn: [{x, y, r, half, width, a, rgb, glowRgb}] (view
+    // logical; r is the streak's length, half half its height, width its edges' softness, see
+    // Engine.flareShapes).
     // view: [scale, offX, offY] of the logical view.
     flares(view, flares) {
         const gl = this.gl;
@@ -352,21 +354,23 @@ class GLBackdrop {
         gl.blendFunc(gl.ONE, gl.ONE);
         gl.uniform2f(p.u("uSize"), this.r.width, this.r.height);
         gl.uniform3fv(p.u("uView"), view);
-        const flare = this.ring, color = this.ringColor, glow = this.ringGlow;
+        const flare = this.ring, half = this.waveAmp, color = this.ringColor, glow = this.ringGlow;
         color.fill(0); // alpha 0: slot unused
         for (let i = 0; i < flares.length; i++) {
             const f = flares[i];
             flare[i * 4] = f.x; flare[i * 4 + 1] = f.y; flare[i * 4 + 2] = f.r; flare[i * 4 + 3] = f.width;
+            half[i] = f.half;
             color.set(f.rgb, i * 4);
             color[i * 4 + 3] = f.a;
             glow.set(f.glowRgb, i * 3);
-            // the bloom and ghosts end well inside 2.5 bloom radii, the streak's halo in 7 core thicknesses
-            const reach = Math.max(7 * f.width, 2.5 * 0.25 * f.r) * s, cy = oy + f.y * s;
+            // the bloom and ghosts end well inside 2.5 bloom radii, the streak's halo 7 softness lengths past its edges
+            const reach = Math.max(f.half + 7 * f.width, 2.5 * 0.25 * f.r) * s, cy = oy + f.y * s;
             if (f.a > 0) { y0 = Math.min(y0, cy - reach); y1 = Math.max(y1, cy + reach); }
         }
         y0 = Math.max(0, Math.floor(y0)); y1 = Math.min(this.r.height, Math.ceil(y1));
         if (y1 <= y0) return;
         gl.uniform4fv(p.u("uFlare"), flare);
+        gl.uniform1fv(p.u("uFlareHalf"), half);
         gl.uniform4fv(p.u("uFlareColor"), color);
         gl.uniform3fv(p.u("uFlareGlow"), glow);
         gl.enable(gl.SCISSOR_TEST);

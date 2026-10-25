@@ -1114,10 +1114,13 @@ class Engine {
         for (const row of rows) this.flashes.push({ row, life: FLASH_LIFE });
         if (rows.size) {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
+            // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
+            const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
             const mode = this.options.rings;
             const span = mode === "ripple" || mode === "prism" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
             this.rings.push({
-                y: this.cellY(mid) + CELL / 2, life: span, span, power: rows.size,
+                y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
+                life: span, span, power: rows.size,
                 chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
             });
             this.hueTarget += HUE_STEP * rows.size / 2;
@@ -1512,16 +1515,19 @@ class Engine {
     }
 
     // Clear flares: a short anamorphic lens flare through the cleared rows, a horizontal streak
-    // with a white-hot core, a soft bloom and three small ghosts, widening as it fades. Centre,
-    // streak length (its exponential falloff's scale) and core thickness in logical units.
+    // as tall as they are with a white-hot core, a soft bloom and three small ghosts, widening as
+    // it fades. Centre, streak length (its exponential falloff's scale), half the band's height
+    // (from the top of the highest cleared row to the bottom of the lowest) and the softness of
+    // its edges in logical units.
     flareShapes() {
         return this.rings.map(ring => {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const ease = 1 - Math.pow(1 - k, 3);
             return {
-                x: BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue + 20,
+                x: BOARD_X + BOARD_W / 2, y: (ring.top + ring.bottom) / 2, hue: ring.hue + 20,
                 r: 200 + 700 * ease,
-                width: (3 + 2.5 * ring.power) * (1 - k) + 1.5,
+                half: (ring.bottom - ring.top) / 2,
+                width: 4 * (1 - k) + 2,
                 a: (1 - k) * (1 - k) * (0.5 + 0.12 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * FLARE_ALPHA,
             };
         });
