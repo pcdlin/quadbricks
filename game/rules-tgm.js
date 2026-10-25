@@ -1212,8 +1212,9 @@ class TiGame extends TgmGame {
             + Math.ceil(levelAfter / 2) + speed;
     }
 
-    // Master: reaching 500 after 7:00 ends the game
+    // Master: reaching 500 after 7:00 ends the game, but not in a promotional exam (tetris.wiki)
     checkLevelStop(levelBefore) {
+        if (this.exam && this.exam.kind === "promotion") return;
         if (levelBefore < TGM_TORIKAN_LEVEL && this.level >= TGM_TORIKAN_LEVEL && this.frames > TGM_TORIKAN_FRAMES) {
             this.level = TGM_TORIKAN_LEVEL;
             this.endGame("LEVEL STOP", "OVER 7:00 AT LEVEL 500");

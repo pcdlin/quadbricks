@@ -248,6 +248,13 @@ for (const manual of [true, false]) {
     place(g, tetI, 1, 18, 7);
     g.lock();
     check("Master: reaching level 500 after 7:00 stops the game at 500", [g.isGameOver(), g.level, g.endTitle], [true, 500, "LEVEL STOP"]);
+    const exam = createGame(arika, "standard", 0, 0, {}, { exams: true, qualified: 9, exam: { kind: "promotion", grade: 12 } });
+    while (exam.phase !== "active") exam.advanceFrame(0);
+    exam.level = 497; exam.frames = 7 * 3600 + 1;
+    for (let r = 2; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) exam.setCell(r, c, r >= 18 && c !== 9 ? 1 : 0);
+    place(exam, tetI, 1, 18, 7);
+    exam.lock();
+    check("  ...but not in a promotional exam (tetris.wiki)", [exam.isGameOver(), exam.level], [false, 503]);
     const h = started(arika);
     h.level = 996;
     for (let r = 2; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) h.setCell(r, c, r >= 18 && c !== 9 ? 1 : 0);

@@ -383,7 +383,7 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 - SRS with **Arika's I-piece kicks**; Ti randomizer (35-piece pool, 4-piece history,
   6 rolls, arcade bug included; first piece never S/Z/O); 3 next pieces.
 - Level +1 per new piece except at x99 and 998; clears add 1/2/4/6; reaching 500 after 7:00
-  ends the game ("LEVEL STOP").
+  ends the game ("LEVEL STOP"), except in a promotional exam.
 - Level 999 stops the timer and starts the staff roll: phase `rollstart` empties the field a row
   every 6 frames from the bottom (confetti, no shake), then 3238 frames of play (`roll`,
   `rollFrames`; the TIME row becomes a ROLL countdown). Blocks locked in the roll hide
