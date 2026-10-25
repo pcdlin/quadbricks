@@ -866,7 +866,12 @@ class RuleGame {
                 if (this.plainArs) {
                     // no kicks
                 } else if (to === 0 || to === 2) {
-                    kick = at(0, -1) || at(0, 1) || at(0, 2); // wall kicks into horizontal
+                    // wall kicks into horizontal, only for an I touching a wall or the stack beside it
+                    // (tetris.wiki, Cambridge)
+                    const row = this.curPiece_row, col = this.curPiece_col;
+                    if (!this.movePossible(row, col - k, from) || !this.movePossible(row, col + k, from)) {
+                        kick = at(0, -1) || at(0, 1) || at(0, 2);
+                    }
                 } else if (this.iFloorKicks < this.arsFloorKicks.i && !this.canFall()) {
                     kick = at(-1, 0) || at(-2, 0); // floor kick, only when resting on something
                     floorKick = kick !== null;

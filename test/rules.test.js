@@ -621,6 +621,20 @@ function classicAt(type, rot, row, col, blocks) {
         [wall, first, second, m.rotate(1)], [[true, 2], [true, 18], false, false]);
 }
 {
+    // tetris.wiki's I wall kick examples: the I needs to touch a wall or the stack beside it
+    // vertical I in column 2 (box column 0), a block in column 0 in the row it turns into
+    const open = classicAt(tetI, 1, 10, 0, [[11, 0]]);
+    const air = [open.rotate(1), open.curPiece_rotation];
+    // the same with a block beside the I's bottom (column 1): kicks 1 right
+    const touching = classicAt(tetI, 1, 10, 0, [[11, 0], [13, 1]]);
+    const kicked = [touching.rotate(1), touching.curPiece_rotation, touching.curPiece_col];
+    // against the right wall (column 9): kicks 1 left
+    const right = classicAt(tetI, 1, 10, 7, []);
+    const left = [right.rotate(1), right.curPiece_col];
+    check("Classic I wall kicks only when touching: none in the open / 1 right beside the stack / 1 left off the right wall",
+        [air, kicked, left], [[false, 1], [true, 2, 1], [true, 6]]);
+}
+{
     // T in a notch on the floor (state R), rotating to pointing up: wall kicks blocked, floor kick up 1
     const g = classicAt(tetT, 1, 19, 4, [[21, 4], [21, 6]]);
     const k1 = [g.rotate(1), g.curPiece_row, g.lockDelayZeroed];

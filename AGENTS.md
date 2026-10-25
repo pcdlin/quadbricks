@@ -438,7 +438,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 - ARS shapes (`ARS_SHAPES`): bottom-aligned, L/J/T spawn flat side up, I/S/Z two states,
   spawn rows 19–20 (engine row 1). Sega colours (`ARS_PALETTE`: I red, T cyan, S purple, Z green).
 - Kicks: basic, then 1 right, then 1 left. Centre-column rule for L/J/T rotating from
-  3-wide orientations. TGM3 extras: I wall kicks (1 left, 1 right, 2 right), I floor kick
+  3-wide orientations. TGM3 extras: I wall kicks (1 left, 1 right, 2 right; only for an I touching a wall or the
+  stack beside it, tetris.wiki and Cambridge), I floor kick
   (up 1 or 2, only when resting, once), T floor kick into pointing-up (twice); rotating
   after a floor kick zeroes the lock delay.
 - Up = sonic drop (no lock); soft drop locks on the ground; step reset only.
@@ -624,9 +625,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   "at least 300 lines" over 30 levels; no grades (Tetris Effect grades by lines); ARE and DAS stay the
   Guideline's. Dig: garbage cells take random piece colours (no grey block here); the timer is the
   score, as in NullpoMino.
-- Centre-column rule scans only the rotated piece's cells; the I right-1 kick has no
-  "touching the stack" condition; the T floor kick is tried after failed wall kicks
-  (NullpoMino behaviour).
+- Centre-column rule scans only the rotated piece's cells; the I's wall kicks are tried in
+  NullpoMino's order; the T floor kick is tried after failed wall kicks (NullpoMino behaviour).
 - Staff roll timings (3238-frame roll, row-by-row field clear, fade over the last 10 of 300
   frames, invisible after 2) follow NullpoMino's `GradeMania3Mode`.
   With the Exams card Off, surviving the invisible roll at displayed grade 32 gives Grand Master
