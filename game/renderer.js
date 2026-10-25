@@ -111,7 +111,7 @@ vec3 turn(vec3 v) {
 const BLOCK_VS = `
 attribute vec3 aGrid; // u, v across the block (0..1); z 1 for the foot of the sides
 uniform vec4 uCell;   // x, y and size of the cell (logical units)
-uniform vec2 uSquash; // scale across (about the cell's centre) and of the height
+uniform vec2 uSquash; // scale across (about the cell's centre, free sides only) and of the height
 uniform vec4 uCam;    // field centre x, y (logical), camera distance, depth offset
 uniform vec2 uShift;  // the field's shake (logical units)
 uniform vec3 uView;   // logical units to pixels: scale, x and y offset
@@ -129,7 +129,9 @@ void main() {
     float z = aGrid.z > 0.5 && d < 0.001 ? 0.0 : blockHeight(d);
     vP = p;
     vZ = z;
-    vec2 b = uCell.xy + ((p - 0.5) * uSquash.x + 0.5) * uCell.z;
+    // squashed across, only on free sides: merged ones stay on the cell's edge, so no seams open
+    vec2 free = vec2(p.x < 0.5 ? uOpen.x : uOpen.y, p.y < 0.5 ? uOpen.z : uOpen.w);
+    vec2 b = uCell.xy + (p + (p - 0.5) * (uSquash.x - 1.0) * free) * uCell.z;
     vBoardY = b.y;
     vec3 w = turn(vec3(b - uCam.xy, z * uSquash.y * uCell.z));
     w.z += uCam.w;

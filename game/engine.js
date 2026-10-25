@@ -304,6 +304,8 @@ const BLOCK_PASS_MARGIN = 40; // room around the frame in the blocks' layer for 
 // drop SQUASH_DROP from one row to SQUASH_DROP_ROWS or more (times the effects level)
 const SQUASH_LIFE = 40, SQUASH_DECAY = 7, SQUASH_FREQ = 0.42, SQUASH_BULGE = 0.45;
 const SQUASH_LOCK = 0.12, SQUASH_DROP = [0.18, 0.38], SQUASH_DROP_ROWS = 16;
+const SQUASH_JOIN = 0.015; // blocks squashing more differently than this don't merge
+
 const BOARD_GLOW_BLUR = [44, 74]; // board glow blur (device px) at rest and at full pulse
 
 // Timing: a game frame may run this many ms early, so a display refresh landing just
@@ -2227,7 +2229,10 @@ class Engine {
         const offs = this.rowOffsets = this.rowOffsets || [];
         for (let i = firstRow; i < HEIGHT; i++) offs[i] = game.getDropOffset(i, this.tickPhase);
         const shown = (i, j) => i >= firstRow && i < HEIGHT && j >= 0 && j < WIDTH && game.getCell(i, j) && game.getCellAlpha(i, j) > 0;
-        const stackJoins = (i, j, i2, j2) => shown(i2, j2) && pal[game.getCell(i2, j2)] === pal[game.getCell(i, j)] && offs[i2] === offs[i];
+        // a squashing piece joins the stack only once it has settled, so their heights match
+        const squashOf = (i, j) => squash.get(i * WIDTH + j) || 0;
+        const stackJoins = (i, j, i2, j2) => shown(i2, j2) && pal[game.getCell(i2, j2)] === pal[game.getCell(i, j)] &&
+            offs[i2] === offs[i] && Math.abs(squashOf(i2, j2) - squashOf(i, j)) < SQUASH_JOIN;
         for (let i = firstRow; i < HEIGHT; i++) {
             for (let j = 0; j < WIDTH; j++) {
                 if (!shown(i, j)) continue;
