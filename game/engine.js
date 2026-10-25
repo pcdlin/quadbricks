@@ -1512,13 +1512,10 @@ class Engine {
                 break;
             }
             case MENU_SETUP: {
-                // Breadcrumb: rule set and mode, then what the cards choose (e.g. level and height)
+                // Breadcrumb: rule set and mode, then a generic prompt
                 const ruleset = RULESETS[this.rulesetpos];
-                const items = this.setupItems();
-                const names = items.map(item => item.name);
-                const choice = "CHOOSE " + (names.length > 1 ? names.slice(0, -1).join(", ") + " AND " : "") + names[names.length - 1];
-                heading(`${ruleset.name}  ·  ${this.chosenMode().name}  ·  ${choice}`.toUpperCase());
-                this.drawMenuList(this.settingCards(items), this.setuppos, listTop);
+                heading(`${ruleset.name}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase());
+                this.drawMenuList(this.settingCards(this.setupItems()), this.setuppos, listTop);
                 hint = "← →  CHANGE      ENTER  START      ESC  BACK";
                 break;
             }
