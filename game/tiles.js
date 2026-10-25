@@ -34,6 +34,30 @@ const GB_SHADES = ["#0f380f", "#306230", "#8bac0f", "#c8dc9a"]; // lightest lift
 const MONO_INK = "244,236,220"; // Mono's warm gallery white
 const holoLum = (index) => index > 7 ? 70 : 58 + index * 3; // the neutral colour (8) sits mid-range
 
+// Stained glass: the pane inside the lead cames, and the lead seam across it (its direction
+// alternates by colour)
+const STAINED_LEAD = "#17141c";
+function stainedPane(size) {
+    const inset = 0, w = size, came = size * 0.08; // edge to edge: neighbours share their lead
+    return { inset, w, came, gx: inset + came, gw: w - came * 2 };
+}
+function stainedSeam(g, size, index, color, lineWidth) {
+    const { came, gx, gw } = stainedPane(size);
+    g.beginPath();
+    if (index % 2) { g.moveTo(gx, gx + gw * 0.62); g.lineTo(gx + gw * 0.58, gx); }
+    else { g.moveTo(gx + gw * 0.4, gx + gw); g.lineTo(gx + gw, gx + gw * 0.35); }
+    g.strokeStyle = color;
+    g.lineWidth = lineWidth || came;
+    g.lineCap = "round";
+    g.stroke();
+}
+
+// A repeatable pseudo-random sequence in [0, 1), so a style's texture is the same every time
+function seededRandom(seed) {
+    let s = seed;
+    return () => (s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff) / 0x80000000;
+}
+
 const TILESETS = {
     // Translucent, luminous glass cells that bloom into the backdrop (Tetris Effect look)
     radiant: {
@@ -251,6 +275,80 @@ const TILESETS = {
             g.lineWidth = active ? 2 : 1.5;
             for (let i = active ? 3 : 2; i > 0; i--) g.stroke(); // each pass adds to the glow
             g.shadowBlur = 0;
+        },
+    },
+
+    // Backlit coloured glass in lead cames, a lead seam across each pane. The light is the
+    // engine's lamp (lamp: "always"), drawn over the glass and moving with the field's tilt.
+    stained: {
+        name: "Stained glass",
+        lamp: "always",
+        lampMask(g, size, index) { // the glass, not the lead
+            const { gx, gw } = stainedPane(size);
+            g.fillRect(gx, gx, gw, gw);
+            g.globalCompositeOperation = "destination-out";
+            stainedSeam(g, size, index, "#000");
+            g.globalCompositeOperation = "source-over";
+        },
+        pad: (style) => style === "active" ? 8 : 0,
+        draw(g, col, size, style, index) {
+            const { inset, w, gx, gw } = stainedPane(size);
+            if (style === "ghost") {
+                g.fillStyle = col.base + "16";
+                g.fillRect(gx, gx, gw, gw);
+                g.strokeStyle = col.light + "88";
+                g.lineWidth = 1.5;
+                g.strokeRect(inset + 1.5, inset + 1.5, w - 3, w - 3);
+                g.lineWidth = 1;
+                stainedSeam(g, size, index, col.light + "55", 1);
+                return;
+            }
+            const active = style === "active";
+            // the lead frame; the falling piece's light spills round it
+            if (active) {
+                g.shadowColor = col.light;
+                g.shadowBlur = 12;
+            }
+            g.beginPath();
+            g.rect(inset, inset, w, w);
+            g.fillStyle = STAINED_LEAD;
+            g.fill();
+            g.shadowBlur = 0;
+            // the glass, darker towards the bottom right, mottled
+            g.save();
+            g.beginPath();
+            g.rect(gx, gx, gw, gw);
+            g.clip();
+            const body = g.createLinearGradient(gx, gx, gx + gw, gx + gw);
+            body.addColorStop(0, col.base);
+            body.addColorStop(1, col.dark);
+            g.fillStyle = body;
+            g.globalAlpha = active ? 1 : 0.82;
+            g.fillRect(gx, gx, gw, gw);
+            g.globalAlpha = 1;
+            const rnd = seededRandom(index * 97 + 7);
+            for (let i = 0; i < 7; i++) {
+                const x = gx + rnd() * gw, y = gx + rnd() * gw, rad = gw * (0.12 + rnd() * 0.22);
+                const blot = g.createRadialGradient(x, y, 0, x, y, rad);
+                blot.addColorStop(0, rnd() < 0.5 ? "rgba(255,255,255,0.16)" : "rgba(0,0,20,0.18)");
+                blot.addColorStop(1, "rgba(0,0,0,0)");
+                g.fillStyle = blot;
+                g.fillRect(gx, gx, gw, gw);
+            }
+            g.restore();
+            stainedSeam(g, size, index, STAINED_LEAD);
+            // a glint along the cames' inner top-left edge
+            g.beginPath();
+            g.moveTo(gx - 0.5, gx + gw);
+            g.lineTo(gx - 0.5, gx - 0.5);
+            g.lineTo(gx + gw, gx - 0.5);
+            g.strokeStyle = "rgba(255,255,255,0.14)";
+            g.lineWidth = 1;
+            g.stroke();
+            if (!active) {
+                g.fillStyle = "rgba(6,8,22,0.16)";
+                g.fillRect(inset, inset, w, w);
+            }
         },
     },
 
