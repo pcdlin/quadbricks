@@ -128,7 +128,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   the abbreviation spelled out and one line on what it does, drawn under the compact card list for
   the selected item. `options.handling` goes to `RuleGame` in `initGame()`; changes made while a
   game is paused apply at once (`applyHandling()` → `RuleGame.setHandling()`).
-- The Visuals screen lists Block style first, then Scale, then the rest (`VISUAL_ITEMS`). The Block
+- The Visuals screen lists Block style first, then Confetti, then Scale, then the rest (`VISUAL_ITEMS`). The Block
   style card (`preview: true`) is a little taller (`menuRowHeight()`) and shows the style's preview at
   its right, beside the name (`drawTilesetPreview()`: one active, one locked and one ghost block in
   different colours, `PREVIEW_BLOCKS`, at their size in the well). The list is
@@ -303,6 +303,7 @@ DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn
 - `PIECE_COLORS` (index 1..7 = cyan, purple, orange, blue, green, red, yellow) were sampled
   from the legacy tile PNGs. Effects receive colour indices (types mapped through
   `game.palette`), so TGM3 Classic's Sega colours work everywhere.
+- Confetti (Options → Visuals → Confetti, `options.confetti`, `CONFETTI_STYLES` in `options.js`): Glow (default, soft additive light motes), Paper (tumbling slips that flutter down), Sparks (streaks along their flight), Stars (twinkling four-point stars), Bubbles (rings floating up) and Pixels (squares snapped to a 3-unit grid, fading in steps). `CONFETTI_SPECS` (`engine.js`) gives each its count, size, motion, life, alpha and blending; `confettiSprites()` draws an atlas with a row per sprite style and a column per colour (`CONFETTI_COLORS`), turned sprites go through `confettiQuad()`. Light styles are added, Paper and Pixels drawn normally after them. TGM3 Easy's fireworks are always Glow.
 - Effects: confetti per cleared cell, cleared-row flash, hard-drop flash, clear messages
   in the right column below the next pieces (bigger/warmer for longer combos).
   Options → Visuals → Effects (`options.effects`, level 0–3: Off, Subtle, Normal, Intense; `effectScale` multiplies strengths) at Off turns off confetti, the cleared-row flash and the
@@ -706,7 +707,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), tileset, confetti, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
   qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).
