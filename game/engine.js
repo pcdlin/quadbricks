@@ -20,7 +20,7 @@ const PUSH_BITS = { left: LEFT_PUSH, right: RIGHT_PUSH, hard: HARD_PUSH, soft: S
 const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELEASE, rotl: ROTL_RELEASE, rotr: ROTR_RELEASE, hold: HOLD_RELEASE };
 
 // Menu screens
-const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_LEVEL = 7;
+const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7;
 const MENU_DEPTH = [0, 1, 2, 1, 2, 2, 2, 3];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
@@ -30,14 +30,20 @@ const MAIN_ITEMS = [
     { name: "Options", desc: "Controls, visuals and Guideline handling", accent: tetS, screen: MENU_OPTIONS },
 ];
 
-// Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with startLevels: the level (and
-// for those with startHeights, the garbage height). See rules.js
+// Start step 3 (MENU_SETUP), for modes with `setup`: setting cards changed with ← →, each choosing
+// one of its labels for a RuleGame argument: arg "variant" (the label's entry in values), or
+// "startLevel" and "height" (the label's index). Remembered per mode for the session (setupChoices)
+const indexLabels = count => Array.from({ length: count }, (_, i) => String(i));
+const levelSetup = count => ({ name: "Level", accent: tetT, arg: "startLevel", labels: indexLabels(count) });
+const HEIGHT_SETUP = { name: "Height", accent: tetZ, arg: "height", labels: indexLabels(GB_B_HEIGHTS) };
+const GOAL_SETUP = { name: "Goal", accent: tetO, arg: "variant", labels: ["150 lines", "Endless"], values: ["marathon", "standard"] };
+
+// Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
 const RULESETS = [
     { name: "Guideline", accent: tetT, desc: "SRS, 7-bag, T-spins and back-to-backs",
       modes: [
-          { name: "Endless", mode: guideline, variant: "standard", accent: tetI, desc: "Keeps going at level 15 speed" },
-          { name: "Marathon", mode: guideline, variant: "marathon", accent: tetO, desc: "Clear 150 lines" },
+          { name: "Marathon", mode: guideline, variant: "marathon", setup: [GOAL_SETUP], accent: tetO, desc: "Clear 150 lines, or keep going" },
           { name: "Sprint", mode: guideline, variant: "sprint", accent: tetL, desc: "Clear 40 lines as fast as you can" },
           { name: "Ultra", mode: guideline, variant: "ultra", accent: tetZ, desc: "Score as much as you can in two minutes" },
       ] },
@@ -58,13 +64,13 @@ const RULESETS = [
       ] },
     { name: "NES", accent: tetJ, desc: "NES (1989) — no hard drop, no hold, no kicks",
       modes: [
-          { name: "A-Type", mode: nesTetris, variant: "standard", startLevels: NES_START_LEVELS, accent: tetL, desc: "Endless, faster every 10 lines, top speed at level 29" },
-          { name: "B-Type", mode: nesTetris, variant: "btype", startLevels: NES_START_LEVELS, startHeights: GB_B_HEIGHTS, accent: tetS, desc: "Clear 25 lines, starting over garbage" },
+          { name: "A-Type", mode: nesTetris, variant: "standard", setup: [levelSetup(NES_START_LEVELS)], accent: tetL, desc: "Endless, faster every 10 lines, top speed at level 29" },
+          { name: "B-Type", mode: nesTetris, variant: "btype", setup: [levelSetup(NES_START_LEVELS), HEIGHT_SETUP], accent: tetS, desc: "Clear 25 lines, starting over garbage" },
       ] },
     { name: "GB", accent: tetO, desc: "GB (1989) — no hard drop, no hold, no kicks",
       modes: [
-          { name: "A-Type", mode: gameBoy, variant: "standard", startLevels: GB_START_LEVELS, accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
-          { name: "B-Type", mode: gameBoy, variant: "btype", startLevels: GB_START_LEVELS, startHeights: GB_B_HEIGHTS, accent: tetS, desc: "Clear 25 lines, starting over garbage" },
+          { name: "A-Type", mode: gameBoy, variant: "standard", setup: [levelSetup(GB_START_LEVELS)], accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
+          { name: "B-Type", mode: gameBoy, variant: "btype", setup: [levelSetup(GB_START_LEVELS), HEIGHT_SETUP], accent: tetS, desc: "Clear 25 lines, starting over garbage" },
       ] },
 ];
 const OPTIONS_ITEMS = [
@@ -108,15 +114,8 @@ function touchWords(s) {
         .replace(/ESC  BACK/g, "BACK").replace(/ENTER/g, "OK").replace(/ESC/g, "BACK");
 }
 
-// Start step 3 (NES and GB): the starting level, and B-Type's height (levelItems()). choice: the mode's
-// property with the number of values, also the Engine map that remembers the choice per mode
-const LEVEL_ITEMS = [
-    { id: "startLevel", name: "Level", accent: tetT, choice: "startLevels" },
-    { id: "startHeight", name: "Height", accent: tetZ, choice: "startHeights" },
-];
-const LEVEL_CHOICES = Object.fromEntries(LEVEL_ITEMS.map(item => [item.id, item.choice]));
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
-const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals and rule set cards, tighter than the other menus
+const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals, rule set and mode cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
 // Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
 const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
@@ -275,11 +274,10 @@ class Engine {
         this.optionspos = 0;  // Controls, Visuals or Guideline handling
         this.visualspos = 0;
         this.handlingpos = 0;
-        this.levelpos = 0;    // Level, or Height (B-Type)
+        this.setuppos = 0;    // setup card
         this.layoutBoard(VISIBLE_TOP);
         this.layout = LAYOUT_FULL; // full or compact, by window (resize())
-        this.startLevels = {}; // starting level chosen per mode ("rule set.mode"), kept for the session
-        this.startHeights = {}; // B-Type height, the same way
+        this.setupChoices = {}; // setup card choices ("rule set.mode.card": label index), kept for the session
         this.visualsScroll = 0;       // Visuals list scrolled out above (logical units), eased
         this.visualsScrollTarget = 0;
         this.controlspos = 0; // key action, or "reset" after the last one
@@ -747,9 +745,9 @@ class Engine {
             [MENU_CONTROLS]: { pos: "controlspos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
-            [MENU_LEVEL]: { pos: "levelpos", count: () => this.levelItems().length, back: MENU_MODES },
+            [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: MENU_MODES },
         };
-        const settings = this.menuStep === MENU_LEVEL ? this.levelItems() : SETTING_ITEMS[this.menuStep];
+        const settings = this.menuStep === MENU_SETUP ? this.setupItems() : SETTING_ITEMS[this.menuStep];
         while (this.events.length) {
             // repeat: the key is held. Lists and values then stop at their ends instead of wrapping
             const { code, down, repeat } = this.events.shift();
@@ -779,10 +777,10 @@ class Engine {
                 } else if (this.menuStep === MENU_RULES) {
                     this.menuStep = MENU_MODES;
                     this.menupos = 0;
-                } else if (this.menuStep === MENU_MODES && this.chosenMode().startLevels) {
-                    this.menuStep = MENU_LEVEL;
-                    this.levelpos = 0;
-                } else if (this.menuStep === MENU_MODES || this.menuStep === MENU_LEVEL) {
+                } else if (this.menuStep === MENU_MODES && this.chosenMode().setup) {
+                    this.menuStep = MENU_SETUP;
+                    this.setuppos = 0;
+                } else if (this.menuStep === MENU_MODES || this.menuStep === MENU_SETUP) {
                     this.menuAction();
                     return;
                 } else if (settings) {
@@ -795,12 +793,12 @@ class Engine {
         }
     }
 
-    // Visuals and Guideline handling screens: step a setting (dir -1 or 1; toggles ignore it).
+    // Visuals, Guideline handling and setup screens: step a setting (dir -1 or 1; toggles ignore it).
     // wrap false (key held): stop at the first or last value; toggles don't flip
     changeOption(id, dir, wrap = true) {
-        const choice = LEVEL_CHOICES[id];
-        if (choice) {
-            this[choice][this.chosenModeKey()] = stepIndex(this.chosenValue(choice), dir, this.chosenMode()[choice], wrap);
+        const setup = this.setupCard(id);
+        if (setup) {
+            this.setupChoices[setup.key] = stepIndex(this.setupIndex(setup.n), dir, setup.item.labels.length, wrap);
             return;
         }
         if (id === "resetHandling") this.options.resetHandling();
@@ -817,7 +815,8 @@ class Engine {
     // A setting's current value as shown on its card
     optionValue(id) {
         const o = this.options;
-        if (LEVEL_CHOICES[id]) return String(this.chosenValue(LEVEL_CHOICES[id]));
+        const setup = this.setupCard(id);
+        if (setup) return setup.item.labels[this.setupIndex(setup.n)];
         if (OPTION_TOGGLES.includes(id)) return o[id] ? "On" : "Off";
         switch (id) {
             case "effects": return EFFECT_LEVELS[o.effects].name;
@@ -837,30 +836,37 @@ class Engine {
         return items.map(item => item.action ? item : { ...item, desc: `◀  ${this.optionValue(item.id)}  ▶` });
     }
 
-    // The mode selected on the modes screen, and its key for the remembered starting level
+    // The mode selected on the modes screen
     chosenMode() {
         return RULESETS[this.rulesetpos].modes[this.menupos];
     }
 
-    chosenModeKey() {
-        return `${this.rulesetpos}.${this.menupos}`;
+    // The setup screen's cards for the chosen mode (ids "setup0", "setup1", ...)
+    setupItems() {
+        return (this.chosenMode().setup || []).map(({ name, accent }, n) => ({ id: "setup" + n, name, accent }));
     }
 
-    // The chosen mode's remembered start level or height (choice "startLevels" or "startHeights"),
-    // 0 for modes without one
-    chosenValue(choice) {
-        return this.chosenMode()[choice] ? this[choice][this.chosenModeKey()] || 0 : 0;
+    // A setup card's descriptor, its number and its key in setupChoices; null for other ids
+    setupCard(id) {
+        if (!id.startsWith("setup")) return null;
+        const n = Number(id.slice(5));
+        return { n, item: this.chosenMode().setup[n], key: `${this.rulesetpos}.${this.menupos}.${n}` };
     }
 
-    // The level screen's cards: the level, and the height for modes that have one
-    levelItems() {
-        return this.chosenMode().startHeights ? LEVEL_ITEMS : LEVEL_ITEMS.slice(0, 1);
+    // The chosen mode's remembered label index for setup card n (0 at first)
+    setupIndex(n) {
+        return this.setupChoices[`${this.rulesetpos}.${this.menupos}.${n}`] || 0;
     }
 
-    // Activation of menu item
+    // Activation of menu item: the mode, with its setup cards' choices
     menuAction() {
-        const { mode, variant } = this.chosenMode();
-        this.initGame(mode, variant, this.chosenValue("startLevels"), this.chosenValue("startHeights"));
+        const { mode, variant, setup = [] } = this.chosenMode();
+        const args = { variant, startLevel: 0, height: 0 };
+        setup.forEach((item, n) => {
+            const i = this.setupIndex(n);
+            args[item.arg] = item.values ? item.values[i] : i;
+        });
+        this.initGame(mode, args.variant, args.startLevel, args.height);
         this.GAMESTATE = STATE_GAME;
     }
 
@@ -1446,16 +1452,17 @@ class Engine {
                 // Breadcrumb: the chosen rule set, then its modes
                 const ruleset = RULESETS[this.rulesetpos];
                 heading(ruleset.name.toUpperCase() + "  ·  CHOOSE A MODE");
-                this.drawMenuList(ruleset.modes, this.menupos, listTop);
-                hint = (this.chosenMode().startLevels ? "ENTER  SELECT" : "ENTER  START") + "      ESC  BACK";
+                this.drawMenuList(ruleset.modes, this.menupos, listTop, VISUALS_ROWS.rowH, VISUALS_ROWS.gap);
+                hint = (this.chosenMode().setup ? "ENTER  SELECT" : "ENTER  START") + "      ESC  BACK";
                 break;
             }
-            case MENU_LEVEL: {
-                // Breadcrumb: rule set and mode, then the level (and height)
+            case MENU_SETUP: {
+                // Breadcrumb: rule set and mode, then what the cards choose (e.g. level and height)
                 const ruleset = RULESETS[this.rulesetpos];
-                const choice = this.chosenMode().startHeights ? "CHOOSE LEVEL AND HEIGHT" : "CHOOSE A LEVEL";
+                const items = this.setupItems();
+                const choice = "CHOOSE " + items.map(item => item.name).join(" AND ");
                 heading(`${ruleset.name}  ·  ${this.chosenMode().name}  ·  ${choice}`.toUpperCase());
-                this.drawMenuList(this.settingCards(this.levelItems()), this.levelpos, listTop);
+                this.drawMenuList(this.settingCards(items), this.setuppos, listTop);
                 hint = "← →  CHANGE      ENTER  START      ESC  BACK";
                 break;
             }

@@ -82,12 +82,15 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 - Game keys come from `options.keys` (rebindable). Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
 - Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: New Game, Options; `mainItems()` adds Restart first while a game exists, restarting it with the same settings, and Esc from a game opens the menu on it). New Game → `MENU_RULES` (rule sets) →
-  `MENU_MODES` (each rule set's `modes`: Endless…Ultra, Master/20G for TGM1, Master/Death for
-  TAP, World/Classic for TGM3, A-Type/B-Type for NES and GB) → game; modes with `startLevels` (NES's
-  and GB's) go through `MENU_LEVEL` first,
-  setting cards (`levelItems()`: Level 0–19 for NES, 0–9 for GB, plus Height 0–5 for modes with `startHeights`, B-Type),
-  remembered per mode for the session (`startLevels`/`startHeights` maps, keyed by rule set and mode
-  index). Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings),
+  `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra for the Guideline, Master/20G
+  for TGM1, Master/Death for TAP, World/Classic for TGM3, A-Type/B-Type for NES and GB) → game; modes
+  with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
+  `labels` for a `RuleGame` argument (`arg`): `"variant"` (the label's entry in `values`: Marathon's
+  Goal, 150 lines / Endless), or `"startLevel"` / `"height"` (the label's index: Level 0–19 for NES,
+  0–9 for GB; Height 0–5 for B-Type).
+  Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
+  `menuAction()` turns them into arguments). The rule set and mode lists use the Visuals screen's
+  tighter cards (`VISUALS_ROWS`). Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings),
   `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
 - Visuals and Guideline handling are setting screens (`SETTING_ITEMS`: `VISUAL_ITEMS`, `HANDLING_ITEMS`),
@@ -401,7 +404,7 @@ length, M-roll section rules as code) and `GradeManiaMode.java` (TGM1's GM check
   probability 0.5, every row with a hole; the stats show a HEIGHT row), ends with COMPLETE at 25 lines.
 
 ### Variants (all rule sets)
-- `standard`: as specified (Guideline's "Endless"). `marathon`: Guideline only, ends with
+- `standard`: as specified (Guideline's "Endless", Marathon's Goal card). `marathon`: Guideline only, ends with
   COMPLETE after 150 lines (`GUIDELINE_LINE_GOALS`). `sprint`: Guideline only, COMPLETE after 40
   lines with a TIME row. `ultra`: Guideline only, TIME UP after 2 minutes (`GUIDELINE_ULTRA_FRAMES`)
   with a countdown TIME row. Sprint and ultra stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
@@ -469,8 +472,9 @@ add new globals there.
   with the combo chain; M (rebindable) mutes.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
 - Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "NES" and "GB" (in that order;
-  the rule set list uses the Visuals screen's tighter cards so six fit). Guideline's
-  modes are "Endless", "Marathon", "Sprint" and "Ultra", TGM1's "Master" and "20G", TGM3's are
+  the rule set and mode lists use the Visuals screen's tighter cards). Guideline's
+  modes are "Marathon" (Goal: 150 lines or Endless), "Sprint" and "Ultra"; Endless moved under
+  Marathon to keep the list tidy. TGM1's "Master" and "20G", TGM3's are
   "World" and "Classic", TAP's "Master" and "Death", NES's and GB's "A-Type" and "B-Type". The GB
   rule set was named "1989" until the NES one came (the user's rename). GB keeps every visual style (Guideline colours,
   the usual board and effects); only its well is shorter, 18 rows as on the Game Boy (the user's request).
