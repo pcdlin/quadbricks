@@ -251,6 +251,7 @@ class RuleGame {
 
         this.clearedCells = [];
         this.hardDropCells = [];
+        this.lockedCells = []; // blocks of each piece locked, where they ended up (3D blocks squash on landing)
         this.bumps = [];
         this.wallBumped = false;
         this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "clear1".."clear4" (+ "c<chain>" in a combo)
@@ -370,6 +371,7 @@ class RuleGame {
     // Event queues the engine drains every frame
     takeClearedCells() { return this.drain("clearedCells"); }
     takeHardDropCells() { return this.drain("hardDropCells"); }
+    takeLockedCells() { return this.drain("lockedCells"); } // dist: rows hard-dropped (0 for other locks)
     takeBumps() { return this.drain("bumps"); } // directions (-1 left, 1 right) pushed against the border
     takeSounds() { return this.drain("sounds"); }
     // Fireworks fired since the last call (TGM3 Easy's are drawn as bursts)
@@ -1050,13 +1052,13 @@ class RuleGame {
         if (this.gameover) return;
 
         const collapseNow = rows.length > 0 && this.lineClearDelay === 0;
-        if (fromHardDrop) {
-            for (const cell of cells) {
-                // cleared cells keep the row they landed in, for the drop trail (there's no block to flash)
-                const cleared = rows.includes(cell.row);
-                const below = collapseNow && !cleared ? rows.filter(r => r > cell.row).length : 0;
-                this.hardDropCells.push({ row: cell.row + below, col: cell.col, type, dist: this.hardDropDistance, cleared });
-            }
+        for (const cell of cells) {
+            // cleared cells keep the row they landed in, for the drop trail (there's no block to flash)
+            const cleared = rows.includes(cell.row);
+            const below = collapseNow && !cleared ? rows.filter(r => r > cell.row).length : 0;
+            const dist = fromHardDrop ? this.hardDropDistance : 0;
+            if (fromHardDrop) this.hardDropCells.push({ row: cell.row + below, col: cell.col, type, dist, cleared });
+            if (!cleared && (this.bufferTop === null || cell.row >= this.bufferTop)) this.lockedCells.push({ row: cell.row + below, col: cell.col, dist });
         }
 
         if (rows.length === 0) {

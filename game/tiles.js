@@ -304,6 +304,36 @@ const TILESETS = {
         },
     },
 
+    // Moulded plastic in 3D: in the well, HOLD and NEXT the engine draws each block as a mesh
+    // (GLRenderer.block(), Engine.drawBoardBlocks()) standing out of the field by mesh.height cells,
+    // rounded by mesh.bevel and merged with neighbours of its colour into one piece. The sprites
+    // drawn here serve the ghost (and anything drawn flat).
+    plastic: {
+        name: "Plastic",
+        mesh: { bevel: 0.3, height: 0.5, gap: 0.045 },
+        lamp: false, // lit in its own shader
+        pad: () => 0,
+        draw(g, col, size, style) {
+            const inset = 1.5, w = size - inset * 2, r = size * 0.3;
+            g.beginPath();
+            g.roundRect(inset, inset, w, w, r);
+            if (style === "ghost") {
+                g.fillStyle = col.base + "2a";
+                g.fill();
+                g.strokeStyle = col.light + "99";
+                g.lineWidth = 1.5;
+                g.stroke();
+                return;
+            }
+            const body = g.createRadialGradient(size * 0.36, size * 0.32, size * 0.05, size * 0.5, size * 0.5, size * 0.7);
+            body.addColorStop(0, col.light);
+            body.addColorStop(0.5, col.base);
+            body.addColorStop(1, col.dark);
+            g.fillStyle = body;
+            g.fill();
+        },
+    },
+
     // Dark glass cells with glowing coloured outlines
     neon: {
         name: "Neon",

@@ -41,7 +41,7 @@ when WebGL is unavailable).
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings) and the clear ripples' refraction pass. |
-| `game/tiles.js` | Block styles (`TILESETS`): Radiant (default, glassy glow), Glossy, Flat, Neon, Stained glass (`stained`; backlit glass in lead cames, lit only by the lamp, `lamp: "always"`), Faceted, Pixel, Mono, Holo (grey metal; styles with `sheen: true` get `Engine.drawSheen()`, an additive colour gloss per block whose strength and hue follow the field's tilt (`updateSheen()`, `HOLO_*`): grey face-on, shimmering when tilted, so grey for good at tilt Off) and 1989 (`retro1989`; monochrome green, each piece its own pattern), Original. Loads the Original PNGs. |
+| `game/tiles.js` | Block styles (`TILESETS`): Radiant (default, glassy glow), Glossy, Flat, Neon, Stained glass (`stained`; backlit glass in lead cames, lit only by the lamp, `lamp: "always"`), Faceted, Pixel, Mono, Holo (grey metal; styles with `sheen: true` get `Engine.drawSheen()`, an additive colour gloss per block whose strength and hue follow the field's tilt (`updateSheen()`, `HOLO_*`): grey face-on, shimmering when tilted, so grey for good at tilt Off), Plastic (`plastic`, `mesh`: 3D blocks, below) and 1989 (`retro1989`; monochrome green, each piece its own pattern), Original. Loads the Original PNGs. |
 | `game/options.js` | `Options`: key bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
@@ -217,7 +217,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   (`recordSetup`) at the foot of the NEXT column, its parts stacked when the line doesn't fit
   (`drawGameBest()`). `Records` (`options.js`) keeps them.
 - Event queues the engine drains every frame: `takeClearedCells()` (confetti),
-  `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
+  `takeLockedCells()` (each locked piece's blocks where they ended up, with the hard drop's `dist`: the 3D blocks' squash), `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
   (`{text, kind, value}`, kinds `clear`/`tspin`/`b2b`/`combo`/`pc`) with `actionAge`.
 - `chain`: consecutive clearing pieces, −1 after a miss, then 0, 1, 2…; identical in every
@@ -298,6 +298,21 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   grid, blocks, flashes, spawn rows) into a render target and projects it about the
   board's centre from `TILT_DISTANCE`; at rest it is drawn straight to the screen.
   Confetti, side panels and banners stay flat; the board glow follows the shake only.
+- 3D blocks (block styles with `mesh: { bevel, height, gap }`, cell units: Plastic): the well's
+  stack and falling piece, HOLD, NEXT and the menus' pieces are lit meshes instead of sprites
+  (`GLRenderer.beginBlocks()` / `block()` / `endBlocks()`, `BLOCK_VS`/`BLOCK_FS`): a rounded
+  cushion per cell standing `height` out of the field towards the camera, in the field's own
+  perspective and tilt (`boardProject()` is the same projection), so their sides show as it moves.
+  A side whose neighbour has the same colour (and falls with it; the piece only within itself)
+  runs flat to the cell's edge, so pieces read as one moulded part; inner corners get rounded
+  notches (`setJoins()`). `drawBoard()` collects them (`collectBlocks()`) and draws only their
+  soft shadows on the floor (`BLOCK_LIGHT`, `drawBlockShadows()`); `drawGame()` then draws them over
+  the field (`drawBoardBlocks()`), sorted from the farthest from the point under the camera, with
+  back faces culled (no depth buffer). The canvas has no antialiasing, so they go into a layer at
+  `BLOCK_SUPERSAMPLE` times the resolution (`meshPass()`, one render target per key). A locked
+  piece squashes and springs back (`squashes`, from `takeLockedCells()`; `SQUASH_*`, stronger for
+  longer hard drops, scaled by the effects level); the drop flash and the lock fade are uniforms.
+  The ghost stays a sprite; the stack border and lamp aren't drawn with them.
 - Blocks are pre-rendered sprites in one atlas texture per `tileset:size` (a row per style,
   the seven colours side by side); styles are `active` (falling piece), `locked` (stack),
   `ghost`. The falling piece cross-fades from active to locked as the lock delay runs out.
