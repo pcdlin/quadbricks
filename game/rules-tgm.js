@@ -71,6 +71,8 @@ const TGM_ROLL_FADE_FRAMES = 10;
 const TGM_INVISIBLE_COOLS = 9, TGM_INVISIBLE_GRADE = 27; // all COOLs and internal grade 27 for the invisible roll
 // Roll grade points in hundredths of a grade, per 1-4 lines, and for surviving the roll
 const TGM_ROLL_POINTS = { fading: [0, 4, 8, 12, 26], invisible: [0, 10, 20, 30, 100] };
+// Big Master gets no section COOLs, so always the fading roll, with these points (tetris.wiki)
+const TGM_BIG_ROLL_POINTS = [0, 8, 26, 34, 42];
 const TGM_ROLL_CLEAR = { fading: 50, invisible: 160 };
 
 // Hidden test setups (testSetup): how close to the end of the roll and to 15:00 they jump
@@ -1224,7 +1226,8 @@ class TiGame extends TgmGame {
         const section = Math.floor(this.level / 100);
         const seconds = (this.frames - this.sectionStart) / 60;
         const finished = section > this.section || this.level >= TGM_MAX_LEVEL;
-        if (!this.coolChecked && this.level % 100 >= 70 && this.section < TGM_COOL_TIME.length) {
+        // Big: no section COOLs (tetris.wiki)
+        if (!this.coolChecked && !this.bigMode && this.level % 100 >= 70 && this.section < TGM_COOL_TIME.length) {
             this.coolChecked = true;
             if (seconds <= TGM_COOL_TIME[this.section]
                 && (!this.prevCool || seconds <= this.prevCoolTime + TGM_COOL_SLACK)) {
@@ -1258,7 +1261,7 @@ class TiGame extends TgmGame {
 
     // Roll clears earn roll grade
     scoreRollClear(n) {
-        this.rollPoints += TGM_ROLL_POINTS[this.roll][n];
+        this.rollPoints += (this.bigMode ? TGM_BIG_ROLL_POINTS : TGM_ROLL_POINTS[this.roll])[n];
     }
 
     rollKind() {

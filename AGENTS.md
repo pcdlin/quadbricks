@@ -482,7 +482,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 ### Big modes
 - TGM1, TAP (but TGM+) and TGM3 take a Big card; ACE has its own Big mode (Normal's speeds; the wiki
   calls it "similar or possibly identical" to Normal). Shirase's rising garbage copies the bottom two
-  rows when big.
+  rows when big. TGM3 Big Master gets no section COOLs (so always the fading roll), and its roll clears
+  earn 0.08/0.26/0.34/0.42 (`TGM_BIG_ROLL_POINTS`; tetris.wiki).
 
 ### TAP TGM+
 - Sources: tetris.wiki (TAP page); NullpoMino `GarbageManiaMode.java` (pattern, roll length).

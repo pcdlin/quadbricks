@@ -2182,6 +2182,19 @@ function startedBig(mode, variant = "standard") {
         [row(18), row(19), row(20), row(21)], ["########..", "#########.", "########..", "#########."]);
 }
 
+{
+    // TGM3 Big Master: no section COOLs, and its own roll grade points (tetris.wiki, Codes)
+    const g = createGame(arika, "standard", 0, 0, {}, { big: true });
+    while (g.phase !== "active") g.advanceFrame(0);
+    g.level = 69; g.frames = 30 * 60;
+    g.level = 70; g.updateSection();
+    const cool = g.coolPending;
+    g.testSetup("roll");
+    while (g.phase === "rollstart") g.advanceFrame(0);
+    const points = [1, 2, 3, 4].map(n => { const before = g.rollPoints; g.scoreRollClear(n); return g.rollPoints - before; });
+    check("TGM3 Big Master: no COOL at *70 in time, roll clears give 0.08/0.26/0.34/0.42", [cool, g.roll, points], [false, "fading", [8, 26, 34, 42]]);
+}
+
 // ---------------------------------------------------------------- TAP Normal
 {
     const g = startedMode(tgmTap, "normal");
