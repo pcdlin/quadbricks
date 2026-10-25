@@ -137,7 +137,7 @@ const VISUAL_ITEMS = [
     { id: "confetti", name: "Confetti", accent: tetS, fx: true },
     { id: "rings", name: "Clear burst", accent: tetZ, fx: true },
     { id: "flash", name: "Row flash", accent: tetI, fx: true },
-    { id: "backdrop", name: "Backdrop", accent: tetJ },
+    { id: "backdrop", name: "Backdrop", accent: tetJ, fx: true },
     { id: "tilt", name: "3D tilt", accent: tetI, fx: true },
     { id: "shake", name: "Drop shake", accent: tetS, fx: true },
     { id: "trail", name: "Drop trail", accent: tetT, fx: true },
@@ -679,7 +679,7 @@ class Engine {
     // What the backdrop pass draws: colour wash, drifting lights, rings and board glow
     backdropScene() {
         const inGame = this.GAMESTATE === STATE_GAME;
-        const ambient = this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
+        const ambient = this.options.effects && this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
         const color = (s) => ({ ...s, rgb: hslToRgb(s.h, s.s, s.l) });
         const ps = this.pixelScale;
         const m = this.motion;
