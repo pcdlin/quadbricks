@@ -23,7 +23,7 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 There is no build step, bundler or package.json. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
 `game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js →
-sound.js → tiles.js → options.js → renderer.js → backdrop.js → touch.js → engine.js`,
+sound.js → tiles.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
 
@@ -42,8 +42,9 @@ when WebGL is unavailable).
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings), the clear ripples' refraction pass and the clear flares' pass. |
 | `game/tiles.js` | Block styles (`TILESETS`): Radiant (default, glassy glow), Glossy, Flat, Neon, Stained glass (`stained`; backlit glass in lead cames, lit only by the lamp, `lamp: "always"`), Faceted, Pixel, Mono, Holo (grey metal; styles with `sheen: true` get `Engine.drawSheen()`, an additive colour gloss per block whose strength and hue follow the field's tilt (`updateSheen()`, `HOLO_*`): grey face-on, shimmering when tilted, so grey for good at tilt Off) and 1989 (`retro1989`; monochrome green, each piece its own pattern), Original. Loads the Original PNGs. |
-| `game/options.js` | `Options`: key bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
+| `game/options.js` | `Options`: key and gamepad bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
+| `game/gamepad.js` | `GamepadControls`: gamepads (Gamepad API, standard layout, every pad merged), polled each game frame (`poll()`, from `Engine.frame()`). Like the touch controls they feed `Engine.onKey()` with each action's first key. In games the buttons and left stick directions act as bound in `options.pad` (Options → Gamepad; Start always opens the menu); menus take fixed ones (`PAD_MENU`: D-pad or stick arrows, A = Enter, B and Start = Esc; the sound button works there too), held directions repeat. A control held over a switch between menu and game, or over a binding, is ignored until let go. While a pad was used last (`active`, cleared by any keydown) hints name its buttons (`padWords()`). |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for the rule sets (~425 checks). |
@@ -91,11 +92,17 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4; TGM+,
   TAP Normal and Shirase: 1 and 4; Easy: 1, 4, 5 and 6; 5 is TGM3 Master's and Easy's only).
 - Game keys come from `options.keys` (rebindable): each action has a list of one or two key codes
-  (`MAX_KEYS_PER_ACTION`). On the Controls screen, Enter then a new key adds it (a third replaces
+  (`MAX_KEYS_PER_ACTION`). On the Keybinds screen, Enter then a new key adds it (a third replaces
   the action's oldest); a key the action already has is removed, unless it is its only one
   (`Options.bind()`). A key taken from another action leaves that one its other key, or if it had
   none, the replaced key (or, with nothing replaced, the two swap). An action is released only when
-  none of its keys is held. Key hints and the touch controls use each action's first key. Menus always use arrows / Enter / Esc
+  none of its keys is held. Key hints and the touch controls use each action's first key.
+- Gamepad bindings (`options.pad`, Options → Gamepad, `drawBindings()` like the Keybinds screen): per action one or two
+  controls, a standard-layout button index or a left stick direction (`PAD_STICK`, ids 100–103), labelled with Xbox names
+  (`padLabel()`). Defaults `DEFAULT_PAD`: D-pad and stick move and soft drop, D-pad up hard drop (the stick's up is unbound,
+  so a hard drop never slips out of a push), A rotate right, B and X left, Y 180°, LB/RB hold, Back sound. Enter on a row sets
+  `padCapturing`; the next control pressed on a pad is bound by `GamepadControls.poll()` (`Options.bindPad()`, the same rules
+  as keys, `bindIn()`), Start or Esc cancels. Start (`PAD_START`) can't be bound. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
 - Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: New Game, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). New Game → `MENU_RULES` (rule sets) →
   `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master for the Guideline, Master/20G
@@ -113,8 +120,8 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
   `menuAction()` turns them into arguments). The mode lists use the Visuals screen's
   tighter cards (`VISUALS_ROWS`), the rule set list (seven) tighter still, a little higher, with its
-  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings),
-  `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
+  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds"),
+  `MENU_GAMEPAD` (gamepad bindings), `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
 - Visuals and Guideline handling are setting screens (`SETTING_ITEMS`: `VISUAL_ITEMS`, `HANDLING_ITEMS`),
   changed with ← → (Enter steps forward). Add a setting to one of those lists, its default in the
@@ -284,7 +291,7 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   `LAYOUT_COMPACT` (touch devices always, other windows when it shows the well `COMPACT_GAIN` times
   bigger, i.e. narrow ones) fits only the well and a `COMPACT_SIDE_W` column each side:
   `drawCompactPanels()` puts HOLD over smaller stats on the left, NEXT on the right, clear messages
-  centred over the well; the menu's wordmark shrinks and the keycap row is hidden. Board coordinates
+  centred over the well; the menu's wordmark shrinks. Board coordinates
   are the same in both; only the view rect (`layout.view`) and the side columns change. With touch,
   menu hints and the game-over line are reworded for the buttons (`touchWords()`).
 - Playing field motion (`boardMotion()`): the field drifts in 3D, two sine waves per axis
@@ -724,7 +731,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), tileset, confetti, effects, backdrop, rings, flash, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), pad (the same actions, lists of pad controls), tileset, confetti, effects, backdrop, rings, flash, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
   qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).
@@ -752,7 +759,7 @@ export names explicitly at the top; add new globals there, and new rule files to
   - The canvas has no `preserveDrawingBuffer`: to read pixels, call `engine.draw()` and read
     them in the same task. Test context loss with
     `engine.r.gl.getExtension("WEBGL_lose_context")` (`loseContext()`, `restoreContext()`).
-  - Keys sent in the same instant as Enter on the Controls screen arrive before the capture
+  - Keys sent in the same instant as Enter on the Keybinds screen arrive before the capture
     opens; that's a test artefact, not a bug.
   - You can't hear audio: verify sounds by checking `engine.sound.ctx.state === "running"`,
     that `play()` doesn't throw, and which notes get scheduled; tell the user to listen.
