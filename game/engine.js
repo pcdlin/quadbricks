@@ -273,6 +273,8 @@ const MESSAGE_LIFE = 100; // frames
 const TEXT_CACHE_MAX = 256; // rendered text strings kept as textures
 const MESSAGE_POP_MAX = 1.3; // a new message starts this much bigger
 const MESSAGE_GOLD = "#ffd76a";
+const GOLD_RGB = parseColor(MESSAGE_GOLD);
+const goldAlpha = (a) => [GOLD_RGB[0], GOLD_RGB[1], GOLD_RGB[2], a]; // pulsing gold, as inkAlpha
 const COMBO_COLORS = [INK, INK, "#fff1a8", MESSAGE_GOLD, "#ffb35c", "#ff8a4c", "#ff5f4a"]; // by chain length
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
@@ -322,6 +324,7 @@ class Engine {
         this.options = new Options();
         this.records = new Records();
         this.recordNote = null; // the game over banner's record line
+        this.recordNew = false;
         this.game = null;
         this.player_input = 0x0000;
         this.events = [];
@@ -632,6 +635,7 @@ class Engine {
         this.recordSetup = this.recordKey(this.lastGameArgs);
         this.recordDone = false;
         this.recordNote = null;
+        this.recordNew = false;
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, options);
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
@@ -954,7 +958,8 @@ class Engine {
         const result = this.game.record();
         if (!result) return;
         const old = this.records.get(this.recordSetup);
-        this.recordNote = this.records.submit(this.recordSetup, result) ? (old ? "NEW BEST" : "FIRST RECORD") : `BEST  ${old.text}`;
+        this.recordNew = this.records.submit(this.recordSetup, result);
+        this.recordNote = this.recordNew ? (old ? "NEW BEST" : "FIRST RECORD") : `BEST  ${old.text}`;
     }
 
     // Under a mode list or setup cards: the best result with the current choices, if any
@@ -1788,7 +1793,7 @@ class Engine {
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
                 : title === "COMPLETE" ? PIECE_COLORS[tetI].base : PIECE_COLORS[tetZ].base;
             const sub = game.endSub || "ESC — BACK TO MENU";
-            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote);
+            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew);
         }
     }
 
@@ -2139,18 +2144,27 @@ class Engine {
     }
 
     // Horizontal banner across the well (GAME OVER and other endings)
-    // note: a third line under the sub-title (the game over's record)
-    boardBanner(title, sub, alpha, accent = INK, note = null) {
+    // note: a third line under the sub-title (the game over's record); highlight: a record was set,
+    // so the note gets a pulsing gold pill
+    boardBanner(title, sub, alpha, accent = INK, note = null, highlight = false) {
         const r = this.r;
         const cy = this.bandY();
+        const noteH = note ? (highlight ? 30 : 16) : 0;
         r.save();
         r.globalAlpha = alpha;
-        this.drawBand(cy + (note ? 8 : 0), sub ? (note ? 112 : 96) : 70, accent);
+        this.drawBand(cy + noteH / 2, sub ? 96 + noteH : 70, accent);
         // long titles ("GRAND MASTER") shrink to the board width
         const size = Math.min(34, Math.floor(34 * (BOARD_W - 16) / this.measureText(title, 34, 900, 8)));
         this.text(title, BOARD_X + BOARD_W / 2, cy - (sub ? 12 : 0), { size, weight: 900, color: accent === INK ? INK : accent, align: "center", spacing: 8 });
         if (sub) this.text(sub, BOARD_X + BOARD_W / 2, cy + 26, { size: 11, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
-        if (note) this.text(note, BOARD_X + BOARD_W / 2, cy + 46, { size: 11, weight: 800, color: MESSAGE_GOLD, align: "center", spacing: 3 });
+        if (note && highlight) {
+            const pulse = 0.5 + 0.5 * Math.sin(this.clock / 14);
+            const w = this.measureText(note, 15, 900, 5) + 32, h = 26, y = cy + 52;
+            r.shape(BOARD_X + (BOARD_W - w) / 2, y - h / 2, w, h, {
+                radius: h / 2, fill: goldAlpha(0.12 + 0.1 * pulse), stroke: goldAlpha(0.55 + 0.45 * pulse), lineWidth: 1.5,
+            });
+            this.text(note, BOARD_X + BOARD_W / 2, y, { size: 15, weight: 900, color: MESSAGE_GOLD, align: "center", spacing: 5 });
+        } else if (note) this.text(note, BOARD_X + BOARD_W / 2, cy + 46, { size: 11, weight: 800, color: MESSAGE_GOLD, align: "center", spacing: 3 });
         r.restore();
     }
 }
