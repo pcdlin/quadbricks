@@ -200,7 +200,7 @@ configuration fields set in their constructors and hooks they override:
   `sectionStops` false (TAP Normal) pass x99 with new pieces.
 
 The engine drives it with `advanceFrame(inputBitmap)` and reads:
-- `getCell(row, col)`, `getCellAlpha(row, col)` (staff roll), `getCurPiece_*()`, `getShadowRow()` (−100 = no ghost),
+- `getCell(row, col)`, `getCellAlpha(row, col)` (staff roll), `getCellItem(row, col)`, `pieceItem`, `nextItem` (TAP Normal's item pieces), `getCurPiece_*()`, `getShadowRow()` (−100 = no ghost),
   `getHeldPiece()`, `rnd_get_queue(i)`, `isGameOver()`, `inStartDelay()`, `inRollStart()`,
   `countdown()` (3, 2, 1 during READY, else 0), `startdelayCounter/startdelayMax`, `curPiece_lockDelay/lockDelayMax` (lock fade),
   `endTitle/endSub`, `getStats()` (side panel rows; first row is `[RULESET, VARIANT]`),
@@ -483,9 +483,15 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   4 at 0 and again at 100, 16 at 200, 20G at 300), delays as TGM+ (`TAP_NORMAL_DELAYS`), ghost below
   100, no grades. Score: TAP's formula ×6, and at 300 a time bonus of 1253 × the seconds under 5:00.
 - Items (`TAP_NORMAL_ITEMS`): reaching 100 brings Free Fall (every block drops down its column, no
-  holes left), 200 Del Even (every other row from the bottom deleted: the second, fourth, ...); used
-  after the next lock (`useItem()`, from `afterClear()` or `onMiss()`). Rows Free Fall fills clear at
-  once, without score or lines (an assumption: the sources don't say).
+  holes left), 200 Del Even (every other row from the bottom deleted: the second, fourth, ...). The
+  item comes in a piece, the next to enter (`nextItem`, then `pieceItem`; `onNewPiece()`); its blocks
+  keep it in the field (`itemCells`, `getCellItem()`, falling with the stack in `onCollapse()`) and
+  it goes off after the first line clear that takes any of them (tetris.wiki: item pieces "behave
+  normally when placed"; `scoreClear()` collects it in `firingItems`, `afterClear()` calls
+  `useItem()`), the piece's other blocks losing it. The engine marks item blocks, the item piece and
+  the NEXT piece that carries one with a pulsing gold rim (`drawItemMark()`). Rows Free Fall fills
+  clear at once, without score or lines, and blocks an item removes take their item with them (only
+  the player's clears set items off): assumptions, the sources don't say.
 - Level 300: a 20G staff roll (TAP's length) with blocks visible; COMPLETE whether survived or not.
 
 ### Big modes
@@ -653,7 +659,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   in frames, rounded down. The displayed grade stays S9 during the M-roll (NullpoMino). TAP Death's
   credit roll uses the Master roll length. NullpoMino speeds TAP up after 15:00, but the wiki doesn't
   mention it, so that isn't done.
-- TAP Normal: the items come with the level, not in a piece as in the arcade; the line ARE is the
+- TAP Normal: the wiki states how item pieces go off only for Versus; Normal's are taken to work the
+  same, the whole piece carrying the item (the wiki speaks of "an item block"); the line ARE is the
   ARE (27); the roll uses Master's length (the wiki gives none), and holding Start to skip it isn't
   there. Big: no Big TGM+ (NullpoMino has a separate big garbage pattern); nothing beyond the rows
   counting half changes with Big (grades, sections and goals count the halved lines).

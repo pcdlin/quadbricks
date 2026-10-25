@@ -1840,8 +1840,17 @@ class Engine {
         r.restore();
     }
 
-    // Draw a piece (rotation 0) centred on cx/cy, with a game's shapes and colours if given
-    drawPieceCentered(type, cx, cy, size, style = "locked", game = null) {
+    // A block of an item piece (TAP Normal): a pulsing gold rim over it
+    drawItemMark(x, y, size) {
+        const pulse = 0.5 + 0.5 * Math.sin(this.clock / 8);
+        this.r.shape(x + 1.5, y + 1.5, size - 3, size - 3, {
+            radius: size * 0.16, fill: goldAlpha(0.1 + 0.15 * pulse), stroke: goldAlpha(0.55 + 0.45 * pulse), lineWidth: Math.max(1.5, size / 12),
+        });
+    }
+
+    // Draw a piece (rotation 0) centred on cx/cy, with a game's shapes and colours if given; item:
+    // it carries an item (drawItemMark)
+    drawPieceCentered(type, cx, cy, size, style = "locked", game = null, item = false) {
         if (!type) return;
         const cells = (game ? game.pieceCells : SRS_CELLS)[type][0];
         const color = game ? game.palette[type] : type;
@@ -1849,7 +1858,11 @@ class Engine {
         const minR = Math.min(...rows), minC = Math.min(...cols);
         const ox = cx - ((Math.max(...cols) - minC + 1) * size) / 2;
         const oy = cy - ((Math.max(...rows) - minR + 1) * size) / 2;
-        for (const [i, j] of cells) this.drawBlock(color, ox + (j - minC) * size, oy + (i - minR) * size, size, style);
+        for (const [i, j] of cells) {
+            const x = ox + (j - minC) * size, y = oy + (i - minR) * size;
+            this.drawBlock(color, x, y, size, style);
+            if (item) this.drawItemMark(x, y, size);
+        }
     }
 
     // Night gallery backdrop: deep gradient, soft spotlight, receding floor grid
@@ -2272,6 +2285,7 @@ class Engine {
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
                 this.drawLights(pal[game.getCell(i, j)], this.cellX(j), y, CELL);
+                if (game.getCellItem(i, j)) this.drawItemMark(this.cellX(j), y, CELL); // TAP Normal's item pieces
             }
             r.globalAlpha = 1;
         }
@@ -2293,6 +2307,7 @@ class Engine {
             r.globalAlpha = lockLeft;
             this.drawBlock(color, x, y, CELL, "active");
             r.globalAlpha = 1;
+            if (game.pieceItem) this.drawItemMark(x, y, CELL);
         }
         r.restore();
 
@@ -2468,7 +2483,7 @@ class Engine {
         if (game.nextCount > 0) {
             this.label("NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
             this.panel(RIGHT_X, this.boardY + 18, SIDE_W, 110);
-            this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game);
+            this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game, !!game.nextItem);
         }
         // the rest of the rule set's preview, tighter when there are more than two
         // (none for TAP's single next piece)
@@ -2525,7 +2540,7 @@ class Engine {
         if (game.nextCount > 0) {
             this.label("NEXT", rightX, top, sideW, 10, 3);
             this.panel(rightX, top + 12, sideW, box);
-            this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game);
+            this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game, !!game.nextItem);
         }
         const rest = game.nextCount - 1;
         if (rest > 0) {

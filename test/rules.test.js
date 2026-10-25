@@ -2257,18 +2257,47 @@ function startedBig(mode, variant = "standard") {
     clearField(g);
     g.level = 99; g.curPiece_type = 0;
     g.spawn(tetT, false);
-    const item = g.pendingItem;
-    g.setCell(10, 0, 1); g.setCell(15, 0, 1); g.setCell(21, 3, 1);
-    place(g, tetO, 0, 5, 6);
+    const reached = [g.nextItem, g.pieceItem];
+    g.curPiece_type = 0;
+    g.spawn(tetO, false);
+    const entered = [g.pieceItem, g.nextItem];
+    g.setCell(10, 0, 1); // a block hanging in column 0
+    place(g, tetO, 0, 18, 4); // the item piece: rows 19-20, columns 5-6
     g.lock();
-    check("TAP Normal items: level 100 brings Free Fall, used after the next lock: blocks drop down their columns",
-        [item, g.pendingItem, g.getCell(10, 0), g.getCell(20, 0), g.getCell(21, 0), g.getCell(21, 3), g.getCell(21, 7), g.getCell(20, 7)],
-        ["FREE FALL", null, 0, 1, 1, 1, 7, 7]);
+    framesToNextPiece(g);
+    const settled = [g.getCellItem(19, 5), g.getCellItem(20, 6), g.getCellItem(21, 5), g.getCell(10, 0)];
+    check("TAP Normal items: level 100 makes the next piece an item piece (Free Fall), whose blocks keep it as they settle",
+        [reached, entered, settled], [["FREE FALL", null], ["FREE FALL", null], ["FREE FALL", "FREE FALL", null, 1]]);
+    for (let c = 0; c < 9; c++) g.setCell(21, c, 1);
+    place(g, tetI, 1, HEIGHT - 4, 7); // column 9: clears row 21 only, none of the item's blocks
+    g.lock();
+    framesToNextPiece(g);
+    check("  ...a clear that takes none of its blocks leaves it waiting (its blocks fall with the stack)",
+        [g.getCellItem(20, 5), g.getCellItem(21, 6), g.getCell(11, 0), g.actions.some(a => a.text === "FREE FALL")],
+        ["FREE FALL", "FREE FALL", 1, false]);
+    for (const c of [0, 1, 2, 3, 4, 7]) g.setCell(21, c, 1);
+    place(g, tetI, 1, HEIGHT - 4, 6); // column 8: row 21 clears with two of the item's blocks
+    g.lock();
+    framesToNextPiece(g);
+    check("  ...a clear that takes any of its blocks sets it off after the clear: blocks drop down their columns",
+        [g.getCell(11, 0), g.getCell(21, 0), g.getCellItem(21, 5), g.actions.some(a => a.text === "FREE FALL")],
+        [0, 1, null, true]);
+}
+{
+    const g = startedMode(tgmTap, "normal");
+    clearField(g);
+    g.level = 98; g.combo = 1;
+    tapClear(g, 2); // 98 + 2 lines: 100, by a clear
+    const waiting = [g.nextItem, g.actions.some(a => a.text === "FREE FALL")];
+    framesToNextPiece(g);
+    check("  ...reached by a clear: the next piece carries it, nothing goes off yet",
+        [waiting, g.pieceItem, g.nextItem], [["FREE FALL", false], "FREE FALL", null]);
+}
+{
+    const g = startedMode(tgmTap, "normal");
     clearField(g);
     for (let r = 16; r < HEIGHT; r++) g.setCell(r, 0, 1);
-    g.pendingItem = "DEL EVEN";
-    place(g, tetO, 0, 5, 6);
-    g.lock();
+    g.useItem("DEL EVEN");
     const col0 = [...Array(6)].map((_, k) => g.getCell(16 + k, 0));
     check("  ...level 200's Del Even deletes every other row from the bottom (the second, fourth, ...)",
         col0, [0, 0, 0, 1, 1, 1]);
@@ -2440,10 +2469,10 @@ function startedTgm1With(options, variant = "standard") {
     fill(g, ["#########.", "#########.", "#########."]);
     for (let r = 10; r < 13; r++) g.setCell(r, 9, 2); // three blocks hanging over the gaps
     g.setCell(9, 0, 3);
-    g.pendingItem = "FREE FALL";
     const lines = g.lines, score = g.score;
     place(g, tetO, 0, 5, 3);
     g.lock();
+    g.useItem("FREE FALL");
     const row = r => [...Array(WIDTH)].map((_, c) => g.getCell(r, c) ? "#" : ".").join("");
     check("TAP Normal Free Fall: rows it fills clear at once, without score or lines",
         [row(21), row(20), g.lines - lines, g.score - score], ["#...##....", "....##....", 0, 0]); // the O locked on top fell too

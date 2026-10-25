@@ -255,6 +255,10 @@ class RuleGame {
         this.wallBumped = false;
         this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "clear1".."clear4" (+ "c<chain>" in a combo)
         this.fireworks = 0; // fireworks fired since the engine last looked (TGM3 Easy)
+        // Item pieces (TAP Normal): the item the next piece to enter carries (queue[0]), and the
+        // current piece's; their settled blocks answer getCellItem
+        this.nextItem = null;
+        this.pieceItem = null;
         this.queue = [];
     }
 
@@ -320,6 +324,11 @@ class RuleGame {
     // Opacity of a settled block (TGM's staff rolls fade or hide them)
     getCellAlpha(row, col) {
         return 1;
+    }
+
+    // The item a settled block carries (TAP Normal's item pieces), or null
+    getCellItem(row, col) {
+        return null;
     }
 
     setCell(row, col, val) {

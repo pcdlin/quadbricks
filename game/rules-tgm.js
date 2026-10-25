@@ -274,8 +274,9 @@ const TAP_PLUS_PATTERN = [
 ];
 const TAP_PLUS_ROLL_FRAMES = 2024;
 // Normal: to level 300 with no section stops but the last, its own gravity and fixed delays, an item
-// at 100 (Free Fall: every block drops down its column, filling the holes) and at 200 (Del Even:
-// every other row from the bottom is deleted), x6 points for clears and a time bonus at 300, then a
+// piece after reaching 100 (Free Fall: every block drops down its column, filling the holes) and 200
+// (Del Even: every other row from the bottom is deleted), whose item goes off once a line clear takes
+// any of its blocks (tetris.wiki), x6 points for clears and a time bonus at 300, then a
 // 20G credit roll that needn't be survived. No grades.
 const TAP_NORMAL_MAX_LEVEL = 300;
 // Gravity in 1/256 G: [from level, value]
@@ -842,7 +843,9 @@ class TapGame extends TgmGame {
             this.maxLevel = TAP_NORMAL_MAX_LEVEL;
             this.sectionStops = false;
         }
-        this.pendingItem = null; // Normal: the item to use after the next lock
+        // Normal: per cell, the item its block carries (from an item piece); items a clear set off
+        this.itemCells = this.normal ? this.field.map(() => new Array(WIDTH).fill(null)) : null;
+        this.firingItems = [];
         this.sonicTrail = !this.death; // TAP shows the drop trail for the sonic drop too (not Death)
         this.invisibleRollName = "M-ROLL";
         this.rollLength = this.tapPlus ? TAP_PLUS_ROLL_FRAMES : TAP_ROLL_FRAMES;
@@ -892,7 +895,7 @@ class TapGame extends TgmGame {
         return super.gravityAt(speedLevel);
     }
 
-    // Normal: a level reached brings its item, used after the next lock
+    // Normal: a level reached brings its item piece, the next to enter
     afterSpawn(newPiece) {
         const before = this.level;
         super.afterSpawn(newPiece);
@@ -903,21 +906,70 @@ class TapGame extends TgmGame {
         if (!this.normal) return;
         for (const [key, item] of Object.entries(TAP_NORMAL_ITEMS)) {
             const level = Number(key);
-            if (levelBefore < level && this.level >= level) this.pendingItem = item;
+            if (levelBefore < level && this.level >= level) this.nextItem = item;
         }
     }
 
+    // The piece entering takes the item waiting for it, if any
+    onNewPiece() {
+        this.pieceItem = this.nextItem;
+        this.nextItem = null;
+    }
+
+    // An item piece's blocks keep its item in the field
+    onBlockLocked(cell) {
+        super.onBlockLocked(cell);
+        if (this.itemCells && this.pieceItem) this.itemCells[cell.row - FIELD_TOP][cell.col] = this.pieceItem;
+    }
+
+    getCellItem(row, col) {
+        if (!this.itemCells || row < FIELD_TOP || row >= HEIGHT || !this.getCell(row, col)) return null;
+        return this.itemCells[row - FIELD_TOP][col];
+    }
+
+    // A line clear that takes any block of an item piece sets its item off (after the clear); the
+    // piece's other blocks then carry it no more
+    scoreClear(n, rows) {
+        if (this.itemCells) {
+            for (const r of rows) {
+                for (const item of this.itemCells[r - FIELD_TOP]) {
+                    if (item && !this.firingItems.includes(item)) this.firingItems.push(item);
+                }
+            }
+            for (const marks of this.itemCells) {
+                for (let c = 0; c < WIDTH; c++) if (this.firingItems.includes(marks[c])) marks[c] = null;
+            }
+        }
+        super.scoreClear(n, rows);
+    }
+
+    onCollapse(rows) {
+        super.onCollapse(rows);
+        if (this.itemCells) this.itemCells = this.dropRows(this.itemCells, rows, () => new Array(WIDTH).fill(null));
+    }
+
+    // The roll starts on an empty field, without items
+    onRollBegin() {
+        if (this.itemCells) for (const marks of this.itemCells) marks.fill(null);
+        this.nextItem = this.pieceItem = null;
+    }
+
     // The item: Free Fall drops every block down its column, Del Even deletes every other row from the
-    // bottom (the second, fourth, ...)
-    useItem() {
-        const item = this.pendingItem;
-        this.pendingItem = null;
+    // bottom (the second, fourth, ...). Blocks of another item piece keep their item as they move;
+    // those the item itself removes take it with them (only the player's clears set items off)
+    useItem(item) {
         this.addAction(item, "grade");
         if (item === "FREE FALL") {
             for (let c = 0; c < WIDTH; c++) {
                 const blocks = [];
-                for (let r = HEIGHT - 1; r >= FIELD_TOP; r--) if (this.getCell(r, c)) blocks.push(this.getCell(r, c));
-                for (let r = HEIGHT - 1, k = 0; r >= FIELD_TOP; r--, k++) this.setCell(r, c, k < blocks.length ? blocks[k] : 0);
+                for (let r = HEIGHT - 1; r >= FIELD_TOP; r--) {
+                    if (this.getCell(r, c)) blocks.push([this.getCell(r, c), this.itemCells[r - FIELD_TOP][c]]);
+                }
+                for (let r = HEIGHT - 1, k = 0; r >= FIELD_TOP; r--, k++) {
+                    const [type, mark] = k < blocks.length ? blocks[k] : [0, null];
+                    this.setCell(r, c, type);
+                    this.itemCells[r - FIELD_TOP][c] = mark;
+                }
             }
             // rows it fills clear at once (no score or lines: the item's, not the player's)
             const full = [];
@@ -941,7 +993,7 @@ class TapGame extends TgmGame {
     }
 
     afterClear() {
-        if (this.pendingItem) this.useItem();
+        for (const item of this.firingItems.splice(0)) this.useItem(item);
         super.afterClear();
     }
 
@@ -963,7 +1015,6 @@ class TapGame extends TgmGame {
     // TGM+: a piece locked without clearing; enough of them in a row raise the pattern's next row
     onMiss() {
         if (this.tapPlus) this.tapPlusGarbage();
-        if (this.pendingItem) this.useItem();
     }
 
     tapPlusGarbage() {
