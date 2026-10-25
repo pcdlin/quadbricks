@@ -23,7 +23,7 @@ const DEFAULT_KEYS = {
 };
 
 // Board size as a share of the largest size that fits the window (fullscreen can be huge)
-const SCALE_STEPS = [1, 0.9, 0.8, 0.7, 0.6, 0.5];
+const SCALE_STEPS = [0.5, 0.6, 0.7, 0.8, 0.9, 1]; // smallest first, so → makes it bigger
 
 // Keys that keep their menu meaning and can't be bound
 const RESERVED_KEYS = ["Escape"];
@@ -110,7 +110,7 @@ class Options {
         this.shake = true; // playing field shakes on hard drops
         this.trail = true; // streaks behind hard drops and rows falling into clears (only with effects on)
         this.border = false; // TGM-style light outline around the settled stack
-        this.scale = SCALE_STEPS[0];
+        this.scale = 1; // the largest that fits
         Object.assign(this, GUIDELINE_HANDLING);
         try {
             const saved = JSON.parse(localStorage.getItem(OPTIONS_STORAGE_KEY) || "{}");
