@@ -316,6 +316,8 @@ class Engine {
         this.controlspos = 0; // key action, or "reset" after the last one
         this.capturing = null; // action waiting for a new key
         this.options = new Options();
+        this.records = new Records();
+        this.recordNote = null; // the game over banner's record line
         this.game = null;
         this.player_input = 0x0000;
         this.events = [];
@@ -525,6 +527,7 @@ class Engine {
                         if (s === "harddrop" && this.options.shake) this.kickShake(this.game.hardDropDistance);
                     }
                     for (const dir of this.game.takeBumps()) if (this.options.shake) this.bumpShake(dir);
+                    if (this.game.isGameOver() && !this.recordDone) this.submitRecord();
                 }
                 break;
 
@@ -620,6 +623,8 @@ class Engine {
     // options: the hidden modes' (createGame)
     initGame(mode, variant, startLevel = 0, height = 0, options = {}) {
         this.lastGameArgs = [mode, variant, startLevel, height, options];
+        this.recordDone = false;
+        this.recordNote = null;
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, options);
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
@@ -909,8 +914,8 @@ class Engine {
         return this.setupChoices[`${this.rulesetpos}.${this.menupos}.${n}`] ?? (this.chosenMode().setup[n].initial || 0);
     }
 
-    // Activation of menu item: the mode, with its setup cards' choices
-    menuAction() {
+    // The chosen mode with its setup cards' choices: initGame's arguments
+    chosenArgs() {
         const { mode, variant, setup = [] } = this.chosenMode();
         const args = { mode, variant, startLevel: 0, height: 0 }, options = {};
         setup.forEach((item, n) => {
@@ -919,8 +924,37 @@ class Engine {
             if (OPTION_ARGS.includes(item.arg)) options[item.arg] = value;
             else args[item.arg] = value;
         });
-        this.initGame(args.mode, args.variant, args.startLevel, args.height, options);
+        return [args.mode, args.variant, args.startLevel, args.height, options];
+    }
+
+    // Activation of menu item: the mode, with its setup cards' choices
+    menuAction() {
+        this.initGame(...this.chosenArgs());
         this.GAMESTATE = STATE_GAME;
+    }
+
+    // -----------------------------------
+    // PERSONAL RECORDS
+
+    // A game setup's key in the records: initGame's arguments, the options that are on in order
+    recordKey([mode, variant, startLevel, height, options = {}]) {
+        return JSON.stringify([mode, variant, startLevel, height, OPTION_ARGS.filter(id => options[id])]);
+    }
+
+    // The game just ended: its result goes to the records; the banner says whether it beat them
+    submitRecord() {
+        this.recordDone = true;
+        const result = this.game.record();
+        if (!result) return;
+        const setup = this.recordKey(this.lastGameArgs);
+        const old = this.records.get(setup);
+        this.recordNote = this.records.submit(setup, result) ? (old ? "NEW BEST" : "FIRST RECORD") : `BEST  ${old.text}`;
+    }
+
+    // Under a mode list or setup cards: the best result with the current choices, if any
+    drawBest(y) {
+        const best = this.records.get(this.recordKey(this.chosenArgs()));
+        if (best) this.text(`BEST  ${best.text}`, VIEW_W / 2, y, { size: 12, weight: 700, color: MESSAGE_GOLD, align: "center", spacing: 3 });
     }
 
     // -----------------------------------
@@ -1510,6 +1544,9 @@ class Engine {
                 const ruleset = RULESETS[this.rulesetpos];
                 heading(ruleset.name.toUpperCase() + "  ·  CHOOSE A MODE");
                 this.drawMenuList(ruleset.modes, this.menupos, listTop, VISUALS_ROWS.rowH, VISUALS_ROWS.gap);
+                const bottom = listTop + menuListHeight(ruleset.modes, VISUALS_ROWS.rowH, VISUALS_ROWS.gap);
+                this.drawBest(bottom + 22); // with the mode's current setup choices
+                hintY = Math.max(hintY, bottom + 46);
                 hint = (this.chosenMode().setup ? "ENTER  SELECT" : "ENTER  START") + "      ESC  BACK";
                 break;
             }
@@ -1517,7 +1554,11 @@ class Engine {
                 // Breadcrumb: rule set and mode, then a generic prompt
                 const ruleset = RULESETS[this.rulesetpos];
                 heading(`${ruleset.name}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase());
-                this.drawMenuList(this.settingCards(this.setupItems()), this.setuppos, listTop);
+                const items = this.settingCards(this.setupItems());
+                this.drawMenuList(items, this.setuppos, listTop);
+                const bottom = listTop + menuListHeight(items, 64, 10);
+                this.drawBest(bottom + 22);
+                hintY = Math.max(hintY, bottom + 46);
                 hint = "← →  CHANGE      ENTER  START      ESC  BACK";
                 break;
             }
@@ -1705,7 +1746,7 @@ class Engine {
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
                 : title === "COMPLETE" ? PIECE_COLORS[tetI].base : PIECE_COLORS[tetZ].base;
             const sub = game.endSub || "ESC — BACK TO MENU";
-            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent);
+            this.boardBanner(title, this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote);
         }
     }
 
@@ -2054,16 +2095,18 @@ class Engine {
     }
 
     // Horizontal banner across the well (GAME OVER and other endings)
-    boardBanner(title, sub, alpha, accent = INK) {
+    // note: a third line under the sub-title (the game over's record)
+    boardBanner(title, sub, alpha, accent = INK, note = null) {
         const r = this.r;
         const cy = this.bandY();
         r.save();
         r.globalAlpha = alpha;
-        this.drawBand(cy, sub ? 96 : 70, accent);
+        this.drawBand(cy + (note ? 8 : 0), sub ? (note ? 112 : 96) : 70, accent);
         // long titles ("GRAND MASTER") shrink to the board width
         const size = Math.min(34, Math.floor(34 * (BOARD_W - 16) / this.measureText(title, 34, 900, 8)));
         this.text(title, BOARD_X + BOARD_W / 2, cy - (sub ? 12 : 0), { size, weight: 900, color: accent === INK ? INK : accent, align: "center", spacing: 8 });
         if (sub) this.text(sub, BOARD_X + BOARD_W / 2, cy + 26, { size: 11, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
+        if (note) this.text(note, BOARD_X + BOARD_W / 2, cy + 46, { size: 11, weight: 800, color: MESSAGE_GOLD, align: "center", spacing: 3 });
         r.restore();
     }
 }

@@ -199,6 +199,14 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   engine draws no list under the first next piece); `hasHold` (no HOLD box when false);
   `firstDrawnRow` (0: the two rows above the well are drawn; GB: 4); `wellTop` (first row of the
   well: `VISIBLE_TOP`, GB 4 for its 18 rows), which sizes the board (`Engine.layoutBoard()`).
+- Personal records: `record()` gives a finished game's result, `{ key, text }` (key: numbers compared
+  in order, higher is better, times negated; null when it doesn't count: Sprint and Dig unfinished).
+  By family: the score (default; Marathon, Ultra, NES, GB, TAP Normal), Sprint/Dig time, Guideline
+  Master lines then time, TGM grade (`gradeRank()`: M and GM above every grade) then level then time,
+  TGM+ level then time, Easy fireworks, ACE lines then time. The engine submits it once when the game
+  ends (`submitRecord()`, key `recordKey()` from the game's arguments and the options that are on),
+  shows FIRST RECORD / NEW BEST / BEST … in the game over banner, and the best for the current choices
+  under the mode list and setup cards (`drawBest()`). `Records` (`options.js`) keeps them.
 - Event queues the engine drains every frame: `takeClearedCells()` (confetti),
   `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
@@ -653,6 +661,8 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 - `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound} (lists of key codes; a plain string from older versions is read as one key), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
+- `localStorage["quadbricks.records"]`: `{ [recordKey]: { key: [numbers], text } }`, the best result per
+  game setup (invalid entries are dropped on load).
 - Every access is wrapped in try/catch; the game must work with storage unavailable.
 
 ## Working on this repo

@@ -17,7 +17,7 @@
 // (shapes, next pieces, hold, spawn, randomizer, ...) and override hooks: setTimings, spawnPosition,
 // beforeSpawn / onNewPiece / afterSpawn / onBlockOut, onClock, onActiveFrame, dasCharges, canShift,
 // onShiftBlocked, rotate, onMoveReset, advanceDrop / upKey / onGround / onHardDrop, beforeLock,
-// scoreClear, onCollapse, afterClear, ghostVisible, getStats, setupField, setHandling, testSetup.
+// scoreClear, onCollapse, afterClear, ghostVisible, getStats, record, setupField, setHandling, testSetup.
 //
 // Variants shared by several rule sets (the menu offers each family's own, see VARIANT_NAMES):
 //  - standard: the rule set as specified
@@ -362,6 +362,13 @@ class RuleGame {
     // Side panel rows: the first is [rule set, mode]
     getStats() {
         return [["", ""]];
+    }
+
+    // The finished game's result for the personal records: key, numbers compared in order (higher is
+    // better; times go in negated), and text to show; null when the game doesn't count (a time
+    // attack not finished). The score by default.
+    record() {
+        return { key: [this.score], text: this.scoreText() };
     }
 
     formatTime(frames = this.frames) {

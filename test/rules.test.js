@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -2222,6 +2222,31 @@ function startedTgm1With(options, variant = "standard") {
     const row = r => [...Array(WIDTH)].map((_, c) => g.getCell(r, c) ? "#" : ".").join("");
     check("TAP Normal Free Fall: rows it fills clear at once, without score or lines",
         [row(21), row(20), g.lines - lines, g.score - score], ["#...##....", "....##....", 0, 0]); // the O locked on top fell too
+}
+
+// ---------------------------------------------------------------- Personal records
+{
+    const sprint = startedGuideline("sprint");
+    check("Records: Sprint counts only when finished, by time",
+        [sprint.record(), (() => { sprint.frames = 3000; sprint.endTitle = "COMPLETE"; return sprint.record(); })()],
+        [null, { key: [-3000], text: "0:50.00" }]);
+    const marathon = startedGuideline("marathon"); marathon.score = 1234;
+    const master = startedGuideline("master"); master.lines = 42; master.frames = 600;
+    check("  ...Marathon by score, Master by lines then time",
+        [marathon.record(), master.record()], [{ key: [1234], text: "1,234" }, { key: [42, -600], text: "42 LINES · 0:10.00" }]);
+    const tgm3 = startedMode(arika, "standard"); tgm3.level = 300; tgm3.frames = 6000; tgm3.cools = 2;
+    const tap = startedMode(tgmTap, "death"); tap.finalGrade = "M"; tap.level = 500; tap.frames = 9000;
+    const tap2 = startedMode(tgmTap, "death"); tap2.level = 600; tap2.frames = 1;
+    check("  ...TGM by grade, then level, then time; M and GM above every grade, Death's — below",
+        [tgm3.record().text, tgm3.record().key, tap.record().key[0] > TGM_GRADE_LABELS.length - 1, tap2.record().key[0]],
+        ["7 · LV 300 · 1:40.00", [2, 300, -6000], true, -1]);
+    const shirase = startedMode(arika, "shirase"); shirase.sectionsDone = 5; shirase.regrets = 1;
+    const easy = startedMode(arika, "easy"); easy.hanabi = 77;
+    const ace = startedMode(tgmAce, "normal"); ace.lines = 35; ace.frames = 120;
+    const nes = startedNes(); nes.score = 5000;
+    check("  ...Shirase's grade, Easy's fireworks, ACE's lines then time, NES by score",
+        [shirase.record().key[0], easy.record(), ace.record(), nes.record()],
+        [4, { key: [77], text: "77 HANABI" }, { key: [35, -120], text: "35 LINES · 0:02.00" }, { key: [5000], text: "5,000" }]);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");

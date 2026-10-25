@@ -56,6 +56,11 @@ class AceGame extends RuleGame {
             ["LIMIT", this.formatTime(Math.max(0, this.aceTimer))], ["TIME", this.formatTime()]];
     }
 
+    // Lines, then time
+    record() {
+        return { key: [this.lines, -this.frames], text: `${this.lines} LINES · ${this.formatTime()}` };
+    }
+
     setTimings() {
         const v = this.variant === "big" ? "normal" : this.variant, i = this.level - 1;
         const delays = v === "another" ? ACE_ANOTHER_DELAYS[Math.min(i, ACE_ANOTHER_DELAYS.length - 1)]

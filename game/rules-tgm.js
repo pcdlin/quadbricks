@@ -306,6 +306,18 @@ class TgmGame extends RuleGame {
 
     statsName() { return ["", ""]; } // [rule set, mode]
 
+    // Grade, then level, then time
+    record() {
+        return { key: [this.gradeRank(), this.level, -this.frames], text: `${this.gradeLabel()} · LV ${this.level} · ${this.formatTime()}` };
+    }
+
+    // The grade as a number to compare: its place in TGM_GRADE_LABELS, M and GM above them all
+    gradeRank() {
+        if (this.finalGrade === "GM") return TGM_GRADE_LABELS.length + 1;
+        if (this.finalGrade === "M") return TGM_GRADE_LABELS.length;
+        return TGM_GRADE_LABELS.indexOf(this.gradeLabel()); // -1: none yet (TAP Death's "—")
+    }
+
     tgmStats(mode, level, time) {
         return [mode, ["GRADE", this.gradeLabel()], level, time, ["SCORE", this.scoreText()]];
     }
@@ -702,6 +714,13 @@ class TapGame extends TgmGame {
         return super.tgmStats(mode, level, time);
     }
 
+    // TGM+: level, then time; Normal: the score
+    record() {
+        if (this.tapPlus) return { key: [this.level, -this.frames], text: `LV ${this.level} · ${this.formatTime()}` };
+        if (this.normal) return { key: [this.score], text: this.scoreText() };
+        return super.record();
+    }
+
     // Death has no grade until M at level 500
     gradeLabel() {
         if (this.finalGrade || this.death) return this.finalGrade || "—";
@@ -943,6 +962,10 @@ class TiGame extends TgmGame {
         return TGM_GRADE_LABELS[this.gradeIndex()];
     }
 
+    gradeRank() {
+        return this.gradeIndex();
+    }
+
     // After 15 minutes: 20G and the kill delays
     setTimings() {
         super.setTimings();
@@ -1099,6 +1122,11 @@ class TiEasyGame extends TiGame {
         return [mode, ["HANABI", String(this.hanabi)], level, time];
     }
 
+    // The fireworks (those still waiting are counted when the game ends)
+    record() {
+        return { key: [this.hanabi], text: `${this.hanabi} HANABI` };
+    }
+
     delayRow() {
         return [0, ...EASY_DELAYS];
     }
@@ -1235,6 +1263,10 @@ class TiShiraseGame extends TiGame {
     // Grade: sections finished less REGRETs
     gradeLabel() {
         return SHIRASE_GRADE_LABELS[Math.max(0, this.sectionsDone - this.regrets)];
+    }
+
+    gradeRank() {
+        return Math.max(0, this.sectionsDone - this.regrets);
     }
 
     delayRow(speedLevel) {

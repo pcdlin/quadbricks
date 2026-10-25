@@ -111,6 +111,15 @@ class GuidelineGame extends RuleGame {
         return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
     }
 
+    // Sprint and Dig: the time, if finished; Master: lines, then time; the rest: the score
+    record() {
+        if (this.sprint || this.dig) {
+            return this.endTitle === "COMPLETE" ? { key: [-this.frames], text: this.formatTime() } : null;
+        }
+        if (this.master) return { key: [this.lines, -this.frames], text: `${this.lines} LINES · ${this.formatTime()}` };
+        return super.record();
+    }
+
     setTimings() {
         this.are = GUIDELINE_ARE;
         this.lineAre = GUIDELINE_ARE;

@@ -4,6 +4,7 @@
 // runs on the defaults and simply doesn't remember changes.
 
 const OPTIONS_STORAGE_KEY = "quadbricks.options";
+const RECORDS_STORAGE_KEY = "quadbricks.records";
 
 // Rebindable actions, in the order the controls screen lists them
 const KEY_ACTIONS = [
@@ -211,4 +212,41 @@ class Options {
         for (const { id } of KEY_ACTIONS) if (this.keys[id].includes(code)) return id;
         return null;
     }
+}
+
+// Personal records: the best result of each game setup (Engine.recordKey), as RuleGame.record()
+// gives it: { key: numbers compared in order, higher is better; text }. Kept in localStorage.
+class Records {
+    constructor() {
+        this.best = {};
+        try {
+            const saved = JSON.parse(localStorage.getItem(RECORDS_STORAGE_KEY) || "{}");
+            for (const [setup, r] of Object.entries(saved)) {
+                if (r && Array.isArray(r.key) && r.key.every(Number.isFinite) && typeof r.text === "string") this.best[setup] = r;
+            }
+        } catch (e) { /* storage unavailable or corrupt: no records */ }
+    }
+
+    get(setup) {
+        return this.best[setup] || null;
+    }
+
+    // A finished game's result: kept, and true, when it beats the best so far (or is the first)
+    submit(setup, result) {
+        const old = this.best[setup];
+        if (old && !betterRecord(result.key, old.key)) return false;
+        this.best[setup] = { key: result.key, text: result.text };
+        try {
+            localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(this.best));
+        } catch (e) { /* not remembered */ }
+        return true;
+    }
+}
+
+// Whether record key a beats b: the first number that differs decides
+function betterRecord(a, b) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        if ((a[i] ?? -Infinity) !== (b[i] ?? -Infinity)) return (a[i] ?? -Infinity) > (b[i] ?? -Infinity);
+    }
+    return false;
 }
