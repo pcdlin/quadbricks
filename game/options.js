@@ -82,6 +82,7 @@ const RING_MODE_IDS = RING_MODES.map(m => m.id);
 
 // Line clear confetti: how the bits look and move (Engine.explodeCell(), drawParticles())
 const CONFETTI_STYLES = [
+    { id: "off", name: "Off" },
     { id: "glow", name: "Glow" },
     { id: "paper", name: "Paper" },
     { id: "sparks", name: "Sparks" },

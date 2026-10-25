@@ -241,7 +241,7 @@ const COUNTDOWN_COLORS = [null, PIECE_COLORS[tetS].light, PIECE_COLORS[tetO].lig
 // Confetti for cleared lines: piece colour plus a few party colours
 const CONFETTI_EXTRA = ["#ffffff", "#ff5fd2", "#fff27a"];
 const CONFETTI_COLORS = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFETTI_EXTRA];
-// By confetti style (options.confetti; fireworks are always glow): bits per cell, size (least,
+// By confetti style (options.confetti, none when off; fireworks are always glow): bits per cell, size (least,
 // random extra), burst speed factor and upward lift, gravity and air drag per frame, life in
 // frames, alpha, additive blending; spin (radians per frame, at most), sideways flutter, fastest
 // fall, grid (positions and sizes snapped to it)
@@ -1114,6 +1114,7 @@ class Engine {
         const cx = this.cellX(cell.col) + CELL / 2;
         const cy = this.cellY(cell.row) + CELL / 2;
         const style = this.options.confetti, spec = CONFETTI_SPECS[style];
+        if (!spec) return; // off
         const count = Math.max(1, Math.round(spec.count * this.options.effectScale));
         for (let n = 0; n < count; n++) {
             const angle = Math.random() * Math.PI * 2;
