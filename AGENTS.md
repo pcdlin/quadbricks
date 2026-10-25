@@ -31,7 +31,7 @@ when WebGL is unavailable).
 | Path | What it is |
 |---|---|
 | `game/game.js` | Shared definitions only: field size (`WIDTH` 10, `HEIGHT` 22, first visible row `VISIBLE_TOP` 2), piece ids (`tetI`=1 … `tetO`=7), input bitmap bits, SRS `shapes`; `shapeCells()` (a shape table's blocks as offsets) and `clamp()`. |
-| `game/rules.js` | `RuleGame`: the rule sets (Guideline, TGM3 World/Classic, TAP, GB) and their variants. All game logic lives here. |
+| `game/rules.js` | `RuleGame`: the rule sets (Guideline, TGM1, TAP, TGM3 World/Classic, GB) and their variants. All game logic lives here. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings) and the clear ripples' refraction pass. |
@@ -40,7 +40,7 @@ when WebGL is unavailable).
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for `rules.js` (~220 checks). |
+| `test/rules.test.js` | Spec checks for `rules.js` (~270 checks). |
 
 ## History in one paragraph
 
@@ -73,17 +73,17 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   The rules apply a frame's releases before its presses, so a release of an action pressed in
   the same frame waits for the next frame. Keys let go while the game wasn't listening (menu
   open, window unfocused) are released when it resumes (`keysDown`, `syncKeys`).
-- Hidden TGM3 and TAP test keys (`TEST_KEYS`, nowhere in the UI), during a game: Ctrl+Shift+1 straight
+- Hidden TGM1, TGM3 and TAP test keys (`TEST_KEYS`, nowhere in the UI), during a game: Ctrl+Shift+1 straight
   to the staff roll the player has earned, 2 to the invisible roll, 3 to an invisible roll that
   ends in Grand Master if survived (TAP Master: 2 and 3 both go to the M-roll), 4 to the last 5 s
   of the roll, 5 to 10 s before the 15-minute speed-up (TGM3 only). They call
   `RuleGame.testSetup()`, which refuses during READY, after game over, in the Guideline, and for
-  setups a mode doesn't have (TAP Death: only 1 and 4).
+  setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4).
 - Game keys come from `options.keys` (rebindable). Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
 - Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: New Game, Options; `mainItems()` adds Restart first while a game exists, restarting it with the same settings, and Esc from a game opens the menu on it). New Game → `MENU_RULES` (rule sets) →
-  `MENU_MODES` (each rule set's `modes`: Endless…Ultra, World/Classic for TGM3, Master/Death for
-  TAP, A-Type/B-Type for GB) → game; modes with `startLevels` (GB's) go through `MENU_LEVEL` first,
+  `MENU_MODES` (each rule set's `modes`: Endless…Ultra, Master/20G for TGM1, Master/Death for
+  TAP, World/Classic for TGM3, A-Type/B-Type for GB) → game; modes with `startLevels` (GB's) go through `MENU_LEVEL` first,
   setting cards (`levelItems()`: Level 0–9, plus Height 0–5 for modes with `startHeights`, B-Type),
   remembered per mode for the session (`startLevels`/`startHeights` maps, keyed by rule set and mode
   index). Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings),
@@ -110,15 +110,17 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 
 ### Rules engine (`rules.js`)
 `new RuleGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
-`tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gameBoy` (7, GB) and `variant` ∈ `"standard"`,
-`"test"`, `"death"` (plus the Guideline's `"marathon"`, `"sprint"`, `"ultra"` and GB's `"btype"`).
+`tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gameBoy` (7, GB), `tgmOriginal` (8, TGM1) and
+`variant` ∈ `"standard"`, `"test"`, `"death"` (plus the Guideline's `"marathon"`, `"sprint"`,
+`"ultra"`, GB's `"btype"` and TGM1's `"20g"`).
 TAP's `"standard"` is its Master mode, `"death"` its Death mode; GB's `"standard"` is A-Type.
 A third argument, `startLevel` (GB only, clamped to 0–9, `GB_START_LEVELS`), sets the starting level;
 a fourth, `height` (GB B-Type only, clamped to 0–5, `GB_B_HEIGHTS`), the garbage height; a fifth,
 `handling` (Guideline only, overrides of `GUIDELINE_HANDLING`: `das`, `arr`, `sdf`, `dcd`, `ghost`,
-`dropGuard`; ignored by TGM3, TAP and GB, whose timing is part of their spec).
-Flags: `this.tgm` (TGM3 World or Classic, or TAP: levels to 999, delays, grades, staff roll),
-`this.ars` (Classic or TAP), `this.tap`, `this.gb`, `this.hasHold` (false for TAP and GB). GB is
+`dropGuard`; ignored by the others, whose timing is part of their spec).
+Flags: `this.tgm` (TGM1, TGM3 World or Classic, or TAP: levels to 999, delays, grades, staff roll),
+`this.ars` (Classic, TAP or TGM1), `this.plainArs` (TAP or TGM1: basic kicks, no hold, one next
+piece), `this.tap`, `this.tgm1`, `this.gb`, `this.hasHold` (false for TGM1, TAP and GB). GB is
 neither `tgm` nor the Guideline: code paths written as `!this.tgm` for the Guideline also check `!this.gb`.
 
 The engine drives it with `advanceFrame(inputBitmap)` and reads:
@@ -131,7 +133,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   longest fall after it), then falls into the cleared rows at `LINE_DROP_SPEED` rows per frame, faster if the delay is shorter,
   with a trail, `drawLineDropTrails()`; the field itself collapses when the delay ends).
 - `shapes`, `pieceCells` (`shapeCells(shapes)`: `[type][rotation]` → `[row, col]` offsets, what the
-  rules and the engine iterate) and `palette` (piece type → colour index) per rule set; `nextCount` (TAP and GB: 1, so the
+  rules and the engine iterate) and `palette` (piece type → colour index) per rule set; `nextCount` (TGM1, TAP and GB: 1, so the
   engine draws no list under the first next piece); `hasHold` (no HOLD box when false);
   `firstDrawnRow` (0: the two rows above the well are drawn; GB: 4); `wellTop` (first row of the
   well: `VISIBLE_TOP`, GB 4 for its 18 rows), which sizes the board (`Engine.layoutBoard()`).
@@ -143,7 +145,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   rule set and used only for presentation (TGM's `combo` is a score multiplier).
 
 **Row coordinates:** visible rows are 2..21 (bottom = 21). Rows above are buffer: down to
-−18 for the Guideline (20-row buffer); TGM3 and TAP delete blocks locking above row 1. GB's well is
+−18 for the Guideline (20-row buffer); TGM1, TGM3 and TAP delete blocks locking above row 1. GB's well is
 rows 4..21 (`GB_WELL_TOP`, 18 rows); its pieces can't occupy rows above it (`pieceTop`).
 Pieces are 4×4 boxes; `curPiece_row/col` is the box's top-left.
 
@@ -239,10 +241,10 @@ Primary sources: tetris.wiki pages *Tetris Guideline*, *Super Rotation System*, 
 *Heboris Unofficial Expansion* (rule comparison table), *List of TGM series bugs*;
 *Tetris The Absolute The Grand Master 2 PLUS*, *Grade Recognition System*, *TGM randomizer*;
 github.com/raincomplex/randomizers `randos/ti.py` (TGM3 randomizer) and `randos/tgm.py`
-(`tgm_tap`, TAP randomizer with a reference sequence);
+(`tgm`, TGM1's, and `tgm_tap`, TAP's, with a reference sequence);
 github.com/nullpomino/nullpomino `ClassicPlusWallkick.java` (TGM3-style ARS kick order),
-`GradeMania3Mode.java` (staff roll and 15-minute timings) and `GradeMania2Mode.java` (TAP roll
-length, M-roll section rules as code).
+`GradeMania3Mode.java` (staff roll and 15-minute timings), `GradeMania2Mode.java` (TAP roll
+length, M-roll section rules as code) and `GradeManiaMode.java` (TGM1's GM checks and roll).
 
 ### Guideline (Endless and Marathon)
 - SRS with Guideline kick tables (JLSTZ and I); 7-bag; 6 next pieces (Guideline maximum).
@@ -329,6 +331,23 @@ length, M-roll section rules as code).
   999 gives GM regardless. Death's roll keeps blocks visible and changes nothing; topping out
   in it keeps the grade.
 
+### TGM1 (Tetris The Grand Master): Master and 20G
+- Sources: tetris.wiki *Tetris The Grand Master*, *TGM randomizer*; NullpoMino `GradeManiaMode.java`.
+- Plain ARS as in TAP (basic kicks only, IRS, no hold, one next piece, one buffer row), but no
+  sonic or hard drop: Up does nothing. Soft drop is 1G and locks on the ground; step reset.
+- Randomizer (`Tgm1Randomizer`): TAP's with 4 rolls and a history starting Z Z Z Z (first piece never
+  S, Z or O).
+- Gravity: TGM3's table (`TGM_GRAVITY`, 20G from 500); delays the same at every level
+  (`TGM1_DELAYS`): ARE 30, line ARE 30, DAS 16, lock 30, line clear 41; ARR 1. Ghost below level 100;
+  no speed-up at 15:00. Levels as in TAP (+1 per piece except at x99 and 998, +1 per line).
+- Score: (⌈(level+lines)/4⌉ + soft) × lines × combo × bravo (4 for a perfect clear, "BRAVO");
+  combo and soft as in TAP. Grade from the score (`TGM1_GRADE_SCORES`: 9 at 0 … S9 at 120,000).
+- GM (`TGM1_GM_CHECKS`): at level 300 at least 12,000 points by 4:15, at 500 40,000 by 7:30, at 999
+  126,000 by 13:30. Level 999 without them ends the game (COMPLETE with the grade); with them, the
+  grade becomes GM and a 2968-frame staff roll follows with blocks visible; it ends in GRAND MASTER
+  whether survived or topped out.
+- 20G (`"20g"`): the hidden 20G mode, Master at 20G from level 0 (no ghost).
+
 ### GB (Tetris for the Game Boy, 1989): A-Type and B-Type
 - Sources: tetris.wiki *Tetris (Game Boy)*, *Nintendo Rotation System* (and its GB piece chart);
   TASVideos submission 4536 and the disassembly (randomizer).
@@ -358,7 +377,7 @@ length, M-roll section rules as code).
   lines with a TIME row. `ultra`: Guideline only, TIME UP after 2 minutes (`GUIDELINE_ULTRA_FRAMES`)
   with a countdown TIME row. Sprint and ultra stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
   assumption, the sources only give the goals). `death`: constant 20G, no ghost (for TAP it is
-  TAP's own Death mode, above). `btype`: GB only (above).
+  TAP's own Death mode, above). `btype`: GB only (above). `20g`: TGM1 only (above).
   `test`: no gravity (still implemented and tested, but hidden from the menu).
 
 ### Documented assumptions (sources are silent or ambiguous)
@@ -380,6 +399,10 @@ length, M-roll section rules as code).
   in frames, rounded down. The displayed grade stays S9 during the M-roll (NullpoMino). TAP Death's
   credit roll uses the Master roll length. NullpoMino speeds TAP up after 15:00, but the wiki doesn't
   mention it, so that isn't done.
+- TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
+  (length from NullpoMino) only follows GM and empties the field row by row like TGM3's; the DAS
+  charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it. No secret grade,
+  no Big, Rev, Mono or TLS modes.
 - GB: the level and height
   choices use setting cards, not the original's number grids. No B-Type end bonus,
   no heart mode, no line-clear duplication bug, block out at spawn ends the game. The randomizer's
@@ -411,8 +434,9 @@ add new globals there.
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
-- Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TAP", "TGM3" and "GB" (in that order). Guideline's
-  modes are "Endless", "Marathon", "Sprint" and "Ultra", TGM3's are "World" and "Classic", TAP's
+- Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI" and "GB" (in that order;
+  the rule set list uses the Visuals screen's tighter cards so they all fit). Guideline's
+  modes are "Endless", "Marathon", "Sprint" and "Ultra", TGM1's "Master" and "20G", TGM3's are "World" and "Classic", TAP's
   "Master" and "Death", GB's "A-Type" and "B-Type" (the GB rule set was named "1989" until
   the user renamed it). GB keeps every visual style (Guideline colours,
   the usual board and effects); only its well is shorter, 18 rows as on the Game Boy (the user's request).

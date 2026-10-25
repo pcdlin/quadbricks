@@ -12,7 +12,7 @@ const VERSION = "0.3"; // shown in the top left corner
 const MENU_KEYS = ["Escape", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
 // Menu keys the OS key repeat applies to while held (fast scrolling); games ignore it
 const MENU_REPEAT_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
-// Hidden TGM3 and TAP test setups on Ctrl+Shift+digit, not shown anywhere in the game
+// Hidden TGM1, TGM3 and TAP test setups on Ctrl+Shift+digit, not shown anywhere in the game
 const TEST_KEYS = { Digit1: "roll", Digit2: "invisible", Digit3: "gm", Digit4: "rollend", Digit5: "kill" };
 
 // Input bitmap bits per bound action
@@ -40,6 +40,11 @@ const RULESETS = [
           { name: "Marathon", mode: guideline, variant: "marathon", accent: tetO, desc: "Clear 150 lines" },
           { name: "Sprint", mode: guideline, variant: "sprint", accent: tetL, desc: "Clear 40 lines as fast as you can" },
           { name: "Ultra", mode: guideline, variant: "ultra", accent: tetZ, desc: "Score as much as you can in two minutes" },
+      ] },
+    { name: "TGM1", accent: tetZ, desc: "The Grand Master — ARS, no hard or sonic drop, no hold",
+      modes: [
+          { name: "Master", mode: tgmOriginal, variant: "standard", accent: tetT, desc: "Up to level 999, grades 9 to S9, GM by checkpoints" },
+          { name: "20G", mode: tgmOriginal, variant: "20g", accent: tetZ, desc: "Master mode at 20G from the start" },
       ] },
     { name: "TGM2 TAP", accent: tetI, desc: "TGM2 The Absolute Plus — ARS, sonic drop, no hold",
       modes: [
@@ -106,7 +111,7 @@ const LEVEL_ITEMS = [
 ];
 const LEVEL_CHOICES = Object.fromEntries(LEVEL_ITEMS.map(item => [item.id, item.choice]));
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
-const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals cards, tighter than the other menus
+const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals and rule set cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
 // Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
 const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
@@ -1429,7 +1434,7 @@ class Engine {
                 break;
             case MENU_RULES:
                 heading("START  ·  CHOOSE A RULE SET");
-                this.drawMenuList(RULESETS, this.rulesetpos, listTop);
+                this.drawMenuList(RULESETS, this.rulesetpos, listTop, VISUALS_ROWS.rowH, VISUALS_ROWS.gap); // so they all fit
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
             case MENU_MODES: {

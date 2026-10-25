@@ -1,10 +1,10 @@
-// Spec checks for game/rules.js against the Guideline, TGM3 and TAP references.
+// Spec checks for game/rules.js against the Guideline, TGM1, TGM3, TAP and GB references.
 // Usage: node test/rules.test.js
 const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 vm.runInThisContext(fs.readFileSync(dir + "/game.js", "utf8") + "\n" + fs.readFileSync(dir + "/rules.js", "utf8") +
-    "\n;Object.assign(globalThis, {RuleGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, GbRandomizer, guideline, arika, tgmClassic, tgmTap, gameBoy, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
+    "\n;Object.assign(globalThis, {RuleGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, guideline, arika, tgmClassic, tgmTap, gameBoy, tgmOriginal, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -1377,6 +1377,136 @@ const garbageRows = g => {
     tapClear(b, 4, h => { h.curPiece_col = 8; });
     check("GB B-Type at level 7: scores x 8 and keeps its level", [b.score, b.level], [1200 * 8, 7]);
 }
+
+// ---------------------------------------------------------------- TGM1 (Tetris The Grand Master)
+function startedTgm1(variant = "standard") {
+    const g = new RuleGame(tgmOriginal, variant);
+    for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+{
+    // raincomplex/randomizers randos/tgm.py, class tgm (4 rolls), seed 0x1234abcd
+    const r = new Tgm1Randomizer(0x1234abcd);
+    const names = { [tetI]: "i", [tetZ]: "z", [tetS]: "s", [tetJ]: "j", [tetL]: "l", [tetO]: "o", [tetT]: "t" };
+    let s = "";
+    for (let n = 0; n < 40; n++) s += names[r.next()];
+    check("TGM1 randomizer reproduces the reference sequence (4 rolls, history Z Z Z Z)", s, "jistloitzslotjzloijstlzostlzjiotzsljiszt");
+    const firsts = new Set();
+    for (let k = 0; k < 200; k++) firsts.add(new Tgm1Randomizer(k * 7919).next());
+    check("  ...the first piece is never S, Z or O", [firsts.has(tetS), firsts.has(tetZ), firsts.has(tetO)], [false, false, false]);
+}
+{
+    const g = startedTgm1();
+    check("TGM1: one next piece, no hold, ARS shapes and Sega colours",
+        [g.nextCount, g.hasHold, g.shapes === ARS_SHAPES, g.palette[tetI]], [1, false, true, 6]);
+    check("  ...stats: rule set and mode, then grade, level, time, score",
+        [g.getStats()[0], g.getStats().slice(1).map(s => s[0]), startedTgm1("20g").getStats()[0]],
+        [["TGM1", "MASTER"], ["GRADE", "LEVEL", "TIME", "SCORE"], ["TGM1", "20G"]]);
+    const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
+    check("  ...gravity (1/256 G) as TAP's, delays the same at every level (ARE 30, DAS 16, lock 30, line clear 41)",
+        [at(0), at(100), at(251), at(500), at(900)],
+        [[4, 30, 30, 16, 30, 41], [80, 30, 30, 16, 30, 41], [256, 30, 30, 16, 30, 41], [5120, 30, 30, 16, 30, 41], [5120, 30, 30, 16, 30, 41]]);
+    g.level = 100; g.updateTimings(); g.frames = 15 * 3600 - 1;
+    g.advanceFrame(0); g.advanceFrame(0);
+    check("  ...no speed-up at 15:00", [g.gravity * 256, g.lockDelayMax], [80, 30]);
+    const twenty = startedTgm1("20g");
+    check("TGM1 20G: 20G from level 0, no ghost", [twenty.gravity, twenty.getShadowRow()], [20, -100]);
+}
+function tgm1At(type, rot, row, col, blocks = []) {
+    const g = startedTgm1();
+    clearField(g);
+    for (const [r, c] of blocks) g.setCell(r, c, 1);
+    place(g, type, rot, row, col);
+    return g;
+}
+{
+    const z = tgm1At(tetZ, 0, 10, 4, [[10, 6]]);
+    const wall = tgm1At(tetI, 1, 10, -2);
+    const notch = tgm1At(tetT, 1, 19, 4, [[21, 4], [21, 6]]);
+    check("TGM1 rotation: basic kicks, but no I kicks and no floor kicks",
+        [[z.rotate(1), z.curPiece_col - 4], wall.rotate(1), notch.rotate(1)], [[true, 1], false, false]);
+    const s = tgm1At(tetO, 0, 5, 3);
+    s.advanceFrame(HARD_PUSH);
+    const up = [s.phase, s.curPiece_row];
+    const d = tgm1At(tetO, 0, 20, 3);
+    d.advanceFrame(SOFT_PUSH);
+    check("TGM1 drops: Up does nothing (no sonic or hard drop), soft drop locks on the ground", [up, d.phase], [["active", 5], "are"]);
+    const h = tgm1At(tetT, 0, 10, 3);
+    const type = h.curPiece_type;
+    h.advanceFrame(HOLD_PUSH);
+    check("TGM1: the hold button does nothing", [h.curPiece_type, h.getHeldPiece()], [type, 0]);
+}
+{
+    const g = startedTgm1();
+    clearField(g);
+    g.setCell(10, 0, 1); // keeps the field from being empty
+    g.level = 10; g.score = 0; g.combo = 1;
+    tapClear(g, 2, h => { h.softFrames = 5; h.sonicMax = 3; h.activeTime = 20; h.manualLock = false; });
+    check("TGM1 score: (ceil((level + lines) / 4) + soft) x lines x combo, no sonic, speed or level terms",
+        [g.score, g.level], [(3 + 5) * 2 * 3, 12]);
+    clearField(g);
+    g.level = 0; g.score = 0; g.combo = 1;
+    tapClear(g, 4);
+    check("  ...bravo x4 for clearing the field", [g.score, g.actions.some(a => a.text === "BRAVO")], [1 * 4 * 7 * 4, true]);
+    const grade = score => { g.score = score; return g.gradeLabel(); };
+    check("TGM1 grades from the score: 9 at 0, 1 at 12,000, S1 at 16,000, S9 at 120,000",
+        [grade(0), grade(399), grade(400), grade(11999), grade(12000), grade(16000), grade(119999), grade(120000), grade(500000)],
+        ["9", "9", "8", "2", "1", "S1", "S8", "S9", "S9"]);
+}
+{
+    const g = startedTgm1();
+    clearField(g);
+    g.level = 99; g.curPiece_type = 0;
+    g.spawn(tetT, false);
+    check("TGM1 levels: a new piece doesn't pass a section stop (x99)", g.level, 99);
+    const checkpoint = (level, score, frames) => {
+        const h = startedTgm1();
+        clearField(h);
+        h.level = level; h.score = score; h.frames = frames;
+        tapClear(h, 1);
+        return h.gmQualified;
+    };
+    check("TGM1 GM checkpoints: 12,000 by 4:15 at 300, 40,000 by 7:30 at 500",
+        [checkpoint(299, 12000, 255 * 60), checkpoint(299, 11000, 100), checkpoint(299, 20000, 255 * 60 + 1),
+         checkpoint(499, 40000, 450 * 60), checkpoint(499, 39000, 100), checkpoint(450, 0, 0)],
+        [true, false, false, true, false, true]);
+}
+function tgm1To999(score, frames = 600 * 60) {
+    const g = startedTgm1();
+    clearField(g);
+    g.level = 998; g.score = score; g.frames = frames;
+    tapClear(g, 1);
+    return g;
+}
+{
+    const g = tgm1To999(100000);
+    check("TGM1 level 999 without GM: the game ends with the grade", [g.isGameOver(), g.endTitle, g.endSub.startsWith("GRADE S8"), g.level], [true, "COMPLETE", true, 999]);
+    const late = tgm1To999(130000, 810 * 60 + 1);
+    check("  ...126,000 points but after 13:30: no GM", [late.endTitle, late.gradeLabel()], ["COMPLETE", "S9"]);
+    const gm = tgm1To999(130000);
+    check("TGM1 GM: 126,000 by 13:30 at 999 with both checkpoints met", [gm.isGameOver(), gm.gradeLabel(), gm.timerStopped], [false, "GM", true]);
+    for (let f = 0; f < 300 && gm.phase !== "active"; f++) gm.advanceFrame(0);
+    check("  ...then the staff roll with blocks staying visible", [gm.roll, gm.rollLength, gm.rollHide.visible], ["visible", 2968, Infinity]);
+    place(gm, tetO, 0, 19, 3);
+    gm.lock();
+    for (let f = 0; f < 200; f++) gm.advanceFrame(0);
+    check("  ...locked blocks keep showing", gm.getCellAlpha(21, 4), 1);
+    gm.curPiece_type = 0;
+    for (let c = 0; c < WIDTH; c++) for (let r = 2; r < 5; r++) gm.setCell(r, c, 1);
+    gm.spawn(tetT, false);
+    check("  ...topping out in it still ends in GM", [gm.isGameOver(), gm.endTitle, gm.gradeLabel()], [true, "GRAND MASTER", "GM"]);
+    const surv = tgm1To999(130000);
+    for (let f = 0; f < 300 && surv.phase !== "active"; f++) surv.advanceFrame(0);
+    surv.rollFrames = surv.rollLength - 1;
+    surv.advanceFrame(0);
+    check("  ...surviving it too", [surv.isGameOver(), surv.endTitle], [true, "GRAND MASTER"]);
+}
+{
+    const g = startedTgm1();
+    check("TGM1 test setups: only the GM roll and its end", [g.testSetup("invisible"), g.testSetup("kill"), g.testSetup("roll"), g.nextRoll, g.gradeLabel()],
+        [false, false, true, "visible", "GM"]);
+}
+
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);
