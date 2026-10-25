@@ -1,7 +1,8 @@
 // ACE (AceGame): the 150-line time attack modes of the Xbox 360 game (Normal, Hi-Speed 1 and 2,
-// Another, Another 2): 15 levels of 10 lines, each against a time limit, with Arika SRS, hold
+// Another, Another 2, Big): 15 levels of 10 lines, each against a time limit, with Arika SRS, hold
 // and three next pieces (tetris.wiki: Tetris_The_Grand_Master_Ace; speeds and time limits from
-// NullpoMino's TimeAttackMode)
+// NullpoMino's TimeAttackMode). Big plays at Normal's speeds with pieces twice the size (the wiki:
+// "similar or possibly identical" to Normal).
 
 const ACE_LEVELS = 15, ACE_LINES_PER_LEVEL = 10;
 // Gravity in 1/256 G by level from 1; past the end of a mode's list, 20G
@@ -31,6 +32,7 @@ class AceGame extends RuleGame {
         this.moveLimit = ACE_MOVE_RESETS;
         this.lockOut = true;
         this.randomizer = new TiRandomizer(Date.now());
+        if (variant === "big") this.setBig();
         // time left on the level's clock; it waits from a level-up to the next piece
         this.aceTimer = this.aceLimit();
         this.acePaused = false;
@@ -43,7 +45,7 @@ class AceGame extends RuleGame {
     }
 
     setTimings() {
-        const v = this.variant, i = this.level - 1;
+        const v = this.variant === "big" ? "normal" : this.variant, i = this.level - 1;
         const delays = v === "another" ? ACE_ANOTHER_DELAYS[Math.min(i, ACE_ANOTHER_DELAYS.length - 1)]
             : v === "another2" ? ACE_ANOTHER2_DELAYS : ACE_DELAYS;
         [this.are, this.lineAre, this.das, this.lockDelayMax, this.lineClearDelay] = delays;

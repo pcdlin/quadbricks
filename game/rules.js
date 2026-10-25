@@ -29,7 +29,7 @@ const guideline = 3, arika = 4, tgmClassic = 5, tgmTap = 6, gbTetris = 7, tgmOri
 // Shown under the rule set name; standard is named after the rule set instead (see getStats)
 const VARIANT_NAMES = { test: "TEST", death: "DEATH", marathon: "MARATHON", sprint: "SPRINT", ultra: "ULTRA", btype: "B-TYPE", "20g": "20G",
     variable: "VARIABLE", dig: "DIG", master: "MASTER", shirase: "SHIRASE", easy: "EASY", plus: "TGM+",
-    normal: "NORMAL", hispeed1: "HI-SPEED 1", hispeed2: "HI-SPEED 2", another: "ANOTHER", another2: "ANOTHER 2" };
+    normal: "NORMAL", hispeed1: "HI-SPEED 1", hispeed2: "HI-SPEED 2", another: "ANOTHER", another2: "ANOTHER 2", big: "BIG" };
 
 const FIELD_TOP = -18;  // the highest row kept: 20 visible rows + 20-row buffer
 
@@ -105,10 +105,12 @@ function registerRules(modes, pick) {
 
 // A new game of a mode and variant. startLevel: NES and GB (start level), Guideline Master (M1 +
 // startLevel); height: NES and GB B-Type (garbage height), Guideline Dig (rows); handling: Guideline
-// only, overrides of GUIDELINE_HANDLING (the other rule sets keep their specified timing)
-function createGame(mode, variant = "standard", startLevel = 0, height = 0, handling = {}) {
+// only, overrides of GUIDELINE_HANDLING (the other rule sets keep their specified timing); big: the
+// TGM games' Big mode, pieces twice the size all game
+function createGame(mode, variant = "standard", startLevel = 0, height = 0, handling = {}, big = false) {
     const Game = RULE_CLASSES[mode](variant);
     const game = new Game(mode, variant, startLevel, height, handling);
+    if (big) game.setBig();
     game.begin();
     return game;
 }
@@ -124,7 +126,8 @@ class RuleGame {
         this.tgm = false; // the TGM series (TgmGame)
         this.handling = { ...NO_HANDLING };
         this.setShapes(shapes, DEFAULT_PALETTE);
-        this.big = false; // Shirase's staff roll: pieces twice the size, moving two columns at a time
+        this.big = false; // pieces twice the size, moving two columns at a time (setBig)
+        this.bigMode = false; // big from the start: the Big mode
         // First row of the well (the engine sizes the board to it), the first row the engine draws
         // (the two rows above the well too) and the highest row a piece may occupy
         this.wellTop = VISIBLE_TOP;
@@ -377,8 +380,11 @@ class RuleGame {
         return this.curCells[type][this.curPiece_rotation].map(([i, j]) => ({ row: row + i, col: col + j, type }));
     }
 
-    // Big pieces: every block becomes 2 x 2 (its offsets doubled) and pieces move two columns at a time
+    // Big pieces: every block becomes 2 x 2 (its offsets doubled), pieces move and kick two cells at
+    // a time, enter in columns 2-9 on the 2 x 2 grid, and two cleared rows count as one line. Before
+    // the first piece (createGame) it is the Big mode; TGM3 Shirase's staff roll turns it on too.
     setBig() {
+        if (this.phase === "ready") this.bigMode = true;
         this.big = true;
         this.curCells = this.pieceCells.map(states => states.map(cells =>
             cells.flatMap(([i, j]) => [[2 * i, 2 * j], [2 * i, 2 * j + 1], [2 * i + 1, 2 * j], [2 * i + 1, 2 * j + 1]])));
@@ -609,7 +615,7 @@ class RuleGame {
         }
 
         this.curPiece_type = type;
-        [this.curPiece_row, this.curPiece_col] = this.spawnPosition(type);
+        [this.curPiece_row, this.curPiece_col] = this.big ? this.bigSpawnPosition(type) : this.spawnPosition(type);
         this.curPiece_rotation = 0;
 
         // IRS: rotation button held while the piece enters; falls back if blocked
@@ -650,6 +656,10 @@ class RuleGame {
     // [row, col] of the piece's 4x4 box as it enters
     spawnPosition(type) {
         return [0, 3];
+    }
+    // Big pieces: in columns 2-9, on the 2 x 2 grid, the top in the top visible row
+    bigSpawnPosition(type) {
+        return [VISIBLE_TOP - Math.min(...this.curCells[type][0].map(([i]) => i)), 2];
     }
     afterSpawn(newPiece) {} // the piece is in play
     // Block out: the piece has no room to enter
@@ -814,14 +824,14 @@ class RuleGame {
                 }
             }
         }
-        const n = rows.length;
+        const n = this.big ? rows.length >> 1 : rows.length; // big: two rows make a line (NullpoMino)
         this.chain = n > 0 ? this.chain + 1 : -1;
         if (n > 0) this.sounds.push("clear" + n + (this.chain > 0 ? "c" + this.chain : "")); // e.g. "clear2c3"
 
         this.scoreClear(n, rows);
         if (this.gameover) return;
 
-        const collapseNow = n > 0 && this.lineClearDelay === 0;
+        const collapseNow = rows.length > 0 && this.lineClearDelay === 0;
         if (fromHardDrop) {
             for (const cell of cells) {
                 // cleared cells keep the row they landed in, for the drop trail (there's no block to flash)
@@ -831,7 +841,7 @@ class RuleGame {
             }
         }
 
-        if (n === 0) {
+        if (rows.length === 0) {
             this.startAre(this.are);
         } else if (collapseNow) {
             this.collapse(rows);

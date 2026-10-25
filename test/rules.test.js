@@ -2011,5 +2011,111 @@ function startedMode(mode, variant) {
     check("  ...150 lines complete it", [h.isGameOver(), h.endTitle, h.lines], [true, "COMPLETE", 150]);
 }
 
+// ---------------------------------------------------------------- Big modes
+function startedBig(mode, variant = "standard") {
+    const g = createGame(mode, variant, 0, 0, {}, true);
+    for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+{
+    const g = startedBig(tgmOriginal);
+    const spawnCols = [...new Set(g.curPieceCells().map(c => c.col))].sort((a, b) => a - b);
+    check("Big: pieces twice the size, entering in columns 2-9 at the top of the well, the mode named BIG",
+        [g.big, g.bigMode, g.curCells[tetO][0].length, spawnCols[0] >= 2, Math.min(...g.curPieceCells().map(c => c.row)), g.getStats()[0]],
+        [true, true, 16, true, 2, ["TGM1", "MASTER BIG"]]);
+    clearField(g);
+    place(g, tetO, 0, 10, 2);
+    const leftCol = () => Math.min(...g.curPieceCells().map(c => c.col));
+    const cols = [leftCol()];
+    for (let k = 0; k < 3; k++) { g.shift(-1); cols.push(leftCol()); }
+    check("  ...they move two columns at a time, up to the wall", cols, [4, 2, 0, 0]);
+    clearField(g);
+    for (let r = 20; r < HEIGHT; r++) for (let c = 0; c < 6; c++) g.setCell(r, c, 1);
+    g.setCell(10, 0, 1); // the field isn't emptied
+    place(g, tetO, 0, 16, 4); // a big O in columns 6-9, rows 18-21
+    g.level = 10; g.lines = 0;
+    g.lock();
+    check("  ...two cleared rows count as one line", [g.lines, g.level], [1, 11]);
+    check("Big for every TGM game but TGM+, and ACE's Big mode at Normal's speeds",
+        [startedBig(tgmTap, "death").getStats()[0], startedBig(arika, "easy").getStats()[0], startedBig(tgmClassic, "shirase").getStats()[0]],
+        [["TGM2 TAP", "DEATH BIG"], ["TGM3 TI", "WORLD EASY BIG"], ["TGM3 TI", "CLASSIC SHIRASE BIG"]]);
+    const ace = startedMode(tgmAce, "big");
+    check("  ...ACE Big", [ace.getStats()[0], ace.big, ace.gravity * 256, ace.lockDelayMax, ace.aceLimit()], [["ACE", "BIG"], true, 4, 30, 7200]);
+    const plain = startedMode(arika, "standard");
+    check("  ...and not without it", [plain.big, plain.bigMode, plain.getStats()[0]], [false, false, ["TGM3 TI", "WORLD"]]);
+}
+{
+    const g = startedBig(arika, "shirase");
+    clearField(g);
+    g.level = 500;
+    fill(g, ["##########", "#########."]);
+    g.setCell(20, 9, 0); g.setCell(20, 8, 0);
+    g.garbageCount = 20; g.curPiece_type = 0;
+    g.spawn(tetT, false);
+    const row = r => [...Array(WIDTH)].map((_, c) => g.getCell(r, c) ? "#" : ".").join("");
+    check("Big Shirase: garbage rises two rows at a time (the bottom two copied)",
+        [row(18), row(19), row(20), row(21)], ["########..", "#########.", "########..", "#########."]);
+}
+
+// ---------------------------------------------------------------- TAP Normal
+{
+    const g = startedMode(tgmTap, "normal");
+    const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
+    check("TAP Normal: its own gravity (1/256 G), the same delays throughout",
+        [at(0), at(99), at(100), at(139), at(200), at(299), at(300)],
+        [[4, 27, 27, 16, 30, 40], [64, 27, 27, 16, 30, 40], [4, 27, 27, 16, 30, 40], [32, 27, 27, 16, 30, 40],
+         [16, 27, 27, 16, 30, 40], [240, 27, 27, 16, 30, 40], [5120, 27, 27, 16, 30, 40]]);
+    const s = startedMode(tgmTap, "normal");
+    check("  ...stats: mode, level to 300, time, score (no grade)",
+        [s.getStats()[0], s.getStats().map(r => r[0]), s.maxLevel], [["TGM2 TAP", "NORMAL"], ["TGM2 TAP", "LEVEL", "TIME", "SCORE"], 300]);
+    clearField(s);
+    s.level = 98; s.curPiece_type = 0; s.spawn(tetT, false);
+    s.curPiece_type = 0; s.spawn(tetT, false);
+    const past99 = s.level;
+    s.level = 299; s.curPiece_type = 0; s.spawn(tetT, false);
+    check("  ...no section stops, but the last before 300", [past99, s.level], [100, 299]);
+}
+{
+    const g = startedMode(tgmTap, "normal");
+    clearField(g);
+    g.level = 99; g.curPiece_type = 0;
+    g.spawn(tetT, false);
+    const item = g.pendingItem;
+    g.setCell(10, 0, 1); g.setCell(15, 0, 1); g.setCell(21, 3, 1);
+    place(g, tetO, 0, 5, 6);
+    g.lock();
+    check("TAP Normal items: level 100 brings Free Fall, used after the next lock: blocks drop down their columns",
+        [item, g.pendingItem, g.getCell(10, 0), g.getCell(20, 0), g.getCell(21, 0), g.getCell(21, 3), g.getCell(21, 7), g.getCell(20, 7)],
+        ["FREE FALL", null, 0, 1, 1, 1, 7, 7]);
+    clearField(g);
+    for (let r = 16; r < HEIGHT; r++) g.setCell(r, 0, 1);
+    g.pendingItem = "DEL EVEN";
+    place(g, tetO, 0, 5, 6);
+    g.lock();
+    const col0 = [...Array(6)].map((_, k) => g.getCell(16 + k, 0));
+    check("  ...level 200's Del Even deletes every other row from the bottom (the second, fourth, ...)",
+        col0, [0, 0, 0, 1, 1, 1]);
+}
+{
+    const clear = (variant, frames = 0, level = 10) => {
+        const g = startedMode(tgmTap, variant);
+        clearField(g);
+        g.setCell(10, 0, 1);
+        g.level = level; g.score = 0; g.combo = 1; g.frames = frames;
+        tapClear(g, 1, h => { h.softFrames = 0; h.sonicMax = 0; h.activeTime = 10; h.manualLock = false; });
+        return g;
+    };
+    check("TAP Normal score: six times Master's for the same clear", clear("normal").score, 6 * clear("standard").score);
+    const fast = clear("normal", 200 * 60, 299), slow = clear("normal", 301 * 60, 299);
+    check("  ...level 300: 1253 x the seconds under 5:00, then the credit roll",
+        [fast.score - slow.score, fast.timerStopped, fast.level], [1253 * 100, true, 300]);
+    for (let f = 0; f < 400 && fast.phase !== "active"; f++) fast.advanceFrame(0);
+    check("  ...a 20G roll with blocks visible", [fast.roll, fast.gravity], ["visible", 20]);
+    fast.curPiece_type = 0;
+    for (let c = 0; c < WIDTH; c++) for (let r = 1; r < 5; r++) fast.setCell(r, c, 1);
+    fast.spawn(tetT, false);
+    check("  ...that needn't be survived", [fast.isGameOver(), fast.endTitle], [true, "COMPLETE"]);
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

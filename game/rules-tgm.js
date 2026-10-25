@@ -232,6 +232,22 @@ const TAP_PLUS_PATTERN = [
     "#.########", "#######.##", "#######..#", "########.#", "####..####", "####..####", "####.#####", "###...####",
 ];
 const TAP_PLUS_ROLL_FRAMES = 2024;
+// Normal: to level 300 with no section stops but the last, its own gravity and fixed delays, an item
+// at 100 (Free Fall: every block drops down its column, filling the holes) and at 200 (Del Even:
+// every other row from the bottom is deleted), x6 points for clears and a time bonus at 300, then a
+// 20G credit roll that needn't be survived. No grades.
+const TAP_NORMAL_MAX_LEVEL = 300;
+// Gravity in 1/256 G: [from level, value]
+const TAP_NORMAL_GRAVITY = [
+    [0, 4], [8, 5], [19, 6], [35, 8], [40, 10], [50, 12], [60, 16], [70, 32], [80, 48], [90, 64],
+    [100, 4], [108, 5], [119, 6], [125, 8], [131, 12], [139, 32], [149, 48], [156, 80], [164, 112], [174, 128],
+    [180, 144], [200, 16], [212, 48], [221, 80], [232, 112], [244, 144], [256, 176], [267, 192], [277, 208], [287, 224],
+    [295, 240], [300, 5120],
+];
+const TAP_NORMAL_DELAYS = [27, 27, 16, 30, 40]; // ARE, line ARE, DAS, lock delay, line clear delay
+const TAP_NORMAL_SCORE = 6; // clears score six times as much
+const TAP_NORMAL_TIME_BONUS = 1253, TAP_NORMAL_BONUS_SECONDS = 300; // x seconds under 5:00 at level 300
+const TAP_NORMAL_ITEMS = { 100: "FREE FALL", 200: "DEL EVEN" }; // by the level that brings them
 
 // ----------------------------------------------------------
 // TGM1 (Tetris The Grand Master): plain ARS as in TAP, no sonic drop, and TGM3's gravity table
@@ -263,6 +279,7 @@ class TgmGame extends RuleGame {
         this.ars = false; // Arika Rotation System (useArs), else Arika SRS
         this.plainArs = false; // ARS with only the basic kicks (TGM1, TAP)
         this.maxLevel = TGM_MAX_LEVEL;
+        this.sectionStops = true; // a new piece doesn't pass x99 (TAP Normal: only the last stop)
         this.internalGrading = false; // grade points and their decay (TGM3 and TAP Master)
         this.hasKill = false; // the 15-minute speed-up (TGM3 Master)
         this.sonicTrail = false; // the sonic drop leaves a drop trail (TAP Master)
@@ -316,7 +333,8 @@ class TgmGame extends RuleGame {
         const level = ["LEVEL", `${this.level} / ${stop}`];
         // during the staff roll the timer is stopped and the time row counts the roll down
         const time = this.roll ? ["ROLL", this.formatTime(Math.max(0, this.rollLength - this.rollFrames))] : ["TIME", this.formatTime()];
-        return this.tgmStats(this.statsName(), level, time);
+        const [ruleSet, mode] = this.statsName();
+        return this.tgmStats([ruleSet, this.bigMode ? `${mode} BIG` : mode], level, time);
     }
 
     statsName() { return ["", ""]; } // [rule set, mode]
@@ -360,10 +378,7 @@ class TgmGame extends RuleGame {
         if (this.internalGrading && !this.roll) this.decayGrade();
     }
 
-    spawnPosition(type) {
-        if (this.big) { // in columns 2-9, on the 2 x 2 grid, its top in the top visible row
-            return [VISIBLE_TOP - Math.min(...this.curCells[type][0].map(([i]) => i)), 2];
-        }
+    spawnPosition() {
         return [this.ars ? ARS_SPAWN_ROW : TGM_SPAWN_ROW, 3];
     }
 
@@ -378,7 +393,8 @@ class TgmGame extends RuleGame {
     // Level +1 per new piece, except at section stops (x99 and the one before the end) and in the
     // staff roll (TAP Death's can start at 500)
     afterSpawn(newPiece) {
-        if (!this.firstPiece && newPiece && !this.roll && this.level % 100 !== 99 && this.level !== this.maxLevel - 1) {
+        if (!this.firstPiece && newPiece && !this.roll && !(this.sectionStops && this.level % 100 === 99)
+            && this.level !== this.maxLevel - 1) {
             this.level++;
             this.updateSection();
             this.updateTimings();
@@ -762,8 +778,8 @@ class Tgm1Game extends TgmGame {
 
 // ----------------------------------------------------------
 // TAP (TGM2 The Absolute Plus): Master (grades 9 to GM, fading roll or M-roll), Death (20G, M at
-// level 500, GM at 999) and TGM+ (rising garbage). Plain ARS without TGM3's kicks, sonic drop, no
-// hold, one next piece, the TGM2 randomizer.
+// level 500, GM at 999), TGM+ (rising garbage) and Normal (to level 300 with two items). Plain ARS
+// without TGM3's kicks, sonic drop, no hold, one next piece, the TGM2 randomizer.
 
 class TapGame extends TgmGame {
     constructor(mode, variant) {
@@ -774,7 +790,13 @@ class TapGame extends TgmGame {
         this.randomizer = new TapRandomizer(Date.now());
         this.tapPlus = variant === "plus";
         this.death = variant === "death";
-        this.internalGrading = !this.tapPlus; // Death's points are unused
+        this.normal = variant === "normal";
+        this.internalGrading = !this.tapPlus && !this.normal; // Death's points are unused
+        if (this.normal) {
+            this.maxLevel = TAP_NORMAL_MAX_LEVEL;
+            this.sectionStops = false;
+        }
+        this.pendingItem = null; // Normal: the item to use after the next lock
         this.sonicTrail = !this.death; // TAP shows the drop trail for the sonic drop too (not Death)
         this.invisibleRollName = "M-ROLL";
         this.rollLength = this.tapPlus ? TAP_PLUS_ROLL_FRAMES : TAP_ROLL_FRAMES;
@@ -792,7 +814,7 @@ class TapGame extends TgmGame {
     }
 
     tgmStats(mode, level, time) {
-        if (this.tapPlus) return [mode, level, time, ["SCORE", this.scoreText()]]; // no grades
+        if (this.tapPlus || this.normal) return [mode, level, time, ["SCORE", this.scoreText()]]; // no grades
         return super.tgmStats(mode, level, time);
     }
 
@@ -805,7 +827,58 @@ class TapGame extends TgmGame {
     delayRow(speedLevel) {
         if (this.death) return tableLookup(TAP_DEATH_DELAYS, speedLevel);
         if (this.tapPlus) return [0, ...TAP_PLUS_DELAYS];
+        if (this.normal) return [0, ...TAP_NORMAL_DELAYS];
         return super.delayRow(speedLevel);
+    }
+
+    gravityAt(speedLevel) {
+        if (this.normal) return tableLookup(TAP_NORMAL_GRAVITY, this.level)[1] / 256;
+        return super.gravityAt(speedLevel);
+    }
+
+    // Normal: a level reached brings its item, used after the next lock
+    afterSpawn(newPiece) {
+        const before = this.level;
+        super.afterSpawn(newPiece);
+        this.checkItem(before);
+    }
+
+    checkItem(levelBefore) {
+        if (!this.normal) return;
+        for (const [key, item] of Object.entries(TAP_NORMAL_ITEMS)) {
+            const level = Number(key);
+            if (levelBefore < level && this.level >= level) this.pendingItem = item;
+        }
+    }
+
+    // The item: Free Fall drops every block down its column, Del Even deletes every other row from the
+    // bottom (the second, fourth, ...)
+    useItem() {
+        const item = this.pendingItem;
+        this.pendingItem = null;
+        this.addAction(item, "grade");
+        if (item === "FREE FALL") {
+            for (let c = 0; c < WIDTH; c++) {
+                const blocks = [];
+                for (let r = HEIGHT - 1; r >= FIELD_TOP; r--) if (this.getCell(r, c)) blocks.push(this.getCell(r, c));
+                for (let r = HEIGHT - 1, k = 0; r >= FIELD_TOP; r--, k++) this.setCell(r, c, k < blocks.length ? blocks[k] : 0);
+            }
+        } else {
+            const rows = [];
+            for (let r = HEIGHT - 2; r >= FIELD_TOP; r -= 2) {
+                rows.push(r);
+                for (let c = 0; c < WIDTH; c++) {
+                    const type = this.getCell(r, c);
+                    if (type) this.clearedCells.push({ row: r, col: c, type });
+                }
+            }
+            this.collapse(rows.reverse());
+        }
+    }
+
+    afterClear() {
+        if (this.pendingItem) this.useItem();
+        super.afterClear();
     }
 
     // Combo multipliers apply to singles, doubles and triples, never to Tetrises
@@ -814,7 +887,7 @@ class TapGame extends TgmGame {
     }
 
     onBlockOut() {
-        if (this.tapPlus && this.roll) return this.endRoll(); // TGM+'s roll can't be lost
+        if ((this.tapPlus || this.normal) && this.roll) return this.endRoll(); // TGM+'s and Normal's rolls can't be lost
         if (this.roll === "invisible") this.finalGrade = "M"; // M-roll not survived
         super.onBlockOut();
     }
@@ -826,6 +899,7 @@ class TapGame extends TgmGame {
     // TGM+: a piece locked without clearing; enough of them in a row raise the pattern's next row
     onMiss() {
         if (this.tapPlus) this.tapPlusGarbage();
+        if (this.pendingItem) this.useItem();
     }
 
     tapPlusGarbage() {
@@ -841,15 +915,16 @@ class TapGame extends TgmGame {
     }
 
     // A clear of n lines (after scoreTgm). Score = (ceil((level + lines) / 4) + soft + 2 x sonic)
-    // x lines x combo x bravo + ceil(level after / 2) + speed x 7
+    // x lines x combo x bravo + ceil(level after / 2) + speed x 7; Normal: x6, and the time bonus at 300
     scoreTap(n) {
         const death = this.death;
         const levelBefore = this.level;
-        const levelAfter = Math.min(TGM_MAX_LEVEL, levelBefore + n); // one level per line
+        const levelAfter = Math.min(this.maxLevel, levelBefore + n); // one level per line
         const { soft, speed } = this.tgmPieceBonus();
         const bravo = this.fieldEmpty() ? 4 : 1;
-        this.score += (Math.ceil((levelBefore + n) / 4) + soft + 2 * this.sonicMax) * n * this.combo * bravo
+        const points = (Math.ceil((levelBefore + n) / 4) + soft + 2 * this.sonicMax) * n * this.combo * bravo
             + Math.ceil(levelAfter / 2) + speed * 7;
+        this.score += this.normal ? TAP_NORMAL_SCORE * points : points;
         this.lines += n;
         this.addClearActions(n);
         if (bravo > 1) this.addAction("BRAVO", "pc");
@@ -869,13 +944,15 @@ class TapGame extends TgmGame {
                 this.timerStopped = true;
             }
         }
-        if (this.level >= TGM_MAX_LEVEL) {
+        if (this.level >= this.maxLevel) {
             this.timerStopped = true; // the staff roll starts after the clear (afterClear)
             if (death) {
                 this.finalGrade = "GM";
                 this.addAction("GRADE GM", "grade");
             }
+            if (this.normal) this.score += TAP_NORMAL_TIME_BONUS * Math.max(0, Math.ceil(TAP_NORMAL_BONUS_SECONDS - this.frames / 60));
         }
+        this.checkItem(levelBefore);
         this.updateTimings();
         this.setShadow();
     }
@@ -887,7 +964,7 @@ class TapGame extends TgmGame {
     // Master: judge a section against the M-roll conditions once it is finished (the last at 999)
     updateTapSection() {
         const section = Math.floor(this.level / 100);
-        if (section === this.section && this.level < TGM_MAX_LEVEL) return;
+        if (section === this.section && this.level < this.maxLevel) return;
         const time = this.frames - this.sectionStart;
         const s = this.section, times = this.sectionTimes;
         let limit;
@@ -908,12 +985,12 @@ class TapGame extends TgmGame {
     }
 
     rollKind() {
-        if (this.death || this.tapPlus) return "visible";
+        if (this.death || this.tapPlus || this.normal) return "visible";
         return this.mrollEarned() ? "invisible" : "fading";
     }
 
     prepareTestRoll(name) {
-        if (this.tapPlus) return name === "roll";
+        if (this.tapPlus || this.normal) return name === "roll";
         if (this.death) {
             if (name !== "roll") return false;
             this.finalGrade = "GM";
@@ -929,6 +1006,8 @@ class TapGame extends TgmGame {
         const time = this.formatTime();
         if (this.tapPlus) {
             this.endGame("EXCELLENT", time);
+        } else if (this.normal) {
+            this.endGame("COMPLETE", `SCORE ${this.scoreText()} — ${time}`);
         } else if (this.death) { // the credits change nothing
             this.endGame(this.torikan ? "EXCELLENT" : "COMPLETE", `GRADE ${this.gradeLabel()} — ${time}`);
         } else if (this.roll === "invisible") {
@@ -1284,12 +1363,13 @@ class TiShiraseGame extends TiGame {
     }
 
     // As a new piece comes: a copy of the bottom row rises once the counter has reached the
-    // section's quota, then the piece counts
+    // section's quota, then the piece counts. Big: the bottom two rows, a row of big blocks.
     shiraseGarbage() {
         const quota = SHIRASE_GARBAGE[Math.floor(this.level / 100)];
         if (!quota) return;
         if (this.garbageCount >= quota) {
-            this.raiseRow([...this.field[this.field.length - 1]]);
+            const copies = this.field.slice(this.big ? -2 : -1).map(row => [...row]);
+            for (const row of copies) this.raiseRow(row);
             this.garbageCount = 0;
         }
         this.garbageCount++;

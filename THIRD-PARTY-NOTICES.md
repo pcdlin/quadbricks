@@ -19,7 +19,8 @@ files and re-implemented in the rule files (`game/rules*.js`):
 - TGM3 Shirase's staff roll length and big pieces (`SpeedMania2Mode.java`);
 - TAP TGM+'s 24-row garbage pattern (transcribed as a table) and staff roll length
   (`GarbageManiaMode.java`);
-- the ACE modes' gravity, delay and time limit tables (`TimeAttackMode.java`).
+- the ACE modes' gravity, delay and time limit tables (`TimeAttackMode.java`);
+- Big pieces counting two cleared rows as one line (`GameEngine.java`).
 
 As a courtesy, and because its tables informed ours, its licence is reproduced:
 

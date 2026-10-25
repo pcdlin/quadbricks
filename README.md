@@ -65,8 +65,8 @@ are listed as assumptions in `AGENTS.md`.
   `ClassicPlusWallkick.java` (TGM3-style ARS kick order), `GradeMania3Mode.java`
   (staff roll and 15-minute timings), `GradeMania2Mode.java` (TAP roll length
   and M-roll rules), `GradeManiaMode.java` (TGM1), `DigRaceMode.java` (dig),
-  `SpeedMania2Mode.java` (Shirase), `GarbageManiaMode.java` (TGM+) and
-  `TimeAttackMode.java` (ACE).
+  `SpeedMania2Mode.java` (Shirase), `GarbageManiaMode.java` (TGM+),
+  `TimeAttackMode.java` (ACE) and `GameEngine.java` (Big line counting).
 
 Licences and attributions for these sources are in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
