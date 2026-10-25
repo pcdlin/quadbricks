@@ -1,6 +1,6 @@
 // Block styles. Each draws one block into a sprite canvas that is already scaled and
 // offset by pad(style): draw(g, col, size, style, index), where col is the colour entry
-// ({base, light, dark}), index the palette index (1..7) and style "active" (falling
+// ({base, light, dark}), index the palette index (1..8; 8 is the neutral grey-white) and style "active" (falling
 // piece), "locked" (settled stack) or "ghost" (landing preview). Styles that don't colour
 // blocks by col give trail(index), the CSS colour of their drop trail and hard-drop flash
 // (else col.light).
@@ -29,6 +29,7 @@ function loadTileImages() {
 // The 1989 handheld's screen shades, darkest to lightest
 const GB_SHADES = ["#0f380f", "#306230", "#8bac0f", "#c8dc9a"]; // lightest lifted for contrast
 const MONO_INK = "244,236,220"; // Mono's warm gallery white
+const holoLum = (index) => index > 7 ? 70 : 58 + index * 3; // the neutral colour (8) sits mid-range
 
 const TILESETS = {
     // Translucent, luminous glass cells that bloom into the backdrop (Tetris Effect look)
@@ -376,7 +377,7 @@ const TILESETS = {
         name: "Holo",
         sheen: true,
         pad: (style) => style === "active" ? 10 : 0,
-        trail: (index) => `hsl(220,6%,${58 + index * 3}%)`, // the settled block's grey
+        trail: (index) => `hsl(220,6%,${holoLum(index)}%)`, // the settled block's grey
         draw(g, col, size, style, index) {
             const inset = 1.5, w = size - inset * 2, r = size * 0.1;
             const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
@@ -390,7 +391,7 @@ const TILESETS = {
                 return;
             }
             const active = style === "active";
-            const lum = 58 + index * 3 + (active ? 8 : 0); // 61..79 %
+            const lum = holoLum(index) + (active ? 8 : 0); // 61..79 %
             if (active) {
                 g.shadowColor = "rgba(210,215,230,0.7)";
                 g.shadowBlur = 14;

@@ -460,8 +460,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   S1…S13 = sections finished − REGRETs (a section over 60 s in the first two, 50 s after). Level stops
   (`SHIRASE_TORIKAN`): 500 after 3:03 (World) / 2:28 (Classic), 1000 after 6:06 / 4:56 end the game.
   Garbage in 500–999 (`shiraseGarbage()`): +1 per new piece, −1 per line cleared; at the section's
-  quota (20/18/10/9/8) a copy of the bottom row rises before the next piece. Blocks monochrome from
-  1000 (`MONO_PALETTE`, green). Level 1300: a 3238-frame staff roll with big pieces, blocks visible;
+  quota (20/18/10/9/8) a copy of the bottom row rises before the next piece. Blocks monochrome (neutral grey-white, palette index 8) from
+  1000 (`MONO_PALETTE`). Level 1300: a 3238-frame staff roll with big pieces, blocks visible;
   surviving it completes the mode (orange line), topping out ends it with the grade.
 
 ### ACE: Normal, Hi-Speed 1, Hi-Speed 2, Another, Another 2, Big (SRS, ARS or ARS2)
@@ -594,8 +594,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 - TGM3 Easy: the suggested placements before level 100 aren't drawn (the ghost stands in); the
   wiki's gravity table is taken as it lists it; fireworks are counted, not drawn, and the streams
   fire on the frames a clock from the game's start divides; the completion bonus comes at the end of
-  the roll. Shirase: the roll length and big roll pieces follow NullpoMino; the green monochrome is
-  used with both rules (Classic's white has no colour here); level 1300 is reached by clears only.
+  the roll. Shirase: the roll length and big roll pieces follow NullpoMino; the grey-white monochrome is
+  used with both rules; level 1300 is reached by clears only.
 - ACE: NullpoMino's tables are used as they are (its DAS and ARE may be counted differently from the
   arcade's); SRS's soft drop is 1G and doesn't lock. ARS and ARS2 per the wiki's description; ARS's
   "zangi-moves impossible" (and ARS2's re-enabled ones) aren't modelled: both play the same in that
@@ -605,7 +605,7 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's; the DAS
   charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it. No secret grade.
   Hidden modes: Rev is drawn as the well turned upside down with upright blocks (the wiki only says
-  pieces spawn at the bottom and rise); Mono's colour is green (no white or grey block colour here);
+  pieces spawn at the bottom and rise); Mono's colour is a neutral grey-white (palette index 8);
   Uki (a voice for line clears) isn't there; codes don't keep scores off a table (there is none).
 - NES: the entry delay uses the piece's rotation centre as its lock height (the wiki doesn't say which
   cell); the line clear lengthens to the next multiple of 4 frames since the game started; soft drop

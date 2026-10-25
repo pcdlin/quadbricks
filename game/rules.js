@@ -87,7 +87,7 @@ function parseShapes(pieces) {
 // Colour of each piece type, as an index into the engine's palette (cyan, purple, orange,
 // blue, green, red, yellow)
 const DEFAULT_PALETTE = [0, 1, 2, 3, 4, 5, 6, 7];
-const MONO_PALETTE = [0, 5, 5, 5, 5, 5, 5, 5]; // every piece one colour (green; there's no white or grey)
+const MONO_PALETTE = [0, 8, 8, 8, 8, 8, 8, 8]; // every piece one colour (index 8, the neutral white-grey)
 
 // ----------------------------------------------------------
 // Arika Rotation System (TGM's Classic rule, TGM1, TAP, ACE's ARS rules)

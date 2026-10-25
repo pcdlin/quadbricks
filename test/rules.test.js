@@ -1839,7 +1839,7 @@ function startedMode(mode, variant) {
     h.level = 999; h.updateTimings();
     const colours = h.palette.slice();
     h.level = 1000; h.updateTimings();
-    check("  ...monochrome blocks from level 1000", [colours.every(c => c === 5), h.palette.slice(1).every(c => c === 5)], [false, true]);
+    check("  ...monochrome blocks from level 1000", [colours.every(c => c === 8), h.palette.slice(1).every(c => c === 8)], [false, true]);
 }
 {
     const g = startedMode(arika, "shirase");

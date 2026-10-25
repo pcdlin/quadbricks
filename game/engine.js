@@ -212,6 +212,7 @@ const PIECE_COLORS = [
     { base: "#14a73d", light: "#75d895", dark: "#00671b" }, // S green
     { base: "#ee2929", light: "#f26666", dark: "#bf1615" }, // Z red
     { base: "#e4cf00", light: "#fff082", dark: "#aca000" }, // O yellow
+    { base: "#b9bcc6", light: "#eceef4", dark: "#80838f" }, // neutral grey-white (Mono, Shirase from 1000)
 ];
 
 // Block offsets of the SRS shapes, for pieces drawn outside a game (menu accents)
@@ -1115,7 +1116,7 @@ class Engine {
     launchFirework() {
         const [vx, vy, vw, vh] = this.layout.view;
         const x = vx + vw * (0.1 + Math.random() * 0.8), y = vy + vh * (0.12 + Math.random() * 0.4);
-        const colors = [...PIECE_COLORS.slice(1).map(c => c.light), ...CONFETTI_EXTRA];
+        const colors = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFETTI_EXTRA];
         const color = colors[Math.floor(Math.random() * colors.length)];
         const count = Math.max(8, Math.round(FIREWORK_SPARKS * this.options.effectScale));
         const turn = Math.random() * Math.PI * 2;
@@ -1149,7 +1150,7 @@ class Engine {
     // White-hot centre fading to the colour: one sprite per confetti colour, side by side
     glowSprites() {
         if (this.glowAtlas) return this.glowAtlas;
-        const colors = [...PIECE_COLORS.slice(1).map(c => c.light), ...CONFETTI_EXTRA];
+        const colors = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFETTI_EXTRA];
         const c = document.createElement("canvas");
         c.width = GLOW_SPRITE * colors.length;
         c.height = GLOW_SPRITE;
@@ -1335,14 +1336,14 @@ class Engine {
             return { style, pad, px: Math.ceil((size + pad * 2) * s) };
         });
         const c = document.createElement("canvas");
-        c.width = 7 * (Math.max(...rows.map(row => row.px)) + gap);
+        c.width = (PIECE_COLORS.length - 1) * (Math.max(...rows.map(row => row.px)) + gap);
         c.height = rows.reduce((h, row) => h + row.px + gap, 0);
         const g = c.getContext("2d");
         const sprites = {};
         let y = 0;
         for (const { style, pad, px } of rows) {
             sprites[style] = [];
-            for (let type = 1; type <= 7; type++) {
+            for (let type = 1; type < PIECE_COLORS.length; type++) {
                 const x = (type - 1) * (px + gap);
                 g.save();
                 g.beginPath();
