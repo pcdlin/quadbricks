@@ -604,7 +604,8 @@ class RuleGame {
 
         if (this.phase === "rollstart") { // TGM: the field empties before the staff roll
             this.advanceRollStart();
-            return;
+            // the roll's first piece goes through its entry frame like any other (IRS, gravity)
+            if (this.phase !== "active" || this.gameover) return;
         }
 
         if (this.phase === "are") {

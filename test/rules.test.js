@@ -1040,6 +1040,8 @@ for (const mode of [arika, tgmClassic]) {
     check(`${name} roll start: lasts line clear delay + 22 rows x 6 + 2 frames, then the roll's first piece`,
         [f, h.roll, h.phase, h.curPiece_type !== 0, h.fieldEmpty(), h.frames], [delay + 22 * 6 + 2, "fading", "active", true, true, frames]);
     check(`${name} roll: the time row counts the roll down (3238 frames, 53.96 s)`, h.getStats()[3], ["ROLL", "0:53.96"]);
+    check(`${name} roll: the first piece goes through its entry frame (active 1 frame, 20G already on the floor)`,
+        [h.activeTime, h.canFall()], [1, false]);
 }
 {
     const [g] = toRoll(arika, g => { g.cools = 9; g.internalGrade = 27; });
