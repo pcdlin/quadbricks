@@ -119,7 +119,8 @@ const OPTIONS_ITEMS = [
 const VISUAL_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "confetti", name: "Confetti", accent: tetS },
-    { id: "rings", name: "Line clear effect", accent: tetZ },
+    { id: "rings", name: "Clear burst", accent: tetZ },
+    { id: "flash", name: "Row flash", accent: tetI },
     { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
     { id: "backdrop", name: "Backdrop", accent: tetJ },
@@ -264,11 +265,11 @@ const HUE_DEFAULT = 232; // the backdrop's blue at start, and again at each new 
 const RING_LIFE = 46; // frames a clear shockwave expands
 const RING_ALPHA = 0.8; // ring opacity at the Normal effects level
 const RING_CHAIN_MAX = 8; // combo length after which rings stop getting brighter
-const RIPPLE_LIFE = 60; // frames a clear ripple travels (Line clear effect: Ripple)
+const RIPPLE_LIFE = 60; // frames a clear ripple travels (Clear burst: Ripple)
 const RIPPLE_REACH = 600; // logical units the ripple's front travels, past the view's corners
 const RIPPLE_AMP = 1.94; // refraction strength at the Normal effects level
 const RIPPLE_SPREAD = 0.5; // red bends this much less than green, blue this much more
-const FLARE_LIFE = 34; // frames a clear flare lasts (Line clear effect: Flare)
+const FLARE_LIFE = 34; // frames a clear flare lasts (Clear burst: Flare)
 const FLARE_ALPHA = 1.2; // flare brightness at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
 const STACK_BORDER_W = 3; // TGM-style stack border: width of the line, drawn on the blocks' edges
@@ -1110,7 +1111,7 @@ class Engine {
             rows.add(cell.row);
             this.explodeCell(cell);
         }
-        for (const row of rows) this.flashes.push({ row, life: FLASH_LIFE });
+        if (this.options.flash) for (const row of rows) this.flashes.push({ row, life: FLASH_LIFE });
         if (rows.size) {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
@@ -1532,7 +1533,7 @@ class Engine {
         });
     }
 
-    // The Line clear effect in effect: an id from RING_MODES, "off" outside a game or with effects off
+    // The Clear burst in effect: an id from RING_MODES, "off" outside a game or with effects off
     ringMode() {
         return this.GAMESTATE === STATE_GAME && this.options.effects ? this.options.rings : "off";
     }

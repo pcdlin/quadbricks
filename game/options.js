@@ -114,7 +114,7 @@ const OPTION_CHOICES = {
     sdf: SDF_STEPS,
     previews: frameRange(0, GUIDELINE_NEXT),
 };
-const OPTION_TOGGLES = ["backdrop", "shake", "trail", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
+const OPTION_TOGGLES = ["flash", "backdrop", "shake", "trail", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
 
 // Index i stepped by dir through n values: wraps around, or stops at the ends (held keys)
 function stepIndex(i, dir, n, wrap = true) {
@@ -131,6 +131,7 @@ class Options {
         this.rings = "flare"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
         this.tilt = DEFAULT_TILT; // playing field tilt: index into TILT_LEVELS
         this.shake = true; // playing field shakes on hard drops
+        this.flash = true; // cleared rows light up as they go (only with effects on)
         this.trail = true; // streaks behind hard drops and rows falling into clears (only with effects on)
         this.border = false; // TGM-style light outline around the settled stack
         this.scale = 1; // the largest that fits
