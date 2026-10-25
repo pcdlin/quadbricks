@@ -569,7 +569,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   1 from 29). Every row restarts the gravity timer, and gravity keeps going during a soft drop.
   Soft drop: needs a fresh press per piece, first row on the third frame, then every second; holding
   left or right ends it, and holding down blocks shifting.
-- DAS 16 / ARR 6; DAS doesn't charge outside the active phase; a blocked shift leaves it fully
+- DAS 16 / ARR 6; DAS doesn't charge outside the active phase, where left or right only redirect
+  the charge, and letting go never resets it (`keepsDas()`); a blocked shift leaves it fully
   charged (it retries every frame). ARE by the height of the piece's centre (`setNesDelays()`): 10 in
   the bottom two rows, +2 per 4 rows, at most 18; a line clear adds 17–20 frames (to the next multiple
   of 4 frames, `NES_LINE_CLEAR`).

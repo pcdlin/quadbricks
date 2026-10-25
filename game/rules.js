@@ -546,16 +546,16 @@ class RuleGame {
         if (C(ROTR_RELEASE)) this.held.rotr = false;
         if (C(ROT180_RELEASE)) this.held.rot180 = false;
         if (C(HOLD_RELEASE)) this.held.hold = false;
-        if (C(LEFT_RELEASE)) { this.held.left = false; if (this.shiftDir === -1) this.restartShift(this.held.right ? 1 : 0); }
-        if (C(RIGHT_RELEASE)) { this.held.right = false; if (this.shiftDir === 1) this.restartShift(this.held.left ? -1 : 0); }
+        if (C(LEFT_RELEASE)) { this.held.left = false; if (this.shiftDir === -1) this.changeShift(this.held.right ? 1 : 0, false); }
+        if (C(RIGHT_RELEASE)) { this.held.right = false; if (this.shiftDir === 1) this.changeShift(this.held.left ? -1 : 0, false); }
         if (C(SOFT_PUSH)) this.held.soft = true;
         if (C(ROTL_PUSH)) this.held.rotl = true;
         if (C(ROTR_PUSH)) this.held.rotr = true;
         if (C(ROT180_PUSH)) this.held.rot180 = true;
         if (C(HOLD_PUSH)) this.held.hold = true;
         let shiftPushed = false;
-        if (C(LEFT_PUSH)) { this.held.left = true; this.restartShift(-1); shiftPushed = true; }
-        if (C(RIGHT_PUSH)) { this.held.right = true; this.restartShift(1); shiftPushed = true; }
+        if (C(LEFT_PUSH)) { this.held.left = true; this.changeShift(-1, true); shiftPushed = true; }
+        if (C(RIGHT_PUSH)) { this.held.right = true; this.changeShift(1, true); shiftPushed = true; }
 
         // DAS charges in every phase, including ARE and line clears (unless dasCharges() says
         // otherwise). The first auto-shift comes DAS frames after the press (one less with
@@ -645,6 +645,7 @@ class RuleGame {
     }
 
     dasCharges() { return true; } // whether DAS charges this frame
+    keepsDas(pressed) { return false; } // a shift key pressed (or let go) leaves the DAS charge as it is
     canShift() { return true; } // whether the piece may shift this frame
     onShiftBlocked() {} // a shift (press or auto-shift) found no room
 
@@ -681,6 +682,17 @@ class RuleGame {
             return;
         }
         if (++this.curPiece_lockDelay > this.lockDelayMax) this.lock();
+    }
+
+    // The shift direction changed with a key pressed or let go: DAS starts over, unless the rule set
+    // keeps the charge (keepsDas)
+    changeShift(dir, pressed) {
+        if (!this.keepsDas(pressed)) {
+            this.restartShift(dir);
+            return;
+        }
+        this.shiftDir = dir;
+        this.wallBumped = false;
     }
 
     restartShift(dir) {

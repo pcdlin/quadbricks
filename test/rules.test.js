@@ -1839,14 +1839,26 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     }
     check("  ...a blocked shift leaves DAS charged: it moves on the first frame there's room", charged, [4]);
     g.advanceFrame(LEFT_RELEASE);
+    const released = g.dasCounter; // letting go doesn't reset the charge (tetris.wiki)
     clearField(g);
     placeGb(g, tetO, 0, 18, 3);
     g.lock();
+    g.advanceFrame(RIGHT_PUSH); // pressed during the entry delay: the leftover charge turns right
+    while (g.phase !== "active") g.advanceFrame(0);
+    const carried = [released, g.dasCounter, g.curPiece_col];
+    let wait = 0;
+    while (g.curPiece_col === carried[2] && wait < 20) { g.advanceFrame(0); wait++; }
+    check("  ...letting go keeps the charge, and a press during the entry delay redirects it (auto-shifts within ARR 6)",
+        [carried, g.curPiece_col - carried[2], wait <= 6], [[16, 16, 3], 1, true]);
+    g.advanceFrame(RIGHT_RELEASE);
+    clearField(g);
+    placeGb(g, tetO, 0, 18, 3);
+    g.lock();
+    g.dasCounter = 0; // nothing left over
     g.advanceFrame(RIGHT_PUSH); // pressed and held through the entry delay
-    let f = 0;
-    while (g.phase !== "active") { g.advanceFrame(0); f++; }
+    while (g.phase !== "active") g.advanceFrame(0);
     const spawnCol = g.curPiece_col;
-    for (f = 0; f < 15; f++) g.advanceFrame(0);
+    for (let f = 0; f < 15; f++) g.advanceFrame(0);
     const before16 = g.curPiece_col;
     g.advanceFrame(0);
     check("  ...DAS doesn't charge during the entry delay", [before16 - spawnCol, g.curPiece_col - spawnCol], [0, 1]);

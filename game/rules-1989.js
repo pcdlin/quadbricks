@@ -255,6 +255,9 @@ class NesGame extends Game1989 {
     }
 
     dasCharges() { return this.phase === "active"; } // not during the entry delay or a line clear
+    // Left or right during the entry delay or a line clear only redirect the charge, and letting go
+    // never resets it: only a press while a piece is in play does (tetris.wiki)
+    keepsDas(pressed) { return this.phase !== "active" || !pressed; }
     canShift() { return !this.held.soft; } // no shifting while down is held
 
     // Blocked: DAS is (or stays) fully charged and tries again every frame
