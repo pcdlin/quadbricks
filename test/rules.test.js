@@ -2278,6 +2278,20 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
         [resting(tgmAce), resting(aceArs), resting(aceArs2)], [[10, 1, 1], [10, 1, 1], [10, 1, 1]]);
 }
 
+{
+    // ACE deals from a 7-bag that never starts with S, Z or O (tetris.wiki: TGM randomizer)
+    const firsts = new Set();
+    let bags = true;
+    for (let k = 0; k < 300; k++) {
+        const g = createGame(k % 3 ? aceArs : tgmAce, "normal");
+        firsts.add(g.queue[0]);
+        const dealt = [];
+        while (dealt.length < 14) { dealt.push(g.queue.shift()); g.fillQueue(); }
+        bags = bags && [dealt.slice(0, 7), dealt.slice(7)].every(b => [...b].sort().join() === "1,2,3,4,5,6,7");
+    }
+    check("ACE: a 7-bag, the first piece never S, Z or O", [bags, firsts.has(tetS), firsts.has(tetZ), firsts.has(tetO), firsts.size], [true, false, false, false, 4]);
+}
+
 // ---------------------------------------------------------------- Guideline Sprint, Ultra and Marathon options
 {
     const stats = (variant, start = 0) => createGame(guideline, variant, start).getStats();

@@ -194,6 +194,7 @@ class RuleGame {
         this.softDropPoints = 0; // score per soft-dropped row (Guideline)
         this.randomizer = null; // else a 7-bag
         this.bag = [];
+        this.bagNoSzoFirst = false; // the 7-bag never deals S, Z or O first (ACE)
 
         this.field = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) this.field.push(new Array(WIDTH).fill(0));
@@ -436,12 +437,15 @@ class RuleGame {
             if (this.randomizer) {
                 this.queue.push(this.randomizer.next());
             } else {
-                if (this.bag.length === 0) { // 7-bag
-                    this.bag = [1, 2, 3, 4, 5, 6, 7];
-                    for (let i = 6; i > 0; i--) {
-                        const j = Math.floor(Math.random() * (i + 1));
-                        [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
-                    }
+                if (this.bag.length === 0) { // 7-bag, dealt from its end
+                    const first = this.queue.length === 0 && this.firstPiece;
+                    do {
+                        this.bag = [1, 2, 3, 4, 5, 6, 7];
+                        for (let i = 6; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
+                        }
+                    } while (first && this.bagNoSzoFirst && [tetS, tetZ, tetO].includes(this.bag[6]));
                 }
                 this.queue.push(this.bag.pop());
             }

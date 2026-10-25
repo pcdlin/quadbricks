@@ -165,7 +165,7 @@ configuration fields set in their constructors and hooks they override:
 - Configuration: `setShapes(shapes, palette)`, `nextCount`, `hasHold`, `irs`, `iKicks` (SRS I kicks:
   Guideline's, or Arika's for TGM3 World and ACE), `moveLimit` (lock resets per piece), `lockOut`,
   `dropsOnSpawn` (Guideline), `bufferTop` (TGM: blocks locking above it are deleted),
-  `softDropPoints`, `randomizer` (else a 7-bag), `wellTop` / `firstDrawnRow` / `pieceTop`, `level`,
+  `softDropPoints`, `randomizer` (else a 7-bag; `bagNoSzoFirst`: never S, Z or O first), `wellTop` / `firstDrawnRow` / `pieceTop`, `level`,
   `combo`, `handling` (`NO_HANDLING` unless the Guideline's); ARS: `useArs(plain, palette)` (`ars`,
   `plainArs`: basic kicks only), `arsFloorKicks` (per piece, `{ i, t }`), `floorKickZeroes`,
   `sonicTrail`; `rotate()` then uses `rotateArs()`, and `sonicDrop()` is there for an up key that
@@ -514,7 +514,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 
 ### ACE: Normal, Hi-Speed 1, Hi-Speed 2, Another, Another 2, Big (SRS, ARS or ARS2)
 - Sources: tetris.wiki *Tetris The Grand Master Ace*; NullpoMino `TimeAttackMode.java` (tables).
-- Hold with IHS, three next pieces, TGM3's randomizer, ghost (hidden at 20G), lock resets up to 128
+- Hold with IHS, three next pieces, a 7-bag that never deals S, Z or O first (`bagNoSzoFirst`; tetris.wiki
+  *TGM randomizer*), ghost (hidden at 20G), lock resets up to 128
   per piece (`ACE_MOVE_RESETS`, move reset with every rule), no score. Rules (the mode id, the Rule card):
   - SRS (`tgmAce`): Arika SRS (TGM3 World's kicks), hard drop, soft drop 1G.
   - ARS (`aceArs`): TGM3's ARS shapes and kicks (`useArs(false, DEFAULT_PALETTE)`: standard colours)

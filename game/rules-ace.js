@@ -1,7 +1,7 @@
 // ACE (AceGame): the 150-line time attack modes of the Xbox 360 game (Normal, Hi-Speed 1 and 2,
 // Another, Another 2, Big): 15 levels of 10 lines, each against a time limit, with Arika SRS, hold
-// and three next pieces (tetris.wiki: Tetris_The_Grand_Master_Ace; speeds and time limits from
-// NullpoMino's TimeAttackMode). Big plays at Normal's speeds with pieces twice the size (the wiki:
+// and three next pieces, a 7-bag (tetris.wiki: Tetris_The_Grand_Master_Ace, TGM_randomizer; speeds
+// and time limits from NullpoMino's TimeAttackMode). Big plays at Normal's speeds with pieces twice the size (the wiki:
 // "similar or possibly identical" to Normal).
 // Three rules (the mode ids): SRS (tgmAce), ARS (aceArs: TGM3's ARS shapes and kicks with no floor
 // kick limit, standard colours, hard drop locks, soft drop about 0.5G and not locking) and ARS2
@@ -37,7 +37,7 @@ class AceGame extends RuleGame {
         this.iKicks = KICKS_I_ARIKA;
         this.moveLimit = ACE_MOVE_RESETS;
         this.lockOut = true;
-        this.randomizer = new TiRandomizer(Date.now());
+        this.bagNoSzoFirst = true; // a 7-bag that never starts with S, Z or O (tetris.wiki: TGM randomizer)
         this.ars2 = mode === aceArs2;
         if (mode !== tgmAce) {
             this.useArs(false, DEFAULT_PALETTE);
