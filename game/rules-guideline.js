@@ -1,0 +1,247 @@
+// Guideline rule set (GuidelineGame): Tetris Guideline with SRS, a 7-bag, T-spins and
+// back-to-backs, and the player's handling options.
+//  - standard: endless; marathon: 150 lines; variable: marathon with the variable goal, levels 1-15
+//  - sprint: 40 lines as fast as possible; ultra: highest score in 2 minutes (both at level 1)
+//  - dig: clear 5, 10 or 18 rows of garbage as fast as possible, level 1
+//  - master: 20G, shorter lock and line clear delays by level M1-M30, 300 lines
+// (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin; Master's delays
+//  from the Tetris_Effect page; Dig as NullpoMino's DigRaceMode)
+
+// Seconds per row: (0.8 - (level-1) * 0.007) ^ (level-1); returned as rows per frame
+function guidelineGravity(level) {
+    const seconds = Math.pow(0.8 - (level - 1) * 0.007, level - 1);
+    return 1 / (seconds * 60);
+}
+
+const GUIDELINE_MAX_LEVEL = 15;  // level cap; endless play continues at level 15 speed
+const GUIDELINE_LINES_PER_LEVEL = 10; // fixed goal
+const GUIDELINE_LINE_GOALS = { marathon: 150, sprint: 40, master: 300 }; // variants that end on a number of lines
+const GUIDELINE_ULTRA_FRAMES = 2 * 60 * 60; // the ultra variant ends after two minutes
+const GUIDELINE_FIXED_LEVEL = ["sprint", "ultra", "dig"]; // variants that stay at level 1
+// Variable goal: each level needs 5 x level goal points; a clear (or T-spin) earns its base score / 100,
+// rounded down (back-to-back included), and points beyond the goal are lost. Levels 1-15.
+const GUIDELINE_VARIABLE_GOAL = 5;
+// Dig: rows of garbage by choice (the height argument), each with one hole, never in the same
+// column as the row below
+const GUIDELINE_DIG_ROWS = [5, 10, 18];
+// Master: 20G at every level; [lock delay, line clear delay] in frames for levels M1-M30, as
+// tetris.wiki gives them (rounded to whole frames in use). 10 lines per level, done at 300 lines.
+const GUIDELINE_MASTER_DELAYS = [
+    [29.5, 30], [29.5, 27], [29.5, 24], [29.5, 21], [29.5, 18], [29.5, 15], [29.5, 12], [29.5, 9], [29.5, 6], [29.5, 3],
+    [27.6, 0.6], [25.2, 0.6], [22.8, 0.6], [20.4, 0.6], [17.5, 0.6], [16.8, 0.6], [15.6, 0.6], [15, 0.6], [13.2, 0.6], [11.5, 0.6],
+    [11.4, 0.6], [10.8, 0.6], [10.2, 0.6], [9.6, 0.6], [8.5, 0.6], [8.4, 0.6], [7.8, 0.6], [7.2, 0.6], [6.6, 0.6], [5.5, 0.6],
+];
+const GUIDELINE_LOCK_DELAY = 30; // 0.5 s
+const GUIDELINE_MOVE_LIMIT = 15; // move reset limit
+const GUIDELINE_DAS = 10, GUIDELINE_ARR = 2, GUIDELINE_ARE = 6; // recommended handling
+const GUIDELINE_NEXT = 6; // the Guideline allows up to six previews
+const GUIDELINE_SOFT_FACTOR = 20; // soft drop = 20x gravity
+// Player handling for the Guideline (Options → Guideline), the recommended values by default.
+// das, arr: frames (arr 0 shifts straight to the wall); sdf: soft drop factor (Infinity: 20G);
+// dcd: frames a charged auto-shift pauses after a rotation or a new piece; ghost: ghost piece shown;
+// dropGuard: hard drops in a piece's first GUIDELINE_DROP_GUARD frames are ignored
+const GUIDELINE_HANDLING = { das: GUIDELINE_DAS, arr: GUIDELINE_ARR, sdf: GUIDELINE_SOFT_FACTOR, dcd: 0, ghost: true, dropGuard: false };
+const GUIDELINE_DROP_GUARD = 8;
+
+class GuidelineGame extends RuleGame {
+    constructor(mode, variant, startLevel, height, handling) {
+        super(mode, variant);
+        this.handling = { ...GUIDELINE_HANDLING, ...handling };
+        this.master = variant === "master";
+        this.dig = variant === "dig";
+        this.startLevel = this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1) : 0; // master: M1 + startLevel
+        this.level = 1 + this.startLevel;
+        this.height = this.dig ? clamp(height, 0, GUIDELINE_DIG_ROWS.length - 1) : 0;
+        this.goalPoints = 0; // variable goal: points towards the current level's goal
+        this.nextCount = GUIDELINE_NEXT;
+        this.moveLimit = GUIDELINE_MOVE_LIMIT;
+        this.lockOut = true;
+        this.dropsOnSpawn = true; // spawn in rows 21-22, then one row down at once
+        this.softDropPoints = 1;
+    }
+
+    setupField() {
+        if (this.dig) this.fillDigGarbage(GUIDELINE_DIG_ROWS[this.height]);
+    }
+
+    // Dig: full rows with one hole each, the hole never above the one in the row below; isGarbage
+    // marks their rows (it falls with the field) so the clears that remove them can be counted
+    fillDigGarbage(rows) {
+        this.digRows = rows;
+        this.digCleared = 0;
+        this.isGarbage = this.field.map(() => false);
+        let hole = -1;
+        for (let r = HEIGHT - 1; r >= HEIGHT - rows; r--) {
+            let next;
+            do next = Math.floor(Math.random() * WIDTH); while (next === hole);
+            hole = next;
+            for (let c = 0; c < WIDTH; c++) this.setCell(r, c, c === hole ? 0 : 1 + Math.floor(Math.random() * 7));
+            this.isGarbage[r - FIELD_TOP] = true;
+        }
+    }
+
+    onCollapse(rows) {
+        if (this.isGarbage) this.isGarbage = this.dropRows(this.isGarbage, rows, () => false);
+    }
+
+    getStats() {
+        const score = this.scoreText();
+        const mode = ["GUIDELINE", VARIANT_NAMES[this.variant] || "ENDLESS"];
+        const goal = GUIDELINE_LINE_GOALS[this.variant];
+        const lines = ["LINES", goal ? `${this.lines} / ${goal}` : String(this.lines)];
+        if (this.variant === "sprint") return [mode, ["TIME", this.formatTime()], lines, ["SCORE", score]];
+        if (this.variant === "ultra") {
+            return [mode, ["TIME", this.formatTime(Math.max(0, GUIDELINE_ULTRA_FRAMES - this.frames))], lines, ["SCORE", score]];
+        }
+        if (this.variant === "variable") {
+            return [mode, ["LEVEL", String(this.level)], ["GOAL", `${this.goalPoints} / ${GUIDELINE_VARIABLE_GOAL * this.level}`], lines, ["SCORE", score]];
+        }
+        if (this.dig) return [mode, ["TIME", this.formatTime()], ["GARBAGE", `${this.digCleared} / ${this.digRows}`], lines, ["SCORE", score]];
+        if (this.master) return [mode, ["LEVEL", `M${this.level}`], lines, ["TIME", this.formatTime()], ["SCORE", score]];
+        return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
+    }
+
+    setTimings() {
+        this.are = GUIDELINE_ARE;
+        this.lineAre = GUIDELINE_ARE;
+        this.das = this.handling.das;
+        this.arr = this.handling.arr;
+        this.lockDelayMax = GUIDELINE_LOCK_DELAY;
+        this.lineClearDelay = 0;
+        this.gravity = guidelineGravity(Math.min(this.level, GUIDELINE_MAX_LEVEL));
+        this.softGravity = Math.min(20, this.gravity * this.handling.sdf);
+        if (this.master) {
+            const [lock, lineClear] = GUIDELINE_MASTER_DELAYS[Math.min(this.level, GUIDELINE_MASTER_DELAYS.length) - 1];
+            this.lockDelayMax = Math.round(lock);
+            this.lineClearDelay = Math.round(lineClear);
+            this.gravity = this.softGravity = 20;
+        }
+    }
+
+    // Handling changed in the menu during a game applies at once
+    setHandling(handling) {
+        this.handling = { ...GUIDELINE_HANDLING, ...handling };
+        this.updateTimings();
+        this.setShadow();
+    }
+
+    ghostVisible() {
+        return super.ghostVisible() && !this.master;
+    }
+
+    onClock() {
+        if (this.variant === "ultra" && this.frames >= GUIDELINE_ULTRA_FRAMES) {
+            this.endGame("TIME UP", `SCORE ${this.scoreText()}`);
+            return false;
+        }
+        return true;
+    }
+
+    // The hard drop guard ignores hard drops in a piece's first frames
+    upKey() {
+        if (this.handling.dropGuard && this.activeTime <= GUIDELINE_DROP_GUARD) return false;
+        return super.upKey();
+    }
+
+    onHardDrop(distance) {
+        this.score += 2 * distance; // 2 points per hard-dropped cell
+    }
+
+    beforeLock() {
+        this.tspin = this.lockedType === tetT && this.lastRotation ? this.detectTSpin() : null;
+    }
+
+    // 3-corner T-spin with pointing-side mini rule
+    detectTSpin() {
+        const r = this.curPiece_row, c = this.curPiece_col; // T centre is box cell (1,1)
+        const filled = (rr, cc) => this.getCell(rr, cc) !== 0; // walls and floor count
+        const TL = filled(r, c), TR = filled(r, c + 2), BL = filled(r + 2, c), BR = filled(r + 2, c + 2);
+        const front = [[TL, TR], [TR, BR], [BL, BR], [TL, BL]][this.curPiece_rotation];
+        const total = TL + TR + BL + BR;
+        if (total < 3) return null;
+        if (front[0] && front[1]) return "full";
+        return this.lastKick === 4 ? "full" : "mini"; // the 1-by-2 kick upgrades a mini
+    }
+
+    scoreClear(n, rows) {
+        this.scoreGuideline(n, this.tspin, rows);
+    }
+
+    // rows: the rows this lock cleared
+    scoreGuideline(n, tspin, rows) {
+        const L = this.level;
+        let base, difficult;
+        if (tspin === "full") {
+            base = [400, 800, 1200, 1600][n];
+            difficult = n > 0;
+            this.addAction("T-SPIN" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
+        } else if (tspin === "mini") {
+            base = [100, 200, 400][n];
+            difficult = n > 0;
+            this.addAction("T-SPIN MINI" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
+        } else {
+            base = [0, 100, 300, 500, 800][n];
+            difficult = n === 4;
+            if (n > 0) this.addAction(CLEAR_NAMES[n], "clear", n);
+        }
+
+        const b2bBefore = this.b2b;
+        let action = base * L;
+        const b2bBonus = n > 0 && difficult && b2bBefore;
+        if (n > 0) {
+            if (b2bBonus) {
+                action = action * 3 / 2;
+                this.addAction("BACK-TO-BACK", "b2b");
+            }
+            this.b2b = difficult; // singles, doubles and triples break the chain
+        }
+        this.score += Math.floor(action);
+
+        if (n > 0) {
+            this.combo++;
+            if (this.combo > 0) {
+                this.score += 50 * this.combo * L;
+                this.addAction(this.combo + " COMBO", "combo", this.chain);
+            }
+            if (this.fieldEmpty()) {
+                const bonus = n === 4 && b2bBefore ? 3200 : [0, 800, 1200, 1800, 2000][n];
+                this.score += bonus * L;
+                this.addAction("PERFECT CLEAR", "pc");
+            }
+            this.lines += n;
+            const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) || this.variant === "variable" ? this.level
+                : this.master ? Math.min(GUIDELINE_MASTER_DELAYS.length, 1 + this.startLevel + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL))
+                : Math.min(GUIDELINE_MAX_LEVEL, 1 + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL));
+            if (level !== this.level) {
+                this.level = level;
+                this.updateTimings();
+            }
+            const goal = GUIDELINE_LINE_GOALS[this.variant];
+            if (goal && this.lines >= goal) this.endGame("COMPLETE", `${goal} LINES — ${this.formatTime()}`);
+            if (this.dig) {
+                this.digCleared += rows.filter(r => this.isGarbage[r - FIELD_TOP]).length;
+                if (this.digCleared >= this.digRows) this.endGame("COMPLETE", `${this.digRows} ROWS — ${this.formatTime()}`);
+            }
+        } else {
+            this.combo = -1;
+        }
+        // variable goal: T-spins without lines count too
+        if (this.variant === "variable" && base > 0) this.addGoalPoints(Math.floor(base * (b2bBonus ? 1.5 : 1) / 100));
+    }
+
+    // Variable goal: the level goes up once its goal is met (the rest is lost), and meeting
+    // level 15's ends the marathon
+    addGoalPoints(points) {
+        this.goalPoints += points;
+        if (this.goalPoints < GUIDELINE_VARIABLE_GOAL * this.level) return;
+        this.goalPoints = 0;
+        if (this.level >= GUIDELINE_MAX_LEVEL) {
+            this.endGame("COMPLETE", `LEVEL ${GUIDELINE_MAX_LEVEL} — ${this.formatTime()}`);
+            return;
+        }
+        this.level++;
+        this.updateTimings();
+    }
+}
+
+registerRules([guideline], () => GuidelineGame);

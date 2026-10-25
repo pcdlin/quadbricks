@@ -85,8 +85,8 @@ const RULESETS = [
       ] },
     { name: "GB", accent: tetO, desc: "GB (1989) — no hard drop, no hold, no kicks",
       modes: [
-          { name: "A-Type", mode: gameBoy, variant: "standard", setup: [levelSetup(GB_START_LEVELS)], accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
-          { name: "B-Type", mode: gameBoy, variant: "btype", setup: [levelSetup(GB_START_LEVELS), HEIGHT_SETUP], accent: tetS, desc: "Clear 25 lines, starting over garbage" },
+          { name: "A-Type", mode: gbTetris, variant: "standard", setup: [levelSetup(GB_START_LEVELS)], accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
+          { name: "B-Type", mode: gbTetris, variant: "btype", setup: [levelSetup(GB_START_LEVELS), HEIGHT_SETUP], accent: tetS, desc: "Clear 25 lines, starting over garbage" },
       ] },
 ];
 const OPTIONS_ITEMS = [
@@ -600,7 +600,7 @@ class Engine {
 
     initGame(mode, variant, startLevel = 0, height = 0) {
         this.lastGameArgs = [mode, variant, startLevel, height];
-        this.game = new RuleGame(mode, variant, startLevel, height, this.options.handling);
+        this.game = createGame(mode, variant, startLevel, height, this.options.handling);
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
         this.newTiltWaves();

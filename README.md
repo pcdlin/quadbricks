@@ -39,7 +39,7 @@ Stop the server with Ctrl+C.
 
 ## Rule sources
 
-The rule sets in `game/rules.js` follow published specifications and community
+The rule sets in `game/rules*.js` follow published specifications and community
 reference implementations. Where the sources disagree or are silent, the choices
 are listed as assumptions in `AGENTS.md`.
 
@@ -57,7 +57,7 @@ are listed as assumptions in `AGENTS.md`.
 - **ACE** (tetris.wiki): *Tetris The Grand Master Ace*.
 - **NES Tetris** (tetris.wiki and meatfighter.com): *Tetris (NES, Nintendo)*,
   *Scoring*, "Applying Artificial Intelligence to Nintendo Tetris".
-- **Game Boy Tetris** (tetris.wiki and TASVideos): *Tetris (Game Boy)*, *Nintendo
+- **GB Tetris** (tetris.wiki and TASVideos): *Tetris (Game Boy)*, *Nintendo
   Rotation System*, TASVideos submission 4536 and its disassembly (randomizer).
 - **Randomizers** (test vectors only): [raincomplex/randomizers](https://github.com/raincomplex/randomizers),
   `randos/ti.py` (TGM3) and `randos/tgm.py` (TGM1 and TAP).

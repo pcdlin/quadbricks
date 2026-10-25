@@ -9,7 +9,7 @@ people's work went into the repository beyond facts and specifications.
 <https://github.com/nullpomino/nullpomino>
 
 No NullpoMino code is copied. Numeric values and behaviours were taken from its mode
-files and re-implemented in `game/rules.js`:
+files and re-implemented in the rule files (`game/rules*.js`):
 
 - the TGM3 kick order (`ClassicPlusWallkick.java`);
 - staff roll and 15-minute timings and delay rows (`GradeMania3Mode.java`);
@@ -68,7 +68,7 @@ running the algorithm of its `randos/tgm.py`. No code is included.
 <https://docs.google.com/document/d/11J4BAxrkzxI5VYa1dt7oLuWEhI0yhv8OnNpgfbdKS7U>
 (community document "TGM3 Easy mode hanabi", linked from the Korean namu.wiki article on TGM3)
 
-The fireworks rules in `game/rules.js` (base values, combo and bonus multipliers, streams,
+The fireworks rules in `game/rules-tgm.js` (base values, combo and bonus multipliers, streams,
 the staff roll's free fireworks) are re-implemented from its description. None of its text
 is included.
 
@@ -76,7 +76,7 @@ is included.
 
 <https://meatfighter.com/nintendotetrisai/> ("Applying Artificial Intelligence to Nintendo
 Tetris") described the NES orientation table, soft drop, randomizer and level progression
-that `game/rules.js` re-implements. None of its code or text is included.
+that `game/rules-1989.js` re-implements. None of its code or text is included.
 
 ## Fonts
 

@@ -127,6 +127,7 @@ class Options {
                 }
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
+            if (saved.tileset === "gameboy") saved.tileset = "retro1989"; // the 1989 style's old id
             for (const [id, values] of Object.entries(OPTION_CHOICES)) {
                 if (values.includes(saved[id])) this[id] = saved[id];
             }

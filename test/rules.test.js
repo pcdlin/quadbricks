@@ -1,10 +1,12 @@
-// Spec checks for game/rules.js against the Guideline, TGM1, TGM3, TAP, NES and GB references.
+// Spec checks for the rule sets (game/rules*.js) against the Guideline, TGM1, TGM3, TAP, NES and GB references.
 // Usage: node test/rules.test.js
 const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
-vm.runInThisContext(fs.readFileSync(dir + "/game.js", "utf8") + "\n" + fs.readFileSync(dir + "/rules.js", "utf8") +
-    "\n;Object.assign(globalThis, {RuleGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gameBoy, tgmOriginal, nesTetris, tgmAce, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
+// the rules: game.js, then the files of game/index.html that define them, in its order
+const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
+vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
+    "\n;Object.assign(globalThis, {RuleGame, createGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -15,7 +17,7 @@ function check(name, actual, expected) {
 
 // Start a game and run to the first active piece
 function started(mode) {
-    const g = new RuleGame(mode);
+    const g = createGame(mode);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -52,13 +54,13 @@ const piecesOf = g => g.queue.slice();
     check("Guideline gravity formula matches the Marathon G table", got, exp);
 }
 {
-    const g = new RuleGame(guideline);
+    const g = createGame(guideline);
     const bagCounts = () => { const q = []; while (q.length < 14) { q.push(g.queue.shift()); g.fillQueue(); } return q; };
     const q = bagCounts();
     check("Guideline 7-bag: each bag of 7 has one of every piece", [q.slice(0, 7).sort(), q.slice(7, 14).sort()], [[1, 2, 3, 4, 5, 6, 7], [1, 2, 3, 4, 5, 6, 7]]);
 }
 {
-    const g = new RuleGame(guideline);
+    const g = createGame(guideline);
     g.queue[0] = tetT;
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     check("Guideline spawn: T at col 3, appears in rows 21-22 then drops one row (engine row 1)", [g.curPiece_type, g.curPiece_col, g.curPiece_row], [tetT, 3, 1]);
@@ -265,7 +267,7 @@ for (const manual of [true, false]) {
 }
 {
     // Countdown 3, 2, 1 (30 frames each); input is taken on the frame right after it
-    const g = new RuleGame(guideline);
+    const g = createGame(guideline);
     const shown = [g.countdown()], sounds = [];
     let first = 0;
     for (let f = 1; f <= 200 && !first; f++) {
@@ -279,23 +281,23 @@ for (const manual of [true, false]) {
     check("Countdown: 3 (also before the first frame), 2, 1 for 30 frames each, then the game", runs, [[3, 31], [2, 30], [1, 30], [0, 1]]);
     check("  ...the first active frame is frame 91, when 1 goes", [first, COUNTDOWN_STEPS * COUNTDOWN_STEP_FRAMES + 1], [91, 91]);
     check("  ...a count sound with each digit, go with the first active frame", sounds, ["count@1", "count@31", "count@61", "go@91"]);
-    const h = new RuleGame(guideline);
+    const h = createGame(guideline);
     for (let f = 0; f < 90; f++) h.advanceFrame(0);
     h.queue[0] = tetJ;
     const col = h.queue[0] && (h.advanceFrame(LEFT_PUSH), h.curPiece_col);
-    const ref = new RuleGame(guideline);
+    const ref = createGame(guideline);
     for (let f = 0; f < 91; f++) ref.advanceFrame(0);
     check("  ...a press on that frame moves the new piece at once", [h.phase, col], ["active", ref.curPiece_col - 1]);
 }
 {
     // IRS: held rotation at spawn, falls back to spawn orientation when blocked
-    const g = new RuleGame(guideline);
+    const g = createGame(guideline);
     g.queue[0] = tetJ;
     g.advanceFrame(ROTR_PUSH);
     while (g.phase !== "active") g.advanceFrame(0);
     check("IRS: rotate held during READY spawns the piece rotated", g.curPiece_rotation, 1);
     // IHS
-    const h = new RuleGame(arika);
+    const h = createGame(arika);
     const first = h.queue[0], second = h.queue[1];
     h.advanceFrame(HOLD_PUSH);
     while (h.phase !== "active") h.advanceFrame(0);
@@ -307,7 +309,7 @@ function clearField(g) { for (let r = -18; r < HEIGHT; r++) for (let c = 0; c < 
 function framesToNextPiece(g) { let f = 0; while (g.phase !== "active" && f < 200) { g.advanceFrame(0); f++; } return f; }
 
 for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 12, 14, 16, 18, 20]], [arika, "Arika (DAS 16, ARR 1)", [0, 16, 17, 18, 19, 20]]]) {
-    const g = new RuleGame(rs, "test"); // no gravity: only shifting moves the piece
+    const g = createGame(rs, "test"); // no gravity: only shifting moves the piece
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     clearField(g);
     place(g, tetO, 0, 10, 7); // O in columns 8-9: room for 8 shifts to the left
@@ -323,7 +325,7 @@ for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 1
 
 // ---------------------------------------------------------------- Guideline handling options
 function handlingGame(handling, variant = "test") {
-    const g = new RuleGame(guideline, variant, 0, 0, handling);
+    const g = createGame(guideline, variant, 0, 0, handling);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     clearField(g);
     return g;
@@ -377,11 +379,11 @@ function shiftFrames(g, frames, input = () => 0) {
     check("Guideline hard drop guard: ignored in a piece's first 8 frames, works after", [early, g.phase], [["active", row], "are"]);
 }
 check("Handling options don't change TGM3, TAP or GB timing",
-    [new RuleGame(arika, "standard", 0, 0, { das: 3, arr: 0 }), new RuleGame(tgmTap, "standard", 0, 0, { das: 3 }), new RuleGame(gameBoy, "standard", 0, 0, { das: 3, ghost: false })].map(g => [g.das, g.arr]),
+    [createGame(arika, "standard", 0, 0, { das: 3, arr: 0 }), createGame(tgmTap, "standard", 0, 0, { das: 3 }), createGame(gbTetris, "standard", 0, 0, { das: 3, ghost: false })].map(g => [g.das, g.arr]),
     [[16, 1], [16, 1], [24, 9]]);
 
 {
-    const g = new RuleGame(guideline, "test");
+    const g = createGame(guideline, "test");
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     clearField(g);
     place(g, tetO, 0, 10, -1); // O against the left wall
@@ -470,7 +472,7 @@ check("Only 2 corners occupied: no T-spin, plain single (100 x level)", tspinLoc
     check("ARS shapes: bottom-aligned, L/J/T flat side up, I/S/Z two states, clockwise turns", issues, []);
 }
 {
-    const g = new RuleGame(tgmClassic);
+    const g = createGame(tgmClassic);
     g.queue[0] = tetT;
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     const rows = [...new Set(cellsAt(g).map(c => c.row))];
@@ -628,7 +630,7 @@ for (const [rs, name] of [[guideline, "Guideline"], [arika, "TGM3 World"], [tgmC
 for (const [rs, name, label] of [[guideline, "Guideline", ["GUIDELINE", "ENDLESS"]], [arika, "TGM3 World", ["TGM3 TI", "WORLD"]], [tgmClassic, "TGM3 Classic", ["TGM3 TI", "CLASSIC"]]]) {
     const variantLabel = variant => [label[0], rs === guideline ? variant : `${label[1]} ${variant}`];
     // Test: no gravity, soft drop still moves the piece
-    const t = new RuleGame(rs, "test");
+    const t = createGame(rs, "test");
     for (let f = 0; f < 100 && t.phase !== "active"; f++) t.advanceFrame(0);
     const row0 = t.curPiece_row;
     for (let f = 0; f < 600; f++) t.advanceFrame(0);
@@ -638,7 +640,7 @@ for (const [rs, name, label] of [[guideline, "Guideline", ["GUIDELINE", "ENDLESS
     check(`${name} test: piece stays put for 10 s, soft drop still moves it`, [still, t.curPiece_row > row0, t.getStats()[0]], [true, true, variantLabel("TEST")]);
 
     // Death: 20G from the start, no ghost
-    const d = new RuleGame(rs, "death");
+    const d = createGame(rs, "death");
     for (let f = 0; f < 100 && d.phase !== "active"; f++) d.advanceFrame(0);
     check(`${name} death: 20G (piece on the floor in its first frame), no ghost`, [d.gravity, d.canFall(), d.shadowRow], [20, false, -100]);
 
@@ -654,7 +656,7 @@ for (const [rs, name, label] of [[guideline, "Guideline", ["GUIDELINE", "ENDLESS
 // ---------------------------------------------------------------- Guideline marathon, sprint, ultra
 for (const [variant, goal] of [["marathon", 150], ["sprint", 40], ["standard", 0]]) {
     // One line short of the goal: an O clears the bottom row
-    const g = new RuleGame(guideline, variant);
+    const g = createGame(guideline, variant);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     g.lines = (goal || 150) - 1;
     for (let r = 2; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, r === 21 && c < 8 ? 1 : 0);
@@ -669,7 +671,7 @@ for (const [variant, goal] of [["marathon", 150], ["sprint", 40], ["standard", 0
     if (variant === "sprint") check("Sprint: stays at level 1, shows TIME instead of LEVEL", [g.level, g.getStats().map(row => row[0])], [1, ["GUIDELINE", "TIME", "LINES", "SCORE"]]);
 }
 {
-    const u = new RuleGame(guideline, "ultra");
+    const u = createGame(guideline, "ultra");
     for (let f = 0; f < 100 && u.phase !== "active"; f++) u.advanceFrame(0);
     u.frames = 0; // the setup loop ran the clock for a frame or two
     u.lines = 99; // would be level 10 in the other modes
@@ -683,7 +685,7 @@ for (const [variant, goal] of [["marathon", 150], ["sprint", 40], ["standard", 0
 
 // ---------------------------------------------------------------- Guideline variable goal, master, dig
 function startedGuideline(variant, startLevel = 0, height = 0) {
-    const g = new RuleGame(guideline, variant, startLevel, height);
+    const g = createGame(guideline, variant, startLevel, height);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -730,7 +732,7 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
     for (let c = 0; c < 8; c++) g.setCell(21, c, 1);
     place(g, tetO, 0, 5, 7); g.hardDrop();
     check("  ...300 lines complete it", [g.isGameOver(), g.endTitle], [true, "COMPLETE"]);
-    const other = new RuleGame(guideline, "marathon", 7);
+    const other = createGame(guideline, "marathon", 7);
     check("  ...other Guideline modes ignore the start level", other.level, 1);
 }
 {
@@ -749,7 +751,7 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
         sizes, [5, 10, 18].map(rows => ({ rows, oneHole: true, apart: true })));
     const g = startedGuideline("dig");
     check("  ...stats: mode, time, garbage cleared, lines, score; level 1 throughout",
-        [g.getStats()[0], g.getStats().map(s => s[0]), g.getStats()[2], g.level, new RuleGame(guideline, "dig", 0, 7).digRows],
+        [g.getStats()[0], g.getStats().map(s => s[0]), g.getStats()[2], g.level, createGame(guideline, "dig", 0, 7).digRows],
         [["GUIDELINE", "DIG"], ["GUIDELINE", "TIME", "GARBAGE", "LINES", "SCORE"], ["GARBAGE", "0 / 5"], 1, 18]);
     const fillHole = r => { for (let c = 0; c < WIDTH; c++) g.setCell(r, c, g.getCell(r, c) || 1); };
     fillHole(21);
@@ -981,7 +983,7 @@ for (const [roll, setup, title, label] of [
 
 // ---------------------------------------------------------------- Hidden test setups
 {
-    const g = new RuleGame(arika);
+    const g = createGame(arika);
     check("Test setup: not during READY", g.testSetup("roll"), false);
     const ready = started(arika);
     check("Test setup: not in Guideline", started(guideline).testSetup("roll"), false);
@@ -1034,7 +1036,7 @@ for (const mode of [arika, tgmClassic]) {
 
 // ---------------------------------------------------------------- TAP (TGM2 The Absolute Plus)
 function startedTap(variant = "standard") {
-    const g = new RuleGame(tgmTap, variant);
+    const g = createGame(tgmTap, variant);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -1051,7 +1053,7 @@ function startedTap(variant = "standard") {
     check("TAP randomizer: the first piece is never S, Z or O", [firsts.has(tetS), firsts.has(tetZ), firsts.has(tetO)], [false, false, false]);
 }
 {
-    const g = new RuleGame(tgmTap);
+    const g = createGame(tgmTap);
     g.queue[0] = tetT;
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     const rows = [...new Set(cellsAt(g).map(c => c.row))];
@@ -1060,7 +1062,7 @@ function startedTap(variant = "standard") {
     const type = g.curPiece_type, next = g.rnd_get_queue(0);
     g.advanceFrame(HOLD_PUSH);
     check("TAP: the hold button does nothing", [g.curPiece_type, g.getHeldPiece(), g.rnd_get_queue(0)], [type, 0, next]);
-    const h = new RuleGame(tgmTap);
+    const h = createGame(tgmTap);
     const first = h.rnd_get_queue(0);
     h.advanceFrame(HOLD_PUSH); // held through READY: no IHS
     for (let f = 0; f < 100 && h.phase !== "active"; f++) h.advanceFrame(0);
@@ -1275,9 +1277,9 @@ function deathTo500(frames) {
     check("  ...Master's gm setup goes to the M-roll", [g.roll, g.frames <= 525 * 60], ["invisible", true]);
 }
 
-// ---------------------------------------------------------------- GB (Tetris for the Game Boy)
+// ---------------------------------------------------------------- GB (1989)
 function startedGb(variant = "standard", level = 0, height = 0) {
-    const g = new RuleGame(gameBoy, variant, level, height);
+    const g = createGame(gbTetris, variant, level, height);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -1320,7 +1322,7 @@ const cellsOf = g => {
     clearField(g);
     placeGb(g, tetT, 0, 3, 3); // T in the well's top two rows: turning needs the row above
     check("  ...pieces can't turn or reach above the well", [g.rotate(1), g.movePossible(1, 3, 0, tetT), g.movePossible(3, 3, 0, tetT)], [false, false, true]);
-    check("  ...other rule sets keep 20 rows and draw the two above", [new RuleGame(guideline).wellTop, new RuleGame(guideline).firstDrawnRow], [2, 0]);
+    check("  ...other rule sets keep 20 rows and draw the two above", [createGame(guideline).wellTop, createGame(guideline).firstDrawnRow], [2, 0]);
 }
 {
     const g = startedGb();
@@ -1432,14 +1434,14 @@ const garbageRows = g => {
     check("GB B-Type height 0: no garbage; height 5: ten rows",
         [garbageRows(startedGb("btype")).some(x => x), garbageRows(startedGb("btype", 0, 5)).filter(x => x).length], [false, 10]);
     check("  ...height stays within 0-5, and A-Type ignores it",
-        [new RuleGame(gameBoy, "btype", 0, 9).height, new RuleGame(gameBoy, "btype", 0, -1).height, garbageRows(startedGb("standard", 0, 5)).some(x => x)], [5, 0, false]);
+        [createGame(gbTetris, "btype", 0, 9).height, createGame(gbTetris, "btype", 0, -1).height, garbageRows(startedGb("standard", 0, 5)).some(x => x)], [5, 0, false]);
     clearField(g);
     g.lines = 24;
     tapClear(g, 1, h => { h.curPiece_col = 8; });
     check("  ...ends at 25 lines with the level unchanged", [g.isGameOver(), g.endTitle, g.level], [true, "COMPLETE", 0]);
 }
 {
-    const g = new RuleGame(gameBoy, "standard", 5);
+    const g = createGame(gbTetris, "standard", 5);
     check("GB start level 5: level 5 speed from the start", [g.level, g.gbFrames, g.getStats()[1]], [5, 33, ["LEVEL", "5"]]);
     for (; g.phase !== "active";) g.advanceFrame(0);
     clearField(g);
@@ -1451,9 +1453,9 @@ const garbageRows = g => {
     tapClear(g, 1, h => { h.curPiece_col = 8; });
     check("  ...first level-up after 60 lines (start x 10 + 10), not before", [at59, g.lines, g.level], [5, 60, 6]);
     check("GB start level stays within 0-9, and other rule sets ignore it",
-        [new RuleGame(gameBoy, "standard", 12).level, new RuleGame(gameBoy, "standard", -3).level, new RuleGame(guideline, "standard", 5).level, new RuleGame(arika, "standard", 5).level],
+        [createGame(gbTetris, "standard", 12).level, createGame(gbTetris, "standard", -3).level, createGame(guideline, "standard", 5).level, createGame(arika, "standard", 5).level],
         [9, 0, 1, 0]);
-    const b = new RuleGame(gameBoy, "btype", 7);
+    const b = createGame(gbTetris, "btype", 7);
     for (; b.phase !== "active";) b.advanceFrame(0);
     clearField(b);
     b.lines = 20;
@@ -1463,7 +1465,7 @@ const garbageRows = g => {
 
 // ---------------------------------------------------------------- TGM1 (Tetris The Grand Master)
 function startedTgm1(variant = "standard") {
-    const g = new RuleGame(tgmOriginal, variant);
+    const g = createGame(tgmOriginal, variant);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -1592,7 +1594,7 @@ function tgm1To999(score, frames = 600 * 60) {
 
 // ---------------------------------------------------------------- NES (Tetris for the NES)
 function startedNes(variant = "standard", level = 0, height = 0) {
-    const g = new RuleGame(nesTetris, variant, level, height);
+    const g = createGame(nesTetris, variant, level, height);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -1740,11 +1742,11 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     check("  ...a line clear adds 17-20 frames, to the next multiple of 4", [clear(100), clear(101), clear(102), clear(103)], [27, 30, 29, 28]);
 }
 {
-    const nesLevel = (start, lines) => { const g = new RuleGame(nesTetris, "standard", start); g.lines = lines; g.nintendoLevel(); return g.level; };
+    const nesLevel = (start, lines) => { const g = createGame(nesTetris, "standard", start); g.lines = lines; g.updateLevel(); return g.level; };
     check("NES levels: first level-up after start x 10 + 10 lines, or max(100, start x 10 - 50) if sooner, then every 10",
         [[0, 9], [0, 10], [5, 59], [5, 60], [5, 70], [12, 99], [12, 100], [12, 110], [16, 109], [16, 110], [19, 139], [19, 140], [0, 290]].map(([s, l]) => nesLevel(s, l)),
         [0, 1, 5, 6, 7, 12, 13, 14, 16, 17, 19, 20, 29]);
-    check("NES start levels 0-19", [new RuleGame(nesTetris, "standard", 25).level, new RuleGame(nesTetris, "standard", -1).level, new RuleGame(nesTetris, "standard", 19).gbFrames], [19, 0, 2]);
+    check("NES start levels 0-19", [createGame(nesTetris, "standard", 25).level, createGame(nesTetris, "standard", -1).level, createGame(nesTetris, "standard", 19).gbFrames], [19, 0, 2]);
     const g = startedNes();
     clearField(g);
     g.lines = 8;
@@ -1769,7 +1771,7 @@ function startedNes(variant = "standard", level = 0, height = 0) {
 
 // ---------------------------------------------------------------- TGM3 Shirase
 function startedMode(mode, variant) {
-    const g = new RuleGame(mode, variant);
+    const g = createGame(mode, variant);
     for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
 }
@@ -1975,11 +1977,11 @@ function startedMode(mode, variant) {
         [g.hasHold, g.nextCount, g.curPiece_row, g.moveLimit, g.tgm], [true, 3, 2, 128, false]);
     check("  ...stats: mode, level, lines, the level's time limit, time",
         [g.getStats()[0], g.getStats()[1], g.getStats()[2], g.getStats()[3][0]], [["ACE", "NORMAL"], ["LEVEL", "1 / 15"], ["LINES", "0 / 150"], "LIMIT"]);
-    const grav = (variant, level) => { const h = new RuleGame(tgmAce, variant); h.level = level; h.updateTimings(); return h.gravity * 256; };
+    const grav = (variant, level) => { const h = createGame(tgmAce, variant); h.level = level; h.updateTimings(); return h.gravity * 256; };
     check("  ...gravity: Normal 4/256 at level 1 to 20G at 13, Hi-Speed 1 84/256 to 20G at 8, the rest 20G",
         [grav("normal", 1), grav("normal", 12), grav("normal", 13), grav("hispeed1", 1), grav("hispeed1", 8), grav("hispeed2", 1), grav("another", 1)],
         [4, 1280, 5120, 84, 5120, 5120, 5120]);
-    const delays = (variant, level) => { const h = new RuleGame(tgmAce, variant); h.level = level; h.updateTimings(); return [h.are, h.lineAre, h.das, h.lockDelayMax, h.lineClearDelay]; };
+    const delays = (variant, level) => { const h = createGame(tgmAce, variant); h.level = level; h.updateTimings(); return [h.are, h.lineAre, h.das, h.lockDelayMax, h.lineClearDelay]; };
     check("  ...delays: Normal fixed, Another by level, Another 2 fixed",
         [delays("normal", 9), delays("another", 1), delays("another", 15), delays("another2", 1)],
         [[25, 25, 15, 30, 41], [18, 18, 10, 28, 14], [6, 6, 7, 13, 5], [6, 6, 7, 13, 4]]);
@@ -2000,7 +2002,7 @@ function startedMode(mode, variant) {
     g.aceTimer = 1;
     g.advanceFrame(0); g.advanceFrame(0);
     check("  ...running out ends the game", [g.isGameOver(), g.endTitle], [true, "TIME OVER"]);
-    const another = new RuleGame(tgmAce, "another");
+    const another = createGame(tgmAce, "another");
     check("  ...Another: a minute per level", another.aceTimer, 3600);
     const h = startedMode(tgmAce, "hispeed2");
     clearField(h);

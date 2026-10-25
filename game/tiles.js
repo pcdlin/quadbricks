@@ -26,7 +26,7 @@ function loadTileImages() {
     return Promise.all(jobs);
 }
 
-// Game Boy screen shades, darkest to lightest
+// The 1989 handheld's screen shades, darkest to lightest
 const GB_SHADES = ["#0f380f", "#306230", "#8bac0f", "#c8dc9a"]; // lightest lifted for contrast
 const MONO_INK = "244,236,220"; // Mono's warm gallery white
 
@@ -422,8 +422,8 @@ const TILESETS = {
         },
     },
 
-    // Monochrome four-shade green, like the Game Boy's screen: each piece has its own pattern
-    gameboy: {
+    // Monochrome four-shade green, like the 1989 handheld's screen: each piece has its own pattern
+    retro1989: {
         name: "1989",
         pad: () => 0,
         // the block's main shade; dark-bodied blocks take the light one, so the trail shows
@@ -440,7 +440,7 @@ const TILESETS = {
                 g.setLineDash([]);
                 return;
             }
-            px(0, 0, 8, 8, darkest); // outline, as all Game Boy blocks have
+            px(0, 0, 8, 8, darkest); // outline, as all of its blocks have
             switch (index) {
                 case 1: px(1, 1, 6, 6, light); px(1, 3, 6, 2, lightest); break;               // bar
                 case 2: px(1, 1, 6, 6, dark); px(3, 3, 2, 2, lightest); break;                // dark with a light core

@@ -1,74 +1,37 @@
-// Modern rule sets for the web port, selectable next to the original modes:
+// The rule sets' common base. Each family lives in its own file and subclasses RuleGame:
 //
-//  - Guideline: Tetris Guideline with SRS: endless, 150-line marathon, variable-goal marathon,
-//    40-line sprint, 2-minute ultra, dig (clear rows of garbage) and 20G master
-//    (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin; master's
-//     delays from the Tetris_Effect page; dig as NullpoMino's DigRaceMode)
-//  - Arika: Tetris The Grand Master 3 Terror-Instinct, Master mode, World rule
-//    (tetris.wiki: Tetris_The_Grand_Master_3_Terror-Instinct, Heboris_Unofficial_Expansion,
-//     randomizer from the wiki TGM_randomizer page, checked against the arcade sequence)
-//  - Classic: the same TGM3 Master mode with the Classic rule: Arika Rotation System
-//    with TGM3's I and T kicks, sonic drop, locking soft drop, step reset, Sega colours
-//    (tetris.wiki: Arika_Rotation_System; kick order as in NullpoMino's ClassicPlusWallkick)
-//  - both TGM3 rules end with the staff roll (fading, or invisible with all COOLs), which can
-//    earn Grand Master, and speed up to 20G after 15 minutes (timings from NullpoMino's
-//    GradeMania3Mode)
-//  - TGM3's other modes, with either rule: Shirase (20G to level 1300, rising garbage, monochrome
-//    blocks, a staff roll with big pieces; roll length from NullpoMino's SpeedMania2Mode) and Easy
-//    (to level 200, scored in fireworks: the community analysis "TGM3 Easy mode hanabi" that
-//    tetris.wiki links to)
-//  - TAP: Tetris The Absolute The Grand Master 2 PLUS, Master mode (grades 9 to GM, fading roll
-//    or M-roll) and Death mode (20G, M at level 500, GM at 999): plain ARS without TGM3's kicks,
-//    sonic drop, no hold, one next piece, TGM2 randomizer
-//    (tetris.wiki: Tetris_The_Absolute_The_Grand_Master_2_PLUS, Grade_Recognition_System,
-//     TGM_randomizer; randomizer as TGM3's; roll length from
-//     NullpoMino's GradeMania2Mode), and TGM+ (rising garbage from a fixed pattern; pattern and
-//     roll length from NullpoMino's GarbageManiaMode)
-//  - ACE: the 150-line time attack modes of the Xbox 360 game (Normal, Hi-Speed 1 and 2, Another,
-//    Another 2) with Arika SRS (tetris.wiki: Tetris_The_Grand_Master_Ace; speeds and time limits
-//    from NullpoMino's TimeAttackMode)
-//  - TGM1: Tetris The Grand Master, Master and 20G: plain ARS like TAP but without the sonic drop,
-//    constant delays, grades from the score, GM for meeting score and time checkpoints, then a
-//    staff roll that can't be lost
-//    (tetris.wiki: Tetris_The_Grand_Master, TGM_randomizer; GM checks and roll length from
-//     NullpoMino's GradeManiaMode)
-//  - NES: Tetris for the NES (Nintendo, 1989), A-Type (endless, levels 0-29 and on) and B-Type:
-//    right-handed Nintendo Rotation System without kicks, no hard drop, no hold, no lock delay,
-//    entry delay by lock height, the NES randomizer
-//    (tetris.wiki: Tetris_(NES,_Nintendo), Scoring; meatfighter.com's NES Tetris disassembly notes)
-//  - GB: Tetris for the Game Boy (1989), A-Type (endless, levels 0-20) and B-Type (25 lines over
-//    garbage): left-handed Nintendo Rotation System without kicks, no hard drop, no hold, no lock
-//    delay, one next piece, the Game Boy's randomizer with its OR bug
-//    (tetris.wiki: Tetris_(Game_Boy), Nintendo_Rotation_System; randomizer from TASVideos
-//     submission 4536 and the game's disassembly)
+//  - rules-guideline.js  Guideline (GuidelineGame): Marathon (150 lines, variable goal, endless),
+//                        Sprint, Ultra, Dig, Master
+//  - rules-tgm.js        the TGM series (TgmGame): TGM1 (Tgm1Game), TAP (TapGame: Master, Death,
+//                        TGM+) and TGM3 (TiGame: Master; TiEasyGame, TiShiraseGame), World or Classic rule
+//  - rules-ace.js        ACE (AceGame): the 150-line time attack modes
+//  - rules-1989.js       NES and GB (Game1989: NesGame, GbGame), A-Type and B-Type
 //
-// Each rule set has these variants, taken over from the original modes:
+// Each family file registers its modes (registerRules); createGame() builds the right subclass and
+// starts it. The engine drives a game one frame at a time (advanceFrame with an input bitmap) and
+// reads it through getCell, getCurPiece_*, takeClearedCells, getStats, ...
+//
+// RuleGame does what every rule set shares: the field, input and DAS, the frame and its phases
+// (ready, active, are, lineclear), collision, SRS rotation with kicks, gravity and the lock delay,
+// line clears and the engine's event queues. Subclasses set their configuration in the constructor
+// (shapes, next pieces, hold, spawn, randomizer, ...) and override hooks: setTimings, spawnPosition,
+// beforeSpawn / onNewPiece / afterSpawn / onBlockOut, onClock, onActiveFrame, dasCharges, canShift,
+// onShiftBlocked, rotate, onMoveReset, advanceDrop / upKey / onGround / onHardDrop, beforeLock,
+// scoreClear, onCollapse, afterClear, ghostVisible, getStats, setupField, setHandling, testSetup.
+//
+// Variants shared by several rule sets (the menu offers each family's own, see VARIANT_NAMES):
 //  - standard: the rule set as specified
 //  - test:     no gravity (soft and hard drop still work)
-//  - death:    constant 20G, no ghost piece (TAP: its own Death mode, see below)
-//  - marathon: Guideline only: the game ends after 150 lines (standard is endless)
-//  - variable: Guideline only: marathon with the variable goal, levels 1-15
-//  - dig:      Guideline only: clear 5, 10 or 18 rows of garbage as fast as possible, fixed level 1
-//  - master:   Guideline only: 20G, shorter lock and line clear delays by level M1-M30, 300 lines
-//  - sprint:   Guideline only: 40 lines as fast as possible, fixed level 1
-//  - ultra:    Guideline only: highest score in 2 minutes, fixed level 1
-//  - btype:    NES and GB only: B-Type, 25 lines starting over rows of garbage
-//  - 20g:      TGM1 only: its hidden 20G mode, 20G from the start
-//  - shirase, easy: TGM3 only (either rule); plus: TAP only, TGM+
-//  - normal, hispeed1, hispeed2, another, another2: ACE's modes
-//
-// RuleGame is driven by the engine one frame at a time (advanceFrame with an input
-// bitmap) and read through getCell, getCurPiece_*, takeClearedCells, getStats, ...
+//  - death:    constant 20G, no ghost piece (TAP: its own Death mode)
 // Row coordinates: visible rows are 2..21; rows above are the buffer zone.
 
-const guideline = 3, arika = 4, tgmClassic = 5, tgmTap = 6, gameBoy = 7, tgmOriginal = 8, nesTetris = 9, tgmAce = 10;
+const guideline = 3, arika = 4, tgmClassic = 5, tgmTap = 6, gbTetris = 7, tgmOriginal = 8, nesTetris = 9, tgmAce = 10;
 // Shown under the rule set name; standard is named after the rule set instead (see getStats)
 const VARIANT_NAMES = { test: "TEST", death: "DEATH", marathon: "MARATHON", sprint: "SPRINT", ultra: "ULTRA", btype: "B-TYPE", "20g": "20G",
     variable: "VARIABLE", dig: "DIG", master: "MASTER", shirase: "SHIRASE", easy: "EASY", plus: "TGM+",
     normal: "NORMAL", hispeed1: "HI-SPEED 1", hispeed2: "HI-SPEED 2", another: "ANOTHER", another2: "ANOTHER 2" };
 
-const FIELD_TOP = -18;  // Guideline: 20 visible rows + 20-row buffer
-const TGM_BUFFER_TOP = 1; // TGM1, TGM3 and TAP: one buffer row, blocks locking above it are deleted
+const FIELD_TOP = -18;  // the highest row kept: 20 visible rows + 20-row buffer
 
 // Start countdown 3, 2, 1, half a second each; the frame after it is the first to take input
 const COUNTDOWN_STEPS = 3, COUNTDOWN_STEP_FRAMES = 30;
@@ -81,6 +44,10 @@ const LINE_DROP_PAUSE = 12;
 
 // Clear messages by number of lines
 const CLEAR_NAMES = ["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"];
+
+// Handling without the player's options (only the Guideline has them): no DAS cut, ghost shown
+// where the rule set has one, no hard drop guard
+const NO_HANDLING = { dcd: 0, ghost: true, dropGuard: false };
 
 // ----------------------------------------------------------
 // SRS kick data: tests 2-5 per transition, (x right, y up)
@@ -101,7 +68,7 @@ const KICKS_I_GUIDELINE = {
     "L->0": [[+1, 0], [-2, 0], [+1, -2], [-2, +1]], "0->L": [[-1, 0], [+2, 0], [-1, +2], [+2, -1]],
 };
 
-// Arika SRS (TGM3 World rule / TGM Ace): modified I kicks, same JLSTZ data
+// Arika SRS (TGM3 World rule / ACE): modified I kicks, same JLSTZ data
 const KICKS_I_ARIKA = {
     "0->R": [[-2, 0], [+1, 0], [+1, +2], [-2, -1]], "R->0": [[+2, 0], [-1, 0], [+2, +1], [-1, -2]],
     "R->2": [[-1, 0], [+2, 0], [-1, +2], [+2, -1]], "2->R": [[-2, 0], [+1, 0], [-2, +1], [+1, -1]],
@@ -115,354 +82,11 @@ function parseShapes(pieces) {
     return [shapes[0], ...pieces.map(states => states.map(rows => rows.map(r => [...r].map(ch => ch === "." ? 0 : 1))))];
 }
 
-// ----------------------------------------------------------
-// Arika Rotation System (Classic rule)
-
-// Piece shapes per rotation state (spawn, CW, 180, CCW). All but I sit at the bottom of
-// their 3x3 box; L, J and T spawn with the flat side up; I, S and Z toggle between two states.
-const ARS_SHAPES = parseShapes([
-    [["....", "IIII", "....", "...."], ["..I.", "..I.", "..I.", "..I."], ["....", "IIII", "....", "...."], ["..I.", "..I.", "..I.", "..I."]],
-    [["....", "TTT.", ".T..", "...."], [".T..", "TT..", ".T..", "...."], ["....", ".T..", "TTT.", "...."], [".T..", ".TT.", ".T..", "...."]],
-    [["....", "LLL.", "L...", "...."], ["LL..", ".L..", ".L..", "...."], ["....", "..L.", "LLL.", "...."], [".L..", ".L..", ".LL.", "...."]],
-    [["....", "JJJ.", "..J.", "...."], [".J..", ".J..", "JJ..", "...."], ["....", "J...", "JJJ.", "...."], [".JJ.", ".J..", ".J..", "...."]],
-    [["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."], ["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."]],
-    [["....", "ZZ..", ".ZZ.", "...."], ["..Z.", ".ZZ.", ".Z..", "...."], ["....", "ZZ..", ".ZZ.", "...."], ["..Z.", ".ZZ.", ".Z..", "...."]],
-    [["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."]],
-]);
-
-const ARS_SPAWN_ROW = 1; // pieces appear in rows 19-20
-const ARS_I_FLOOR_KICKS = 1, ARS_T_FLOOR_KICKS = 2; // TGM3 limits per piece
-
 // Colour of each piece type, as an index into the engine's palette (cyan, purple, orange,
-// blue, green, red, yellow). Classic uses the Sega/Arika colours.
+// blue, green, red, yellow)
 const DEFAULT_PALETTE = [0, 1, 2, 3, 4, 5, 6, 7];
-const ARS_PALETTE = [0, 6, 1, 3, 4, 2, 5, 7]; // I red, T cyan, L orange, J blue, S purple, Z green, O yellow
 
-// ----------------------------------------------------------
-// Guideline timing
-
-// Seconds per row: (0.8 - (level-1) * 0.007) ^ (level-1); returned as rows per frame
-function guidelineGravity(level) {
-    const seconds = Math.pow(0.8 - (level - 1) * 0.007, level - 1);
-    return 1 / (seconds * 60);
-}
-
-const GUIDELINE_MAX_LEVEL = 15;  // level cap; endless play continues at level 15 speed
-const GUIDELINE_LINES_PER_LEVEL = 10; // fixed goal
-const GUIDELINE_LINE_GOALS = { marathon: 150, sprint: 40, master: 300 }; // variants that end on a number of lines
-const GUIDELINE_ULTRA_FRAMES = 2 * 60 * 60; // the ultra variant ends after two minutes
-const GUIDELINE_FIXED_LEVEL = ["sprint", "ultra", "dig"]; // variants that stay at level 1
-// Variable goal: each level needs 5 x level goal points; a clear (or T-spin) earns its base score / 100,
-// rounded down (back-to-back included), and points beyond the goal are lost. Levels 1-15.
-const GUIDELINE_VARIABLE_GOAL = 5;
-// Dig: rows of garbage by choice (the height argument), each with one hole, never in the same
-// column as the row below
-const GUIDELINE_DIG_ROWS = [5, 10, 18];
-// Master: 20G at every level; [lock delay, line clear delay] in frames for levels M1-M30, as
-// tetris.wiki gives them (rounded to whole frames in use). 10 lines per level, done at 300 lines.
-const GUIDELINE_MASTER_DELAYS = [
-    [29.5, 30], [29.5, 27], [29.5, 24], [29.5, 21], [29.5, 18], [29.5, 15], [29.5, 12], [29.5, 9], [29.5, 6], [29.5, 3],
-    [27.6, 0.6], [25.2, 0.6], [22.8, 0.6], [20.4, 0.6], [17.5, 0.6], [16.8, 0.6], [15.6, 0.6], [15, 0.6], [13.2, 0.6], [11.5, 0.6],
-    [11.4, 0.6], [10.8, 0.6], [10.2, 0.6], [9.6, 0.6], [8.5, 0.6], [8.4, 0.6], [7.8, 0.6], [7.2, 0.6], [6.6, 0.6], [5.5, 0.6],
-];
-const GUIDELINE_LOCK_DELAY = 30; // 0.5 s
-const GUIDELINE_MOVE_LIMIT = 15; // move reset limit
-const GUIDELINE_DAS = 10, GUIDELINE_ARR = 2, GUIDELINE_ARE = 6; // recommended handling
-const GUIDELINE_NEXT = 6; // the Guideline allows up to six previews
-const GUIDELINE_SOFT_FACTOR = 20; // soft drop = 20x gravity
-// Player handling for the Guideline (Options → Guideline), the recommended values by default.
-// das, arr: frames (arr 0 shifts straight to the wall); sdf: soft drop factor (Infinity: 20G);
-// dcd: frames a charged auto-shift pauses after a rotation or a new piece; ghost: ghost piece shown;
-// dropGuard: hard drops in a piece's first GUIDELINE_DROP_GUARD frames are ignored
-const GUIDELINE_HANDLING = { das: GUIDELINE_DAS, arr: GUIDELINE_ARR, sdf: GUIDELINE_SOFT_FACTOR, dcd: 0, ghost: true, dropGuard: false };
-const GUIDELINE_DROP_GUARD = 8;
-
-// ----------------------------------------------------------
-// TGM3 Master timing
-
-// Gravity in 1/65536 G: [from level, value]
-const TGM_GRAVITY = [
-    [0, 1024], [30, 1536], [35, 2048], [40, 2560], [50, 3072], [60, 4096], [70, 8192],
-    [80, 12288], [90, 16384], [100, 20480], [120, 24576], [140, 28672], [160, 32768],
-    [170, 36864], [200, 1024], [220, 8192], [230, 16384], [233, 24576], [236, 32768],
-    [239, 40960], [243, 49152], [247, 57344], [251, 65536], [300, 131072], [330, 196608],
-    [360, 262144], [400, 327680], [420, 262144], [450, 196608], [500, 1310720],
-];
-
-// [from speed level, ARE, line ARE, DAS, lock delay, line clear delay] in frames.
-// COOLs put the speed level up to 900 above the level, hence the rows past 999.
-const TGM_DELAYS = [
-    [0, 27, 27, 16, 30, 40],
-    [500, 27, 27, 10, 30, 25],
-    [600, 27, 18, 10, 30, 16],
-    [700, 18, 14, 10, 30, 12],
-    [800, 14, 8, 10, 30, 6],
-    [900, 14, 8, 8, 17, 6],
-    [1000, 8, 8, 8, 17, 6],
-    [1100, 7, 7, 8, 15, 6],
-    [1200, 6, 6, 8, 15, 6],
-];
-
-const TGM_LEVEL_FOR_LINES = [0, 1, 2, 4, 6]; // Master: triple +4, tetris +6
-const TGM_MAX_LEVEL = 999;
-const TGM_TORIKAN_LEVEL = 500, TGM_TORIKAN_FRAMES = 7 * 60 * 60; // ends at 500 if slower than 7:00
-const TGM_GHOST_UNTIL = 100; // ghost piece shown below level 100
-const TGM_ROTATION_RESETS = 8, TGM_MOVE_RESETS = 10; // World rule move reset limits
-const TGM_SPAWN_ROW = 2; // spawn in the top visible rows
-const TGM_NEXT = 3; // TGM3 shows three next pieces
-// After 15 minutes the game speeds up to keep players from playing too long:
-// 20G, [ARE, line ARE, DAS, lock delay, line clear delay] as in NullpoMino's TGM3 mode
-const TGM_KILL_FRAMES = 15 * 60 * 60, TGM_KILL_DELAYS = [2, 1, 5, 13, 3];
-
-// Staff roll after level 999: the field clears one row every ROLL_ROW_FRAMES from the bottom,
-// then play goes on for ROLL_FRAMES with blocks hiding after they lock. Fading roll: they fade
-// out over FADE_FRAMES and are gone 5 s after locking; invisible roll: gone at once.
-const TGM_ROLL_FRAMES = 3238;
-const TGM_ROLL_ROW_FRAMES = 6;
-const TGM_ROLL_HIDE = { fading: 300, invisible: 2 }; // frames after locking
-const TGM_ROLL_FADE_FRAMES = 10;
-const TGM_INVISIBLE_COOLS = 9, TGM_INVISIBLE_GRADE = 27; // all COOLs and internal grade 27 for the invisible roll
-// Roll grade points in hundredths of a grade, per 1-4 lines, and for surviving the roll
-const TGM_ROLL_POINTS = { fading: [0, 4, 8, 12, 26], invisible: [0, 10, 20, 30, 100] };
-const TGM_ROLL_CLEAR = { fading: 50, invisible: 160 };
-
-// Hidden test setups (testSetup): how close to the end of the roll and to 15:00 they jump
-const TEST_ROLL_LEAD = 5 * 60, TEST_KILL_LEAD = 10 * 60;
-const TEST_GM_ROLL_POINTS = 440; // 17 boosts + 9 COOLs + 4.4, surviving the roll's 1.6 makes 32
-
-// ----------------------------------------------------------
-// TGM3 grading (Master mode)
-
-// Per internal grade: [displayed-grade boosts, decay frames, points for 1, 2, 3, 4 lines]
-const TGM_GRADES = [
-    [0, 125, 10, 20, 40, 50], [1, 80, 10, 20, 30, 40], [2, 80, 10, 20, 30, 40],
-    [3, 50, 10, 15, 30, 40], [4, 45, 10, 15, 20, 40], [5, 45, 5, 15, 20, 30],
-    [5, 45, 5, 10, 20, 30], [6, 40, 5, 10, 15, 30], [6, 40, 5, 10, 15, 30],
-    [7, 40, 5, 10, 15, 30], [7, 40, 2, 12, 13, 30], [7, 40, 2, 12, 13, 30],
-    [8, 30, 2, 12, 13, 30], [8, 30, 2, 12, 13, 30], [8, 30, 2, 12, 13, 30],
-    [9, 20, 2, 12, 13, 30], [9, 20, 2, 12, 13, 30], [9, 20, 2, 12, 13, 30],
-    [10, 20, 2, 12, 13, 30], [11, 20, 2, 12, 13, 30], [12, 15, 2, 12, 13, 30],
-    [12, 15, 2, 12, 13, 30], [12, 15, 2, 12, 13, 30], [13, 15, 2, 12, 13, 30],
-    [13, 15, 2, 12, 13, 30], [14, 15, 2, 12, 13, 30], [14, 15, 2, 12, 13, 30],
-    [15, 15, 2, 12, 13, 30], [15, 15, 2, 12, 13, 30], [16, 15, 2, 12, 13, 30],
-    [16, 10, 2, 12, 13, 30], [17, 10, 2, 12, 13, 30],
-];
-// Combo multipliers by combo (1..10) for 2, 3 and 4 lines; singles are always x1
-const TGM_GRADE_COMBO = [
-    [1, 1, 1], [1.2, 1.4, 1.5], [1.2, 1.5, 1.8], [1.4, 1.6, 2.0], [1.4, 1.7, 2.2],
-    [1.4, 1.8, 2.3], [1.4, 1.9, 2.4], [1.5, 2.0, 2.5], [1.5, 2.1, 2.6], [2.0, 2.5, 3.0],
-];
-const TGM_GRADE_LABELS = [
-    "9", "8", "7", "6", "5", "4", "3", "2", "1",
-    "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9",
-    "m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9",
-    "Master", "MasterK", "MasterV", "MasterO", "MasterM",
-    "Grand Master", // only by surviving the invisible roll (there's no promotion exam here)
-];
-const TGM_MAX_GRADE = 31; // MasterM: the highest grade before the end of the roll
-const TGM_GRADE_POINTS = 100; // points for the next internal grade
-// Per 100-level section (seconds): reaching *70 faster than COOL_TIME earns a COOL;
-// taking longer than REGRET_TIME for the whole section is a REGRET
-const TGM_COOL_TIME = [52, 52, 49, 45, 45, 42, 42, 38, 38];
-const TGM_REGRET_TIME = [90, 75, 75, 68, 60, 60, 50, 50, 50, 50];
-const TGM_COOL_SLACK = 2; // after a COOL section, the next may reach *70 at most this much slower
-const TGM_COOL_SPEEDUP = 100; // a COOL moves the speed level 100 ahead once its section is finished
-
-// ----------------------------------------------------------
-// TGM3 Shirase: 20G throughout, levels to 1300
-
-// [from level, ARE, line ARE, DAS, lock delay, line clear delay] in frames
-const SHIRASE_DELAYS = [
-    [0, 12, 8, 10, 18, 6], [100, 12, 7, 8, 18, 5], [200, 12, 6, 8, 17, 4], [300, 6, 6, 8, 15, 4],
-    [500, 6, 5, 6, 13, 3], [600, 6, 5, 6, 12, 3], [1100, 6, 5, 6, 10, 3], [1200, 6, 5, 6, 8, 3],
-    [1300, 6, 6, 6, 15, 6],
-];
-const SHIRASE_MAX_LEVEL = 1300;
-// Level stops: reaching the level later than this (frames) ends the game; by rule
-const SHIRASE_TORIKAN = { world: [[500, 183 * 60], [1000, 366 * 60]], classic: [[500, 148 * 60], [1000, 296 * 60]] };
-// Rising garbage in sections 5-9: the counter goes +1 per new piece and -1 per line cleared (not
-// below 0); at the section's quota a copy of the bottom row rises before the next piece
-const SHIRASE_GARBAGE = [0, 0, 0, 0, 0, 20, 18, 10, 9, 8];
-// A section slower than this many seconds is a REGRET: 60 for the first two, then 50
-const SHIRASE_REGRET_TIME = (section) => section < 2 ? 60 : 50;
-const SHIRASE_MONO_LEVEL = 1000; // every block monochrome from here
-const MONO_PALETTE = [0, 5, 5, 5, 5, 5, 5, 5]; // green (World's; Classic's white has no colour here)
-const SHIRASE_ROLL_FRAMES = 3238; // the staff roll after 1300, with big pieces
-// Grade: sections finished less REGRETs
-const SHIRASE_GRADE_LABELS = ["1", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13"];
-
-// ----------------------------------------------------------
-// TGM3 Easy: to level 200 with fixed delays; scored in fireworks (hanabi)
-
-// Gravity in 1/256 G: [from level, value]
-const EASY_GRAVITY = [
-    [0, 4], [8, 5], [19, 6], [35, 8], [40, 10], [50, 12], [60, 16], [70, 32], [80, 48], [90, 64],
-    [101, 16], [112, 48], [121, 80], [132, 128], [144, 112], [156, 144], [167, 176], [177, 192], [200, 5120],
-];
-const EASY_DELAYS = [48, 25, 14, 30, 40]; // ARE, line ARE, DAS, lock delay, line clear delay
-const EASY_MAX_LEVEL = 200;
-const EASY_ROLL_FRAMES = 3265;
-// Fireworks for a clear: truncate(base x combo x every bonus that applies), added to a stream that
-// fires one every EASY_STREAM_FRAMES (frames the clock divides). Bonuses:
-const EASY_BASE = [0, 1.0, 2.9, 3.8, 4.7]; // by lines
-// combo: doubles and more add one (to 9) before scoring, singles keep it without the bonus, a piece
-// that clears nothing resets it; multiplier by combo (0: none)
-const EASY_COMBO = [1, 1.0, 1.5, 1.9, 2.2, 2.9, 3.5, 3.9, 4.2, 4.5];
-const EASY_COMBO_MAX = 9;
-// in the roll the combo is frozen and mapped (the game's bug: 9 maps to the lowest) for every clear
-const EASY_ROLL_COMBO_MAP = [1, 1, 2, 3, 4, 4, 4, 4, 4, 0], EASY_ROLL_COMBO = [1.0, 1.5, 1.9, 2.2, 2.9];
-const EASY_FIXED_SPEED = 1.3, EASY_FIXED_SPEED_FRAMES = 100; // a combo-stream firework fired lately
-const EASY_SPLIT = 1.4; // rows cleared apart
-const EASY_LUCKY = 1.3, EASY_LUCKY_LEVELS = [25, 50, 75, 125, 150, 175, 199]; // level before the clear
-const EASY_30S = 1.4, EASY_30S_FRAMES = 1800, EASY_30S_LEVELS = 30; // 30 levels in a 30 s period: next clear
-const EASY_VAR_SPEED = 100, EASY_VAR_FINESSE = 120; // x (level - frames) / n when over n
-const EASY_SPIN = 2, EASY_TSPIN = 3, EASY_TSPIN_TRIPLE = 4; // last move a rotation (never the O)
-const EASY_BRAVO = 6; // a perfect clear before the roll, in its own stream
-const EASY_COMPLETE = 24; // surviving the roll
-const EASY_STREAM_FRAMES = 10;
-
-// ----------------------------------------------------------
-// TAP (TGM2 The Absolute Plus): Master and Death modes. Master uses TGM3's gravity and delay
-// tables below level 1000 (TGM3 took them from TAP) and the same internal grades (TGM_GRADES).
-
-const TAP_NEXT = 1; // one next piece, and no hold
-// [from level, ARE, line ARE, DAS, lock delay, line clear delay] in frames; always 20G
-const TAP_DEATH_DELAYS = [
-    [0, 18, 14, 12, 30, 12],
-    [100, 14, 8, 12, 26, 6],
-    [200, 14, 8, 11, 22, 6],
-    [300, 8, 8, 10, 18, 6],
-    [400, 7, 7, 8, 15, 5],
-    [500, 6, 6, 8, 15, 4],
-];
-// Grade point combo multipliers by combo (1..10) for 1, 2 and 3 lines; Tetrises are always x1
-// (TGM3's multipliers, which it applies to 2, 3 and 4 lines)
-const TAP_GRADE_COMBO = TGM_GRADE_COMBO;
-const TAP_MAX_GRADE = 17; // S9: the highest grade from grade points
-// Staff roll: fading in Master (blocks gone 4 s after locking), the invisible M-roll for players
-// who qualified, blocks staying visible in Death
-const TAP_ROLL_FRAMES = 3694;
-const TAP_ROLL_HIDE = { fading: 240, invisible: 2, visible: Infinity };
-// M-roll: S9 and at most 8:45 at level 999, plus per section (judged when it ends): the first
-// five within 65 s, the sixth at most 2 s slower than their average, each later one at most 2 s
-// slower than the one before; and at least this many Tetrises in each section
-const TAP_MROLL_FRAMES = 525 * 60;
-const TAP_MROLL_SECTION_FRAMES = 65 * 60, TAP_MROLL_SLACK = 2 * 60;
-const TAP_MROLL_TETRISES = [2, 2, 2, 2, 2, 1, 1, 1, 1, 0];
-const TAP_ORANGE_LINES = 32; // lines cleared in the M-roll for an orange-line GM
-// Death: M for reaching level 500 by 3:25.00; later than that the game stops there and the
-// credits roll without a grade. GM for reaching 999.
-const TAP_DEATH_M_LEVEL = 500, TAP_DEATH_M_FRAMES = 205 * 60;
-// TGM+: Master's gravity with Normal mode's delays, and a row of garbage from a fixed 24-row pattern
-// ('.' a hole) each time 13 - level / 100 pieces in a row lock without clearing; the roll can't be lost
-const TAP_PLUS_DELAYS = [27, 27, 16, 30, 40]; // ARE, line ARE, DAS, lock delay, line clear delay
-const TAP_PLUS_RISE = 13;
-const TAP_PLUS_PATTERN = [
-    ".#########", ".#########", ".#########", ".#########", "#########.", "#########.", "#########.", "#########.",
-    "..########", ".#########", ".#########", "########..", "#########.", "#########.", "##.#######", "#..#######",
-    "#.########", "#######.##", "#######..#", "########.#", "####..####", "####..####", "####.#####", "###...####",
-];
-const TAP_PLUS_ROLL_FRAMES = 2024;
-
-// ----------------------------------------------------------
-// ACE: 15 levels of 10 lines, each against a time limit, with Arika SRS, hold and three next pieces
-
-const ACE_LEVELS = 15, ACE_LINES_PER_LEVEL = 10;
-// Gravity in 1/256 G by level from 1; past the end of a mode's list, 20G
-const ACE_GRAVITY = {
-    normal: [4, 12, 48, 72, 96, 128, 256, 384, 512, 768, 1024, 1280],
-    hispeed1: [84, 128, 256, 512, 768, 1024, 1280],
-};
-// [ARE, line ARE, DAS, lock delay, line clear delay]: Normal and Hi-Speed, Another by level from 1
-// (the last row on), Another 2
-const ACE_DELAYS = [25, 25, 15, 30, 41];
-const ACE_ANOTHER_DELAYS = [
-    [18, 18, 10, 28, 14], [14, 14, 10, 24, 8], [14, 14, 9, 22, 8], [14, 14, 9, 20, 5], [12, 12, 9, 18, 5],
-    [12, 12, 8, 14, 5], [10, 10, 8, 14, 5], [8, 8, 7, 13, 5], [7, 7, 7, 13, 5], [6, 6, 7, 13, 5],
-];
-const ACE_ANOTHER2_DELAYS = [6, 6, 7, 13, 4];
-// Time limit per level in frames, by level from 1 (the last one on)
-const ACE_TIME_LIMITS = { another: [60 * 60], other: [120 * 60, 120 * 60, 90 * 60] };
-const ACE_MOVE_RESETS = 128; // lock resets per piece
-
-// ----------------------------------------------------------
-// TGM1 (Tetris The Grand Master): plain ARS as in TAP, no sonic drop, and TGM3's gravity table
-// (TAP and TGM3 kept TGM1's). The delays never change.
-
-const TGM1_DELAYS = [30, 30, 16, 30, 41]; // ARE, line ARE, DAS, lock delay, line clear delay
-// Score for each grade 9 ... S9 (labels as TGM_GRADE_LABELS)
-const TGM1_GRADE_SCORES = [0, 400, 800, 1400, 2000, 3500, 5500, 8000, 12000,
-    16000, 22000, 30000, 40000, 52000, 66000, 82000, 100000, 120000];
-// GM: [level, score, frames] reached with at least that score within that time: 12,000 by 4:15
-// at 300, 40,000 by 7:30 at 500, 126,000 by 13:30 at 999 (limits inclusive, as in NullpoMino)
-const TGM1_GM_CHECKS = [[300, 12000, 255 * 60], [500, 40000, 450 * 60], [999, 126000, 810 * 60]];
-// GM's staff roll: blocks stay visible, and topping out in it still ends in GM
-const TGM1_ROLL_FRAMES = 2968;
-const TGM1_ROLL_HIDE = { visible: Infinity };
-const TGM1_ROLLS = 4; // randomizer: four rolls against a history that starts Z Z Z Z
-
-// ----------------------------------------------------------
-// NES (Tetris for the NES, Nintendo, 1989)
-
-// Right-handed Nintendo Rotation System: every piece turns about one cell (box cell 2, 2) and
-// spawns with it in the top visible row; T, L and J spawn flat side up, S and Z have two states
-// with the vertical one right of the centre, the I lies in the centre's row. No kicks.
-const NES_SHAPES = parseShapes([
-    [["....", "....", "IIII", "...."], ["..I.", "..I.", "..I.", "..I."], ["....", "....", "IIII", "...."], ["..I.", "..I.", "..I.", "..I."]],
-    [["....", "....", ".TTT", "..T."], ["....", "..T.", ".TT.", "..T."], ["....", "..T.", ".TTT", "...."], ["....", "..T.", "..TT", "..T."]],
-    [["....", "....", ".LLL", ".L.."], ["....", ".LL.", "..L.", "..L."], ["....", "...L", ".LLL", "...."], ["....", "..L.", "..L.", "..LL"]],
-    [["....", "....", ".JJJ", "...J"], ["....", "..J.", "..J.", ".JJ."], ["....", ".J..", ".JJJ", "...."], ["....", "..JJ", "..J.", "..J."]],
-    [["....", "....", "..SS", ".SS."], ["....", "..S.", "..SS", "...S"], ["....", "....", "..SS", ".SS."], ["....", "..S.", "..SS", "...S"]],
-    [["....", "....", ".ZZ.", "..ZZ"], ["....", "...Z", "..ZZ", "..Z."], ["....", "....", ".ZZ.", "..ZZ"], ["....", "...Z", "..ZZ", "..Z."]],
-    [["....", "....", ".OO.", ".OO."], ["....", "....", ".OO.", ".OO."], ["....", "....", ".OO.", ".OO."], ["....", "....", ".OO.", ".OO."]],
-]);
-
-const NES_SPAWN_ROW = VISIBLE_TOP - 2; // the centre in the top visible row
-const NES_PIECE_TOP = 0; // pieces may turn up to two rows above the well, no further
-// Frames per row by level; 1 from level 29 on
-const NES_GRAVITY = [48, 43, 38, 33, 28, 23, 18, 13, 8, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3,
-    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1];
-const NES_START_LEVELS = 20; // 0-19 (10-19 with A held on the NES)
-const NES_SOFT_FRAMES = 2, NES_SOFT_FIRST = 3; // soft drop: the first row on the third frame, then every second
-const NES_DAS = 16, NES_ARR = 6;
-// Entry delay: 10 frames after locking in the bottom two rows, 2 more for each 4 rows above, at most 18
-const NES_ARE = 10, NES_ARE_STEP = 2, NES_ARE_MAX = 18;
-const NES_LINE_CLEAR = 17; // plus 0-3 frames: the animation steps on frames that are multiples of 4
-const NES_B_ROWS = [0, 3, 5, 8, 10, 12]; // B-Type: rows of garbage by height 0-5
-const NES_LINES_PER_LEVEL = 10;
-
-// ----------------------------------------------------------
-// GB (Tetris for the Game Boy, 1989)
-
-// Left-handed Nintendo Rotation System, as drawn on tetris.wiki: T, L and J spawn flat side up and
-// turn about the centre of their 3x3 box; S and Z have two states with the vertical one on the left;
-// the I lies in the third row and stands in the second column. No kicks.
-const GB_SHAPES = parseShapes([
-    [["....", "....", "IIII", "...."], [".I..", ".I..", ".I..", ".I.."], ["....", "....", "IIII", "...."], [".I..", ".I..", ".I..", ".I.."]],
-    [["....", "TTT.", ".T..", "...."], [".T..", "TT..", ".T..", "...."], [".T..", "TTT.", "....", "...."], [".T..", ".TT.", ".T..", "...."]],
-    [["....", "LLL.", "L...", "...."], ["LL..", ".L..", ".L..", "...."], ["..L.", "LLL.", "....", "...."], [".L..", ".L..", ".LL.", "...."]],
-    [["....", "JJJ.", "..J.", "...."], [".J..", ".J..", "JJ..", "...."], ["J...", "JJJ.", "....", "...."], [".JJ.", ".J..", ".J..", "...."]],
-    [["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."], ["....", ".SS.", "SS..", "...."], ["S...", "SS..", ".S..", "...."]],
-    [["....", "ZZ..", ".ZZ.", "...."], [".Z..", "ZZ..", "Z...", "...."], ["....", "ZZ..", ".ZZ.", "...."], [".Z..", "ZZ..", "Z...", "...."]],
-    [["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."], ["....", ".OO.", ".OO.", "...."]],
-]);
-
-const GB_WELL_TOP = HEIGHT - 18; // the Game Boy's well is 18 rows high: rows 4-21, nothing above
-const GB_SPAWN_ROW = GB_WELL_TOP; // the box at the top: the highest block in the second row
-const GB_NEXT = 1; // one next piece, and no hold
-// Frames per row by level 0-20 (true values; the ROM stores one less)
-const GB_GRAVITY = [53, 49, 45, 41, 37, 33, 28, 22, 17, 11, 10, 9, 8, 7, 6, 6, 5, 5, 4, 4, 3];
-const GB_MAX_LEVEL = 20, GB_LINES_PER_LEVEL = 10;
-const GB_START_LEVELS = 10; // the player starts at level 0-9
-const GB_SOFT_FRAMES = 3; // soft drop: a row every 3 frames
-const GB_DAS = 24, GB_ARR = 9;
-const GB_ARE = 2, GB_LINE_CLEAR = 91; // ARE 2; ARE and line clear together 93
-const GB_LINE_SCORES = [0, 40, 100, 300, 1200]; // x (level + 1); NES too
-const GB_MAX_SCORE = 999999; // NES too
-const GB_B_LINES = 25; // B-Type: 25 lines; NES too
-const GB_B_HEIGHTS = 6, GB_ROWS_PER_HEIGHT = 2; // B-Type height 0-5: 0 to 10 rows of garbage
-const GB_GARBAGE_FILL = 0.5; // chance of a block in each garbage cell
-
+// The row of a [from level, ...] table that applies at a level
 function tableLookup(table, level) {
     let row = table[0];
     for (const r of table) if (level >= r[0]) row = r;
@@ -470,296 +94,64 @@ function tableLookup(table, level) {
 }
 
 // ----------------------------------------------------------
-// TGM family randomizers, written from the behaviour tetris.wiki describes ("TGM randomizer"):
-// a short history of recent pieces, and a piece that is in it is rolled again, a limited number
-// of times. Both draw from the arcade's linear congruential generator.
+// Rule set registry
 
-// The arcade generator (the ANSI C rand() recurrence): 15 bits per call. Subclasses deal indices
-// into their pieces table (nextIndex()); next() turns them into piece types.
-class LcgRandomizer {
-    constructor(seed, pieces) {
-        this.seed = seed >>> 0;
-        this.pieces = pieces;
-    }
+const RULE_CLASSES = {}; // mode -> variant -> RuleGame subclass
 
-    rand(n) {
-        this.seed = (Math.imul(this.seed, 1103515245) + 12345) >>> 0;
-        return ((this.seed >>> 10) & 0x7fff) % n;
-    }
-
-    next() {
-        return this.pieces[this.nextIndex()];
-    }
+// A family file registers its modes: pick(variant) returns the class that plays it
+function registerRules(modes, pick) {
+    for (const mode of modes) RULE_CLASSES[mode] = pick;
 }
 
-const TI_PIECES = [tetI, tetZ, tetS, tetJ, tetL, tetO, tetT]; // arcade order: I Z S J L O T
-const TGM_Z = 1, TGM_S = 2, TGM_O = 5; // indices into TI_PIECES
-
-class TgmRandomizer extends LcgRandomizer {
-    constructor(seed) {
-        super(seed, TI_PIECES);
-    }
-
-    // The first piece of a game is never S, Z or O (it would force an overhang)
-    rollFirst() {
-        let piece;
-        do piece = this.rand(7); while (piece === TGM_S || piece === TGM_Z || piece === TGM_O);
-        return piece;
-    }
-}
-
-// ----------------------------------------------------------
-// TGM3 Terror-Instinct randomizer: draws come from a pool of 35 (five of each piece) and are
-// checked against the last four pieces dealt. Every slot that is drawn is refilled with the piece
-// that has gone longest without being dealt, so droughts stay bounded. The arcade's flaw is kept:
-// the "longest drought" search keeps its running maximum across all the refills of one deal, so
-// after a rejected draw later refills in that deal reuse the first choice unless a piece is more
-// overdue than it.
-
-const TI_POOL = 35, TI_ROLLS = 6;
-
-class TiRandomizer extends TgmRandomizer {
-    constructor(seed) {
-        super(seed);
-        this.pool = [];
-        for (let piece = 0; piece < 7; piece++) for (let k = 0; k < 5; k++) this.pool.push(piece);
-        this.sinceDealt = new Array(7).fill(4); // deals since each piece was last dealt
-        this.recent = [TGM_Z, TGM_Z, TGM_S, TGM_S]; // newest first
-        this.started = false;
-        this.bestGap = 0;
-        this.refillPiece = 0;
-    }
-
-    refill(slot) {
-        for (let piece = 0; piece < 7; piece++) {
-            if (this.sinceDealt[piece] > this.bestGap) {
-                this.bestGap = this.sinceDealt[piece];
-                this.refillPiece = piece;
-            }
-        }
-        this.pool[slot] = this.refillPiece;
-    }
-
-    nextIndex() {
-        if (!this.started) {
-            this.started = true;
-            const first = this.rollFirst();
-            this.recent[0] = first;
-            return first;
-        }
-
-        this.bestGap = 0;
-        this.refillPiece = 0;
-        let slot;
-        for (let roll = 0; roll < TI_ROLLS; roll++) {
-            slot = this.rand(TI_POOL);
-            if (!this.recent.includes(this.pool[slot])) break;
-            this.refill(slot);
-            slot = this.rand(TI_POOL); // a rejected roll draws again, and the next roll draws afresh
-        }
-
-        const piece = this.pool[slot];
-        for (let p = 0; p < 7; p++) this.sinceDealt[p]++;
-        this.sinceDealt[piece] = 0;
-        this.refill(slot);
-        this.recent.pop();
-        this.recent.unshift(piece);
-        return piece;
-    }
-}
-
-// ----------------------------------------------------------
-// TAP (TGM2) randomizer: a piece is rolled up to six times to miss the last four dealt, the sixth
-// roll taken as it comes. The history starts Z, Z, S, S and the first piece (never S, Z or O)
-// replaces the first Z. The piece to deal is always rolled one deal ahead.
-// TGM1's is the same with four rolls and a history of Z, Z, Z, Z (Tgm1Randomizer).
-
-const TAP_ROLLS = 6;
-
-class TapRandomizer extends TgmRandomizer {
-    constructor(seed, rolls = TAP_ROLLS, history = [TGM_Z, TGM_S, TGM_S]) {
-        super(seed);
-        this.rolls = rolls;
-        this.recent = [this.rollFirst(), ...history]; // newest first; the newest is the next to deal
-    }
-
-    nextIndex() {
-        const dealt = this.recent[0];
-        let piece;
-        for (let roll = 0; roll < this.rolls - 1; roll++) {
-            piece = this.rand(7);
-            if (!this.recent.includes(piece)) break;
-            piece = this.rand(7); // a rejected roll draws again, and the next roll draws afresh
-        }
-        this.recent.pop();
-        this.recent.unshift(piece);
-        return dealt;
-    }
-}
-
-class Tgm1Randomizer extends TapRandomizer {
-    constructor(seed) {
-        super(seed, TGM1_ROLLS, [TGM_Z, TGM_Z, TGM_Z]);
-    }
-}
-
-// ----------------------------------------------------------
-// GB randomizer: a piece is rolled up to three times while it would make three of a kind with the
-// two before it, the last roll taken as it comes. The game tests this by ORing the three pieces'
-// data values (L J I O Z S T = 0, 4, ..., 24) and comparing with the previous piece, so a roll is
-// also refused whenever its bits and the one before it fit inside the previous piece's: L comes up
-// least often (about 10.5%). Reconstructed from TASVideos submission 4536 and the disassembly; the
-// game seeds from its DIV timer, here from the shared generator.
-
-const GB_PIECES = [tetL, tetJ, tetI, tetO, tetZ, tetS, tetT];
-const GB_ROLLS = 3;
-
-class GbRandomizer extends LcgRandomizer {
-    constructor(seed) {
-        super(seed, GB_PIECES);
-        this.history = []; // the previous piece, then the one before it (indices into GB_PIECES)
-    }
-
-    nextIndex() {
-        const [prev, before] = this.history;
-        let piece;
-        for (let roll = 0; roll < GB_ROLLS; roll++) {
-            piece = this.rand(7);
-            if (this.history.length < 2 || (piece | prev | before) !== prev) break;
-        }
-        this.history = [piece, prev];
-        return piece;
-    }
-}
-
-// ----------------------------------------------------------
-// NES randomizer: a roll of 0-7 is taken unless it is 7 (no piece) or the previous piece; then a
-// second roll of 0-6 is taken as it comes. The NES reads its rolls from a 16-bit LFSR that runs
-// every frame; here they come from the shared generator.
-
-const NES_PIECES = [tetT, tetJ, tetZ, tetO, tetS, tetL, tetI]; // the game's order
-
-class NesRandomizer extends LcgRandomizer {
-    constructor(seed) {
-        super(seed, NES_PIECES);
-        this.prev = -1;
-    }
-
-    nextIndex() {
-        let piece = this.rand(8);
-        if (piece === 7 || piece === this.prev) piece = this.rand(7);
-        this.prev = piece;
-        return piece;
-    }
+// A new game of a mode and variant. startLevel: NES and GB (start level), Guideline Master (M1 +
+// startLevel); height: NES and GB B-Type (garbage height), Guideline Dig (rows); handling: Guideline
+// only, overrides of GUIDELINE_HANDLING (the other rule sets keep their specified timing)
+function createGame(mode, variant = "standard", startLevel = 0, height = 0, handling = {}) {
+    const Game = RULE_CLASSES[mode](variant);
+    const game = new Game(mode, variant, startLevel, height, handling);
+    game.begin();
+    return game;
 }
 
 // ----------------------------------------------------------
 
 class RuleGame {
-    // startLevel: NES and GB only, 0 to NES_START_LEVELS or GB_START_LEVELS - 1; height: their B-Type
-    // only, 0 to GB_B_HEIGHTS - 1 (both chosen in the menu, as on the consoles); handling: Guideline
-    // only, overrides of GUIDELINE_HANDLING (the other rule sets keep their specified timing)
-    constructor(mode, variant = "standard", startLevel = 0, height = 0, handling = {}) {
+    // Common state and defaults; subclasses set their configuration after this, and createGame()
+    // calls begin() once they have
+    constructor(mode, variant = "standard") {
         this.gamemode = mode;
         this.variant = variant;
-        this.tap = mode === tgmTap;
-        this.tapPlus = this.tap && variant === "plus";
-        this.tgm1 = mode === tgmOriginal;
-        this.ti = mode === arika || mode === tgmClassic; // TGM3
-        this.shirase = this.ti && variant === "shirase";
-        this.easy = this.ti && variant === "easy";
-        this.tiMaster = this.ti && !this.shirase && !this.easy;
-        this.ace = mode === tgmAce;
-        this.plainArs = this.tap || this.tgm1; // ARS with only the basic kicks, no hold, one next piece
-        this.ars = mode === tgmClassic || this.plainArs;
-        // TGM1, TGM3 and TAP: levels to 999, ARE and line clear delays, grades, staff roll
-        this.tgm = mode === arika || this.ars;
-        this.gb = mode === gameBoy;
-        this.nes = mode === nesTetris;
-        this.nintendo = this.gb || this.nes; // no hard drop, hold, kicks or lock delay; Nintendo scoring
-        this.hasHold = !this.plainArs && !this.nintendo;
-        this.handling = { ...GUIDELINE_HANDLING, ...(this.tgm || this.nintendo || this.ace ? {} : handling) };
-        this.maxLevel = this.shirase ? SHIRASE_MAX_LEVEL : this.easy ? EASY_MAX_LEVEL : TGM_MAX_LEVEL; // TGM family
-        this.moveLimit = this.ace ? ACE_MOVE_RESETS : GUIDELINE_MOVE_LIMIT; // Guideline and ACE lock resets
-        // grade points and their decay: TGM3 Master and TAP Master (Death's points are unused)
-        this.internalGrading = this.tiMaster || (this.tap && !this.tapPlus);
-        this.shapes = this.ars ? ARS_SHAPES : this.gb ? GB_SHAPES : this.nes ? NES_SHAPES : shapes;
-        this.pieceCells = shapeCells(this.shapes); // [type][rotation] -> [row, col] offsets
+        this.tgm = false; // the TGM series (TgmGame)
+        this.handling = { ...NO_HANDLING };
+        this.setShapes(shapes, DEFAULT_PALETTE);
         this.big = false; // Shirase's staff roll: pieces twice the size, moving two columns at a time
-        this.curCells = this.pieceCells; // the current piece's offsets: pieceCells, or bigCells when big
-        this.palette = this.ars ? ARS_PALETTE : DEFAULT_PALETTE;
-        // First row of the well (the engine sizes the board to it), and the first row the engine
-        // draws: the two rows above the well too, except for GB, whose pieces never leave the well
-        this.wellTop = this.gb ? GB_WELL_TOP : VISIBLE_TOP;
-        this.firstDrawnRow = this.gb ? GB_WELL_TOP : 0;
-        this.pieceTop = this.gb ? GB_WELL_TOP : this.nes ? NES_PIECE_TOP : FIELD_TOP; // highest row a piece may occupy
+        // First row of the well (the engine sizes the board to it), the first row the engine draws
+        // (the two rows above the well too) and the highest row a piece may occupy
+        this.wellTop = VISIBLE_TOP;
+        this.firstDrawnRow = 0;
+        this.pieceTop = FIELD_TOP;
+        this.hasHold = true;
+        this.nextCount = 1; // pieces shown in the preview
+        this.iKicks = KICKS_I_GUIDELINE; // SRS I kicks (rotate())
+        this.irs = true; // a rotation held as the piece enters turns it
+        this.dropsOnSpawn = false; // a new piece drops one row at once (Guideline)
+        this.moveLimit = Infinity; // lock resets per piece (onMoveReset)
+        this.lockOut = false; // a piece locked entirely above the visible field ends the game
+        this.bufferTop = null; // blocks locking above this row are deleted (TGM)
+        this.softDropPoints = 0; // score per soft-dropped row (Guideline)
+        this.randomizer = null; // else a 7-bag
+        this.bag = [];
 
         this.field = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) this.field.push(new Array(WIDTH).fill(0));
 
-        this.master = mode === guideline && variant === "master";
-        this.dig = mode === guideline && variant === "dig";
-        this.startLevel = this.nintendo ? clamp(startLevel, 0, (this.nes ? NES_START_LEVELS : GB_START_LEVELS) - 1)
-            : this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1) : 0; // master: M1 + startLevel
-        this.level = this.nintendo ? this.startLevel : this.tgm ? 0 : 1 + this.startLevel; // ACE: 1
-        this.height = this.nintendo && variant === "btype" ? clamp(height, 0, GB_B_HEIGHTS - 1)
-            : this.dig ? clamp(height, 0, GUIDELINE_DIG_ROWS.length - 1) : 0;
-        this.goalPoints = 0; // variable goal: points towards the current level's goal
+        this.startLevel = 0;
+        this.height = 0;
+        this.level = 1;
         this.lines = 0;
         this.score = 0;
         this.frames = 0;
-
-        // TGM3 grading
-        this.internalGrade = 0;
-        this.gradePoints = 0;
-        this.gradeDecay = 0; // decay timer: frames since the last decay tick or internal grade
-        this.gradeCombo = 0; // combo for grade points: clears of 2+ lines in a row (singles keep it)
-        this.cools = 0; // COOLs from finished sections
-        this.coolPending = false; // COOL earned in the current section
-        this.coolChecked = false; // this section's *70 mark has been judged
-        this.prevCool = false; // the previous section earned a COOL
-        this.prevCoolTime = 0; // seconds the previous section took to reach *70
-        this.speedBonus = 0; // speed levels added by COOLs
-        this.section = 0;
-        this.sectionStart = 0; // frame the current section began
-        this.timerStopped = false; // TGM3: the timer stops at level 999
-        this.roll = null; // staff roll: "fading" or "invisible"
-        this.rollFrames = 0;
-        this.rollPoints = 0; // roll grade points, hundredths of a grade
-        this.rollCleared = false; // survived the whole roll
-        this.rollLength = this.tapPlus ? TAP_PLUS_ROLL_FRAMES : this.tap ? TAP_ROLL_FRAMES : this.tgm1 ? TGM1_ROLL_FRAMES
-            : this.shirase ? SHIRASE_ROLL_FRAMES : this.easy ? EASY_ROLL_FRAMES : TGM_ROLL_FRAMES;
-        // frames until locked blocks hide, by roll (TGM1, TGM+, Shirase and Easy: "visible")
-        this.rollHide = this.tap ? TAP_ROLL_HIDE : this.tgm1 || this.shirase || this.easy ? TGM1_ROLL_HIDE : TGM_ROLL_HIDE;
-        this.lockTime = null; // per cell, rollFrames when it locked (during the roll)
-        // TAP
-        this.sectionTimes = []; // frames each finished section took
-        this.sectionTetrises = 0; // Tetrises in the current section
-        this.mrollQualified = true; // every finished section met the M-roll conditions
-        this.rollLines = 0; // lines cleared in the roll
-        this.finalGrade = null; // "M" or "GM", beyond what grade points give
-        this.torikan = false; // Death: reached 500 too late, the roll starts there
-        this.gmQualified = true; // TGM1: every GM checkpoint reached so far was met
-        // Shirase and TGM+: rising garbage
-        this.garbageCount = 0;
-        this.garbagePos = 0; // TGM+: next row of the pattern
-        this.sectionsDone = 0; // Shirase: sections finished, and REGRETs
-        this.regrets = 0;
-        // Easy: fireworks fired, waiting in the streams, and the bonuses' state
-        this.hanabi = 0;
-        this.hanabiPending = 0;
-        this.bravoPending = 0;
-        this.easyClock = 0; // frames since the start, for the streams
-        this.easyCombo = 0;
-        this.fireTimer = 0; // frames left of the fixed speed combo bonus
-        this.sinceClear = 0; // frames since the last clear (variable speed bonus)
-        this.clearAre = false; // in the ARE after a clear
-        this.bonus30 = false;
-        this.levelMark30 = 0; // level at the start of the current 30 s period
-        this.rollInterval = 0; // frames between the roll's free fireworks
-        // ACE: time left on the level's clock; it waits from a level-up to the next piece
-        this.aceTimer = this.ace ? this.aceLimit() : 0;
-        this.acePaused = false;
+        this.timerStopped = false; // the clock stops (TGM: at the end level, for the staff roll)
         this.gameover = false;
         this.endTitle = null;
         this.endSub = null;
@@ -791,7 +183,7 @@ class RuleGame {
         this.gravityAcc = 0;
 
         // Scoring state
-        this.combo = this.tgm ? 1 : -1;
+        this.combo = -1;
         // Consecutive clearing pieces for presentation, the same in every rule set:
         // -1 after a piece that cleared nothing, 0 on the first clear, 1, 2, ... after
         this.chain = -1;
@@ -804,46 +196,25 @@ class RuleGame {
         this.bumps = [];
         this.wallBumped = false;
         this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "clear1".."clear4" (+ "c<chain>" in a combo)
-
         this.queue = [];
-        this.nextCount = this.plainArs ? TAP_NEXT : this.nintendo ? GB_NEXT : this.tgm || this.ace ? TGM_NEXT : GUIDELINE_NEXT; // pieces shown in the preview
-        if (this.tap) this.randomizer = new TapRandomizer(Date.now());
-        else if (this.tgm1) this.randomizer = new Tgm1Randomizer(Date.now());
-        else if (this.gb) this.randomizer = new GbRandomizer(Date.now());
-        else if (this.nes) this.randomizer = new NesRandomizer(Date.now());
-        else if (this.tgm || this.ace) this.randomizer = new TiRandomizer(Date.now());
-        else this.bag = [];
+    }
+
+    // After the subclass's configuration: the first pieces, the timings, garbage to start over
+    begin() {
         this.fillQueue();
         this.updateTimings();
-        if (this.dig) this.fillDigGarbage(GUIDELINE_DIG_ROWS[this.height]);
-        else if (this.height) this.fillGarbage(this.nes ? NES_B_ROWS[this.height] : this.height * GB_ROWS_PER_HEIGHT);
+        this.setupField();
     }
 
-    // Dig: full rows with one hole each, the hole never above the one in the row below; isGarbage
-    // marks their rows (it falls with the field) so the clears that remove them can be counted
-    fillDigGarbage(rows) {
-        this.digRows = rows;
-        this.digCleared = 0;
-        this.isGarbage = this.field.map(() => false);
-        let hole = -1;
-        for (let r = HEIGHT - 1; r >= HEIGHT - rows; r--) {
-            let next;
-            do next = Math.floor(Math.random() * WIDTH); while (next === hole);
-            hole = next;
-            for (let c = 0; c < WIDTH; c++) this.setCell(r, c, c === hole ? 0 : 1 + Math.floor(Math.random() * 7));
-            this.isGarbage[r - FIELD_TOP] = true;
-        }
+    // The piece shapes ([type][rotation] rows of 0/1) and their offsets, and the colours
+    setShapes(shapeTable, palette = this.palette) {
+        this.shapes = shapeTable;
+        this.pieceCells = shapeCells(shapeTable); // [type][rotation] -> [row, col] offsets
+        this.curCells = this.pieceCells; // the current piece's offsets: pieceCells, or doubled when big
+        this.palette = palette;
     }
 
-    // NES and GB B-Type: random blocks in the bottom rows, each row with at least one block and one hole
-    fillGarbage(rows) {
-        for (let r = HEIGHT - rows; r < HEIGHT; r++) {
-            let cells;
-            do cells = Array.from({ length: WIDTH }, () => Math.random() < GB_GARBAGE_FILL ? 1 + Math.floor(Math.random() * 7) : 0);
-            while (cells.every(v => v) || cells.every(v => !v));
-            cells.forEach((v, c) => this.setCell(r, c, v));
-        }
-    }
+    setupField() {} // garbage to start over (Dig, B-Type)
 
     // ----------------------------------------------------------
     // Engine interface
@@ -870,14 +241,9 @@ class RuleGame {
         return this.field[row - FIELD_TOP][col];
     }
 
-    // Opacity of a settled block: during the staff roll they fade or vanish after locking,
-    // and come back when the game ends
+    // Opacity of a settled block (TGM's staff rolls fade or hide them)
     getCellAlpha(row, col) {
-        if (!this.roll || this.gameover || row < FIELD_TOP || row >= HEIGHT) return 1;
-        const age = this.rollFrames - this.lockTime[row - FIELD_TOP][col];
-        const hide = this.rollHide[this.roll];
-        if (this.roll === "invisible") return age < hide ? 1 : 0;
-        return clamp((hide - age) / TGM_ROLL_FADE_FRAMES, 0, 1);
+        return 1;
     }
 
     setCell(row, col, val) {
@@ -941,67 +307,9 @@ class RuleGame {
         return this.score.toLocaleString("en-US");
     }
 
+    // Side panel rows: the first is [rule set, mode]
     getStats() {
-        const score = this.scoreText();
-        // Rule set and mode; TGM3's standard mode is named after its rule (World or Classic),
-        // Guideline's standard mode is endless
-        const rule = this.ars ? "CLASSIC" : "WORLD";
-        const variantName = VARIANT_NAMES[this.variant];
-        const mode = this.ace ? ["ACE", variantName]
-            : this.gb ? ["GB", variantName || "A-TYPE"]
-            : this.nes ? ["NES", variantName || "A-TYPE"]
-            : this.tgm1 ? ["TGM1", variantName || "MASTER"]
-            : this.tap ? ["TGM2 TAP", variantName || "MASTER"]
-            : this.tgm ? ["TGM3 TI", variantName ? `${rule} ${variantName}` : rule]
-            : ["GUIDELINE", variantName || "ENDLESS"];
-        if (this.ace) {
-            return [mode, ["LEVEL", `${this.level} / ${ACE_LEVELS}`], ["LINES", `${this.lines} / ${ACE_LEVELS * ACE_LINES_PER_LEVEL}`],
-                ["LIMIT", this.formatTime(Math.max(0, this.aceTimer))], ["TIME", this.formatTime()]];
-        }
-        if (this.tgm) {
-            const stop = Math.min(this.maxLevel, (Math.floor(this.level / 100) + 1) * 100);
-            const level = ["LEVEL", `${this.level} / ${stop}`];
-            // during the staff roll the timer is stopped and the time row counts the roll down
-            const time = this.roll ? ["ROLL", this.formatTime(Math.max(0, this.rollLength - this.rollFrames))] : ["TIME", this.formatTime()];
-            if (this.easy) return [mode, ["HANABI", String(this.hanabi)], level, time];
-            if (this.tapPlus) return [mode, level, time, ["SCORE", score]];
-            return [mode, ["GRADE", this.gradeLabel()], level, time, ["SCORE", score]];
-        }
-        const goal = this.nintendo ? (this.variant === "btype" ? GB_B_LINES : 0) : GUIDELINE_LINE_GOALS[this.variant];
-        const lines = ["LINES", goal ? `${this.lines} / ${goal}` : String(this.lines)];
-        if (this.variant === "sprint") return [mode, ["TIME", this.formatTime()], lines, ["SCORE", score]];
-        if (this.variant === "ultra") {
-            return [mode, ["TIME", this.formatTime(Math.max(0, GUIDELINE_ULTRA_FRAMES - this.frames))], lines, ["SCORE", score]];
-        }
-        if (this.variant === "btype") return [mode, ["LEVEL", String(this.level)], ["HEIGHT", String(this.height)], lines, ["SCORE", score]];
-        if (this.variant === "variable") {
-            return [mode, ["LEVEL", String(this.level)], ["GOAL", `${this.goalPoints} / ${GUIDELINE_VARIABLE_GOAL * this.level}`], lines, ["SCORE", score]];
-        }
-        if (this.dig) return [mode, ["TIME", this.formatTime()], ["GARBAGE", `${this.digCleared} / ${this.digRows}`], lines, ["SCORE", score]];
-        if (this.master) return [mode, ["LEVEL", `M${this.level}`], lines, ["TIME", this.formatTime()], ["SCORE", score]];
-        return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
-    }
-
-    // Displayed grade: boosts + COOLs + roll grade; Grand Master only for surviving the invisible roll
-    gradeIndex() {
-        const i = TGM_GRADES[this.internalGrade][0] + this.cools + Math.floor(this.rollPoints / 100);
-        const max = this.rollCleared && this.roll === "invisible" ? TGM_GRADE_LABELS.length - 1 : TGM_MAX_GRADE;
-        return Math.min(i, max);
-    }
-
-    gradeLabel() {
-        if (this.shirase) return SHIRASE_GRADE_LABELS[Math.max(0, this.sectionsDone - this.regrets)];
-        if (this.tgm1) { // from the score; GM for meeting the checkpoints
-            if (this.finalGrade) return this.finalGrade;
-            let i = 0;
-            while (i + 1 < TGM1_GRADE_SCORES.length && this.score >= TGM1_GRADE_SCORES[i + 1]) i++;
-            return TGM_GRADE_LABELS[i];
-        }
-        if (this.tap) { // Death has no grade until M at level 500
-            if (this.finalGrade || this.variant === "death") return this.finalGrade || "—";
-            return TGM_GRADE_LABELS[Math.min(TAP_MAX_GRADE, TGM_GRADES[this.internalGrade][0])];
-        }
-        return TGM_GRADE_LABELS[this.gradeIndex()];
+        return [["", ""]];
     }
 
     formatTime(frames = this.frames) {
@@ -1014,65 +322,10 @@ class RuleGame {
     // ----------------------------------------------------------
     // Rules
 
+    // The rule set's delays and gravity (setTimings), then the variants that override gravity only
+    // (soft drop keeps the rule set's speed)
     updateTimings() {
-        if (this.tgm) {
-            const speedLevel = this.level + this.speedBonus;
-            const delays = this.tap && this.variant === "death" ? TAP_DEATH_DELAYS : this.shirase ? SHIRASE_DELAYS : TGM_DELAYS;
-            const fixed = this.tgm1 ? TGM1_DELAYS : this.tapPlus ? TAP_PLUS_DELAYS : this.easy ? EASY_DELAYS : null;
-            const [, are, lineAre, das, lock, lineClear] = fixed ? [0, ...fixed] : tableLookup(delays, speedLevel);
-            this.are = are;
-            this.lineAre = lineAre;
-            this.das = das;
-            this.arr = 1;
-            this.lockDelayMax = lock;
-            this.lineClearDelay = lineClear;
-            this.gravity = this.shirase ? 20 : this.easy ? tableLookup(EASY_GRAVITY, this.level)[1] / 256
-                : tableLookup(TGM_GRAVITY, speedLevel)[1] / 65536;
-            if (this.shirase && this.level >= SHIRASE_MONO_LEVEL) this.palette = MONO_PALETTE;
-            if (this.tiMaster && this.frames >= TGM_KILL_FRAMES) {
-                [this.are, this.lineAre, this.das, this.lockDelayMax, this.lineClearDelay] = TGM_KILL_DELAYS;
-                this.gravity = 20;
-            }
-            this.softGravity = Math.max(this.gravity, 1); // World rule soft drop: fixed 1G, non-locking
-        } else if (this.ace) {
-            const v = this.variant, i = this.level - 1;
-            const delays = v === "another" ? ACE_ANOTHER_DELAYS[Math.min(i, ACE_ANOTHER_DELAYS.length - 1)]
-                : v === "another2" ? ACE_ANOTHER2_DELAYS : ACE_DELAYS;
-            [this.are, this.lineAre, this.das, this.lockDelayMax, this.lineClearDelay] = delays;
-            this.arr = 1;
-            const gravity = ACE_GRAVITY[v] || [];
-            this.gravity = i < gravity.length ? gravity[i] / 256 : 20;
-            this.softGravity = Math.max(this.gravity, 1);
-        } else if (this.nintendo) {
-            const nes = this.nes;
-            this.are = nes ? NES_ARE : GB_ARE; // NES: set by the lock height (setNesDelays)
-            this.lineAre = this.are;
-            this.das = nes ? NES_DAS : GB_DAS;
-            this.arr = nes ? NES_ARR : GB_ARR;
-            this.lineClearDelay = nes ? NES_LINE_CLEAR : GB_LINE_CLEAR;
-            // the gravity timer (applyGravityGb)
-            this.gbFrames = nes ? NES_GRAVITY[Math.min(this.level, NES_GRAVITY.length - 1)] : GB_GRAVITY[Math.min(this.level, GB_MAX_LEVEL)];
-            this.lockDelayMax = this.gbFrames; // no lock delay: shown as the time left to the next gravity row
-            this.gravity = 1 / this.gbFrames;
-            this.softGravity = 1 / (nes ? NES_SOFT_FRAMES : GB_SOFT_FRAMES);
-        } else {
-            this.are = GUIDELINE_ARE;
-            this.lineAre = GUIDELINE_ARE;
-            this.das = this.handling.das;
-            this.arr = this.handling.arr;
-            this.lockDelayMax = GUIDELINE_LOCK_DELAY;
-            this.lineClearDelay = 0;
-            this.gravity = guidelineGravity(Math.min(this.level, GUIDELINE_MAX_LEVEL));
-            this.softGravity = Math.min(20, this.gravity * this.handling.sdf);
-            if (this.master) {
-                const [lock, lineClear] = GUIDELINE_MASTER_DELAYS[Math.min(this.level, GUIDELINE_MASTER_DELAYS.length) - 1];
-                this.lockDelayMax = Math.round(lock);
-                this.lineClearDelay = Math.round(lineClear);
-                this.gravity = this.softGravity = 20;
-            }
-        }
-
-        // Variants override gravity only; soft drop keeps the rule set's speed
+        this.setTimings();
         if (this.variant === "test") {
             this.gravity = 0;
         } else if (this.variant === "death" || this.variant === "20g") {
@@ -1081,18 +334,14 @@ class RuleGame {
         }
     }
 
-    // Guideline: handling changed in the menu during a game
-    setHandling(handling) {
-        if (this.tgm || this.nintendo || this.ace) return;
-        this.handling = { ...GUIDELINE_HANDLING, ...handling };
-        this.updateTimings();
-        this.setShadow();
-    }
+    // Sets are, lineAre, das, arr, lockDelayMax, lineClearDelay, gravity and softGravity (rows per frame)
+    setTimings() {}
+
+    // Handling changed in the menu during a game (the Guideline's options; ignored elsewhere)
+    setHandling(handling) {}
 
     ghostVisible() {
-        if (this.variant === "death" || this.variant === "20g" || this.master || this.nintendo || !this.handling.ghost) return false;
-        if (this.shirase || (this.ace && this.gravity >= 20)) return false; // 20G: it would sit under the piece
-        return !this.tgm || this.level < TGM_GHOST_UNTIL;
+        return this.variant !== "death" && this.variant !== "20g" && this.handling.ghost;
     }
 
     fillQueue() {
@@ -1158,12 +407,22 @@ class RuleGame {
         this.endSub = sub;
     }
 
-    // Clear messages for the engine: kind is "clear", "tspin", "b2b", "combo" or "pc";
+    // Clear messages for the engine: kind is "clear", "tspin", "b2b", "combo", "pc" or "grade";
     // value is the number of lines for clears and T-spins, the chain length for combos
     addAction(text, kind, value = 0) {
         if (this.actionAge > 0) this.actions = [];
         this.actions.push({ text, kind, value });
         this.actionAge = 0;
+    }
+
+    // The clear's name, then the chain length if it continues one
+    addClearActions(n) {
+        this.addAction(CLEAR_NAMES[n], "clear", n);
+        if (this.chain > 0) this.addAction(this.chain + " COMBO", "combo", this.chain);
+    }
+
+    fieldEmpty() {
+        return this.field.every(row => row.every(v => v === 0));
     }
 
     // ----------------------------------------------------------
@@ -1189,11 +448,10 @@ class RuleGame {
         if (C(LEFT_PUSH)) { this.held.left = true; this.restartShift(-1); shiftPushed = true; }
         if (C(RIGHT_PUSH)) { this.held.right = true; this.restartShift(1); shiftPushed = true; }
 
-        // DAS charges in every phase, including ARE and line clears. The first
-        // auto-shift comes DAS frames after the press, then one every ARR frames.
-        // NES: DAS doesn't charge outside the active phase
+        // DAS charges in every phase, including ARE and line clears (unless dasCharges() says
+        // otherwise). The first auto-shift comes DAS frames after the press, then one every ARR frames.
         let autoShift = false;
-        if (this.shiftDir !== 0 && !shiftPushed && (!this.nes || this.phase === "active")) {
+        if (this.shiftDir !== 0 && !shiftPushed && this.dasCharges()) {
             if (this.dasCounter < this.das) {
                 if (++this.dasCounter >= this.das) {
                     autoShift = true;
@@ -1221,24 +479,8 @@ class RuleGame {
             } else return;
         }
 
-        if (!this.timerStopped) {
-            this.frames++;
-            if (this.tiMaster && this.frames === TGM_KILL_FRAMES) this.updateTimings();
-        }
-        if (this.easy) this.easyFrame();
-        if (this.ace && !this.acePaused && --this.aceTimer < 0) {
-            this.aceTimer = 0;
-            this.endGame("TIME OVER", `LEVEL ${this.level} — ${this.lines} LINES`);
-            return;
-        }
-        if (this.roll && ++this.rollFrames >= this.rollLength) {
-            this.endRoll();
-            return;
-        }
-        if (this.variant === "ultra" && this.frames >= GUIDELINE_ULTRA_FRAMES) {
-            this.endGame("TIME UP", `SCORE ${this.scoreText()}`);
-            return;
-        }
+        if (!this.timerStopped) this.frames++;
+        if (!this.onClock()) return;
 
         if (this.phase === "lineclear") {
             if (++this.phaseCounter >= this.phaseLength) {
@@ -1249,7 +491,7 @@ class RuleGame {
             return;
         }
 
-        if (this.phase === "rollstart") {
+        if (this.phase === "rollstart") { // TGM: the field empties before the staff roll
             this.advanceRollStart();
             return;
         }
@@ -1263,7 +505,7 @@ class RuleGame {
 
         // Active piece
         this.activeTime++;
-        if (this.internalGrading && !this.roll) this.decayGrade();
+        this.onActiveFrame();
 
         if (C(HOLD_PUSH) && !this.spawnedThisFrame && this.canHold) {
             // The swapped-in piece goes through the rest of this frame like a freshly
@@ -1277,51 +519,51 @@ class RuleGame {
             if (C(ROTR_PUSH)) this.rotate(1);
         }
 
-        // NES: no shifting while down is held
-        if ((shiftPushed || (autoShift && !this.dcdWait)) && !(this.nes && this.held.soft)) {
+        if ((shiftPushed || (autoShift && !this.dcdWait)) && this.canShift()) {
             // ARR 0: the auto-shift goes straight to the wall
             let steps = autoShift && this.arr === 0 ? WIDTH : 1, moved = false;
             while (steps-- > 0 && this.shift(this.shiftDir, !moved)) moved = true; // one move sound
-            if (this.nes && !moved) { // NES: blocked, DAS is (or stays) fully charged and tries again every frame
-                this.dasCounter = this.das;
-                this.arrCounter = this.arr - 1;
-            }
+            if (!moved) this.onShiftBlocked();
         }
 
-        if (this.nintendo) { // no hard or sonic drop; locks when gravity or soft drop can't move it down
-            this.applyGravityGb(C(SOFT_PUSH));
-            return;
-        }
+        this.advanceDrop(C);
+    }
 
-        // TGM1 has neither hard nor sonic drop
-        if (C(HARD_PUSH) && !this.tgm1 && !(this.handling.dropGuard && this.activeTime <= GUIDELINE_DROP_GUARD)) {
-            if (this.ars) {
-                this.sonicDrop(); // Classic: drops without locking
-            } else {
-                this.hardDrop();
-                return;
-            }
-        }
+    dasCharges() { return true; } // whether DAS charges this frame
+    canShift() { return true; } // whether the piece may shift this frame
+    onShiftBlocked() {} // a shift (press or auto-shift) found no room
 
+    // Every frame after the countdown, once the clock has run: the rule set's own clocks (time
+    // limits, staff roll, ...). Returns false when the frame should go no further (the game ended).
+    onClock() { return true; }
+
+    onActiveFrame() {} // every frame a piece is in play, before input moves it
+
+    // Drops and locking for the active piece after rotation and shifting: up (a hard drop), then
+    // gravity and the lock delay once it rests
+    advanceDrop(C) {
+        if (C(HARD_PUSH) && this.upKey()) return;
         this.applyGravity();
         if (this.phase !== "active") return;
-
-        // Lock delay
         if (!this.canFall()) {
             this.touched = true;
-            // Classic: soft drop locks on the ground, and so does a piece whose lock
-            // delay was zeroed by rotating after a floor kick
-            if (this.ars && (this.held.soft || this.lockDelayZeroed)) {
-                this.manualLock = this.held.soft;
-                this.lock();
-                return;
-            }
-            if (!this.tgm && this.moveResets >= this.moveLimit) {
-                this.lock(); // out of moves: locks as soon as it touches down
-                return;
-            }
-            if (++this.curPiece_lockDelay >= this.lockDelayMax) this.lock();
+            this.onGround();
         }
+    }
+
+    // Up pressed; returns whether the piece locked
+    upKey() {
+        this.hardDrop();
+        return true;
+    }
+
+    // The piece rests on something: the lock delay runs; out of lock resets it locks at once
+    onGround() {
+        if (this.moveResets >= this.moveLimit) {
+            this.lock();
+            return;
+        }
+        if (++this.curPiece_lockDelay >= this.lockDelayMax) this.lock();
     }
 
     restartShift(dir) {
@@ -1353,9 +595,7 @@ class RuleGame {
 
     spawn(type, fromHold) {
         const newPiece = !fromHold; // entered after ARE (IHS still counts as a new piece)
-        if (this.shirase && newPiece && !this.roll) this.shiraseGarbage();
-        this.acePaused = false;
-        this.clearAre = false;
+        this.beforeSpawn(newPiece);
 
         // IHS: hold button held while the piece enters
         if (!fromHold && this.hasHold && this.held.hold) {
@@ -1369,17 +609,11 @@ class RuleGame {
         }
 
         this.curPiece_type = type;
-        this.curPiece_col = 3;
-        this.curPiece_row = this.ars ? ARS_SPAWN_ROW : this.gb ? GB_SPAWN_ROW : this.nes ? NES_SPAWN_ROW
-            : this.tgm || this.ace ? TGM_SPAWN_ROW : 0; // Guideline: rows 21-22
-        if (this.big) { // in columns 2-9, on the 2 x 2 grid, its top in the top visible row
-            this.curPiece_col = 2;
-            this.curPiece_row = VISIBLE_TOP - Math.min(...this.curCells[type][0].map(([i]) => i));
-        }
+        [this.curPiece_row, this.curPiece_col] = this.spawnPosition(type);
         this.curPiece_rotation = 0;
 
-        // IRS: rotation button held while the piece enters; falls back if blocked (NES and GB have none)
-        const irs = this.nintendo ? 0 : this.held.rotr ? 1 : this.held.rotl ? 3 : 0;
+        // IRS: rotation button held while the piece enters; falls back if blocked
+        const irs = !this.irs ? 0 : this.held.rotr ? 1 : this.held.rotl ? 3 : 0;
         if (irs && type !== tetO && this.movePossible(this.curPiece_row, this.curPiece_col, irs)) {
             this.curPiece_rotation = irs;
         }
@@ -1392,44 +626,35 @@ class RuleGame {
         this.gravityAcc = 0;
         this.activeTime = 0;
         this.softFrames = 0;
-        this.sonicMax = 0;
-        this.manualLock = false; // locked by the player: hard drop, or Classic soft drop on the ground
+        this.manualLock = false; // locked by the player: hard drop, or a soft drop that locks
         this.lastRotation = false;
         this.lastKick = -1;
         this.touched = false;
         this.moveResets = 0;
         this.rotationResets = 0;
-        this.iFloorKicks = 0;
-        this.tFloorKicks = 0;
-        this.floorKicked = false;
-        this.lockDelayZeroed = false;
-        this.softArmed = false; // NES and GB: soft drop needs a fresh press for each piece
-        this.softCounter = 0;
-        this.softRun = 0; // NES and GB: rows soft-dropped since the last press
+        this.onNewPiece();
 
-        // Block out
         if (!this.movePossible(this.curPiece_row, this.curPiece_col, this.curPiece_rotation)) {
-            if ((this.tgm1 || this.tapPlus) && this.roll) return this.endRoll(); // TGM1's GM roll and TGM+'s can't be lost
-            if (this.easy) this.flushHanabi();
-            if (this.tap && this.roll === "invisible") this.finalGrade = "M"; // M-roll not survived
-            this.endGame("GAME OVER", this.easy ? `HANABI ${this.hanabi} — ESC FOR MENU`
-                : this.roll && !this.tapPlus ? `GRADE ${this.gradeLabel()} — ESC FOR MENU` : "BLOCK OUT — ESC FOR MENU");
+            this.onBlockOut();
             return;
         }
-
-        // Guideline: drops one row immediately after appearing
-        if (!this.tgm && !this.nintendo && !this.ace && this.canFall()) this.curPiece_row++;
+        if (this.dropsOnSpawn && this.canFall()) this.curPiece_row++;
         this.lowestRow = this.curPiece_row;
-
-        // TGM: level +1 per new piece, except at section stops (x99 and 998) and in the staff roll
-        // (TAP Death's can start at 500)
-        if (this.tgm && !this.firstPiece && newPiece && !this.roll && this.level % 100 !== 99 && this.level !== this.maxLevel - 1) {
-            this.level++;
-            this.updateSection();
-            this.updateTimings();
-        }
+        this.afterSpawn(newPiece);
         this.firstPiece = false;
         this.setShadow();
+    }
+
+    beforeSpawn(newPiece) {} // a piece is about to enter (newPiece: after ARE, not from hold)
+    onNewPiece() {} // the rule set's per-piece state starts over
+    // [row, col] of the piece's 4x4 box as it enters
+    spawnPosition(type) {
+        return [0, 3];
+    }
+    afterSpawn(newPiece) {} // the piece is in play
+    // Block out: the piece has no room to enter
+    onBlockOut() {
+        this.endGame("GAME OVER", "BLOCK OUT — ESC FOR MENU");
     }
 
     hold() {
@@ -1444,21 +669,10 @@ class RuleGame {
         this.spawn(next, true);
     }
 
-    // Successful move or rotation: move reset, within the rule's limits
+    // Successful move or rotation after touching down: move reset, up to moveLimit per piece
     onMoveReset(isRotation) {
-        if (this.ars || this.nintendo || !this.touched) return; // ARS: step reset only; NES and GB: no lock delay
-        if (this.tgm) {
-            if (isRotation) {
-                if (this.rotationResets >= TGM_ROTATION_RESETS) return;
-                this.rotationResets++;
-            } else {
-                if (this.moveResets >= TGM_MOVE_RESETS) return;
-                this.moveResets++;
-            }
-        } else {
-            if (this.moveResets >= this.moveLimit) return;
-            this.moveResets++;
-        }
+        if (!this.touched || this.moveResets >= this.moveLimit) return;
+        this.moveResets++;
         this.curPiece_lockDelay = 0;
     }
 
@@ -1474,82 +688,16 @@ class RuleGame {
         }
     }
 
-    // ARS rotation with TGM3's kicks; TGM1 and TAP have only the basic ones (I never kicks, no floor kicks)
-    rotateArs(dir) {
-        const type = this.curPiece_type;
-        if (type === tetO) return false;
-        const from = this.curPiece_rotation;
-        const to = (from + dir + 4) % 4;
-        const k = this.big ? 2 : 1; // big pieces kick two cells
-        const at = (dr, dc) => this.movePossible(this.curPiece_row + k * dr, this.curPiece_col + k * dc, to) ? [k * dr, k * dc] : null;
-
-        let kick = at(0, 0);
-        let floorKick = false;
-        if (!kick) {
-            if (type === tetI) {
-                if (this.plainArs) {
-                    // no kicks
-                } else if (to === 0 || to === 2) {
-                    kick = at(0, -1) || at(0, 1) || at(0, 2); // wall kicks into horizontal
-                } else if (this.iFloorKicks < ARS_I_FLOOR_KICKS && !this.canFall()) {
-                    kick = at(-1, 0) || at(-2, 0); // floor kick, only when resting on something
-                    floorKick = kick !== null;
-                }
-            } else {
-                if (this.arsWallKickAllowed(type, from, to)) kick = at(0, 1) || at(0, -1); // right first
-                if (!kick && !this.plainArs && type === tetT && to === 2 && this.tFloorKicks < ARS_T_FLOOR_KICKS) {
-                    kick = at(-1, 0); // T escapes upwards into its pointing-up state
-                    floorKick = kick !== null;
-                }
-            }
-        }
-        if (!kick) return false;
-
-        // TGM3: rotating a T or I again after a floor kick sets its lock delay to zero
-        if (this.floorKicked) this.lockDelayZeroed = true;
-        if (floorKick) {
-            this.floorKicked = true;
-            if (type === tetI) this.iFloorKicks++;
-            else this.tFloorKicks++;
-        }
-
-        this.curPiece_row += kick[0];
-        this.curPiece_col += kick[1];
-        this.curPiece_rotation = to;
-        if (this.curPiece_row > this.lowestRow) this.onFall();
-        this.lastRotation = true;
-        this.setShadow();
-        this.sounds.push("rotate");
-        return true;
-    }
-
-    // Centre column rule: L, J and T rotating from a 3-wide orientation may only kick if the
-    // first colliding cell of the rotated piece (scanning its 3x3 box in reading order) is
-    // not in the centre column
-    arsWallKickAllowed(type, from, to) {
-        if (type !== tetL && type !== tetJ && type !== tetT) return true;
-        if (from !== 0 && from !== 2 || this.big) return true;
-        // L, J and T fit their box's top three rows and columns; the cells come in reading order
-        const hit = this.pieceCells[type][to].find(([i, j]) => this.blocked(this.curPiece_row + i, this.curPiece_col + j));
-        return !hit || hit[1] !== 1;
-    }
-
+    // SRS rotation: the kick tests in order (iKicks for the I), twice as far for big pieces
     rotate(dir) {
-        if (this.ars) return this.rotateArs(dir);
         const type = this.curPiece_type;
         if (type === tetO) return false;
         const from = this.curPiece_rotation;
         const to = (from + dir + 4) % 4;
-        if (this.nintendo) { // no kicks: turns in place or not at all
-            if (!this.movePossible(this.curPiece_row, this.curPiece_col, to)) return false;
-            this.curPiece_rotation = to;
-            this.sounds.push("rotate");
-            return true;
-        }
         const key = STATE_KEYS[from] + "->" + STATE_KEYS[to];
-        const table = type === tetI ? (this.tgm || this.ace ? KICKS_I_ARIKA : KICKS_I_GUIDELINE) : KICKS_JLSTZ;
+        const table = type === tetI ? this.iKicks : KICKS_JLSTZ;
         const tests = [[0, 0], ...table[key]];
-        const size = this.big ? 2 : 1; // big pieces kick twice as far
+        const size = this.big ? 2 : 1;
         for (let k = 0; k < tests.length; k++) {
             const [x, y] = tests[k];
             const row = this.curPiece_row - size * y, col = this.curPiece_col + size * x;
@@ -1602,48 +750,9 @@ class RuleGame {
             if (!this.canFall()) { this.gravityAcc = 0; break; }
             this.curPiece_row++;
             this.gravityAcc -= 1;
-            if (soft && !this.tgm) this.score += 1; // Guideline: 1 point per soft-dropped cell
+            if (soft) this.score += this.softDropPoints;
             this.onFall();
         }
-    }
-
-    // NES and GB: the gravity timer moves the piece a row every gbFrames frames, and a held soft drop
-    // (pressed for this piece) every few frames; a piece that can't move when a row is due locks at
-    // once. GB: a soft drop replaces gravity and doesn't reset its timer, its first row comes with the
-    // press. NES: gravity goes on during a soft drop, every row restarts its timer, the soft drop's
-    // first row comes on the third frame and holding left or right with down ends it.
-    applyGravityGb(softPushed) {
-        const nes = this.nes, softFrames = nes ? NES_SOFT_FRAMES : GB_SOFT_FRAMES;
-        if (softPushed) {
-            this.softArmed = true;
-            this.softCounter = softFrames - (nes ? NES_SOFT_FIRST : 1); // counts up to softFrames
-        }
-        if (!this.held.soft || (nes && (this.held.left || this.held.right))) {
-            this.softArmed = false;
-            this.softRun = 0;
-        }
-        const soft = this.softArmed;
-        let gravityDue = false, softDue = false;
-        if (++this.gravityAcc >= this.gbFrames) {
-            this.gravityAcc = 0;
-            gravityDue = nes || !soft;
-        }
-        if (soft && ++this.softCounter >= softFrames) {
-            this.softCounter = 0;
-            softDue = true;
-        }
-        if (gravityDue || softDue) {
-            if (!this.canFall()) {
-                this.manualLock = softDue;
-                this.lock();
-                return;
-            }
-            this.curPiece_row++;
-            if (softDue) this.softRun++;
-            if (nes) this.gravityAcc = 0;
-            this.onFall();
-        }
-        this.curPiece_lockDelay = this.canFall() ? 0 : this.gravityAcc; // lock fade
     }
 
     // Moves the piece down as far as it goes and returns the rows it fell; eachRow: every row
@@ -1658,60 +767,38 @@ class RuleGame {
         return distance;
     }
 
-    // Classic: drop to the floor without locking; the lock delay then runs as usual
-    sonicDrop() {
-        const distance = this.dropToFloor(true);
-        this.sonicMax = Math.max(this.sonicMax, distance);
-        if (distance === 0) return;
-        this.sounds.push("sonic");
-        if (this.tap && this.variant !== "death") { // TAP shows the drop trail for the sonic drop too (not Death)
-            for (const cell of this.curPieceCells()) this.hardDropCells.push({ ...cell, dist: distance, cleared: false });
-        }
-    }
-
     hardDrop() {
         const distance = this.dropToFloor(false);
         if (distance > 0) this.lastRotation = false;
         this.hardDropDistance = distance;
-        if (this.tgm) this.sonicMax = Math.max(this.sonicMax, distance);
-        else this.score += 2 * distance; // Guideline: 2 points per hard-dropped cell
+        this.onHardDrop(distance);
         this.manualLock = true;
         this.lock(true);
     }
 
-    // 3-corner T-spin with pointing-side mini rule (Guideline)
-    detectTSpin() {
-        const r = this.curPiece_row, c = this.curPiece_col; // T centre is box cell (1,1)
-        const filled = (rr, cc) => this.getCell(rr, cc) !== 0; // walls and floor count
-        const TL = filled(r, c), TR = filled(r, c + 2), BL = filled(r + 2, c), BR = filled(r + 2, c + 2);
-        const front = [[TL, TR], [TR, BR], [BL, BR], [TL, BL]][this.curPiece_rotation];
-        const total = TL + TR + BL + BR;
-        if (total < 3) return null;
-        if (front[0] && front[1]) return "full";
-        return this.lastKick === 4 ? "full" : "mini"; // the 1-by-2 kick upgrades a mini
-    }
+    onHardDrop(distance) {} // scoring for the rows dropped
 
     lock(fromHardDrop = false) {
         const type = this.curPiece_type;
-        this.lockedType = type; // for scoring (Easy's spin bonus)
-        const tspin = !this.tgm && !this.nintendo && !this.ace && type === tetT && this.lastRotation ? this.detectTSpin() : null;
+        this.lockedType = type; // for scoring (T-spins, Easy's spin bonus)
+        this.beforeLock();
         this.sounds.push(fromHardDrop ? "harddrop" : "lock");
 
         const cells = this.curPieceCells();
         let allAbove = true;
         for (const cell of cells) {
             if (cell.row >= VISIBLE_TOP) allAbove = false;
-            if (this.tgm && cell.row < TGM_BUFFER_TOP) continue; // TGM3: deleted above the buffer row
+            if (this.bufferTop !== null && cell.row < this.bufferTop) continue; // deleted above the buffer
             this.setCell(cell.row, cell.col, type);
-            if (this.roll) this.lockTime[cell.row - FIELD_TOP][cell.col] = this.rollFrames;
+            this.onBlockLocked(cell);
         }
 
         this.curPiece_type = 0;
         this.curPiece_lockDelay = 0;
         this.shadowRow = -100;
 
-        // Guideline lock out: piece locked entirely above the visible field
-        if (!this.tgm && !this.nintendo && allAbove) {
+        // Lock out: piece locked entirely above the visible field
+        if (this.lockOut && allAbove) {
             this.endGame("GAME OVER", "LOCK OUT — ESC FOR MENU");
             return;
         }
@@ -1731,12 +818,8 @@ class RuleGame {
         this.chain = n > 0 ? this.chain + 1 : -1;
         if (n > 0) this.sounds.push("clear" + n + (this.chain > 0 ? "c" + this.chain : "")); // e.g. "clear2c3"
 
-        if (this.tgm) this.scoreTgm(n, rows);
-        else if (this.nintendo) this.scoreGb(n);
-        else if (this.ace) this.scoreAce(n);
-        else this.scoreGuideline(n, tspin, rows);
+        this.scoreClear(n, rows);
         if (this.gameover) return;
-        if (this.nes) this.setNesDelays();
 
         const collapseNow = n > 0 && this.lineClearDelay === 0;
         if (fromHardDrop) {
@@ -1759,14 +842,9 @@ class RuleGame {
         }
     }
 
-    // NES, after a lock: the entry delay grows with the height of the piece's centre (box cell 2, 2),
-    // and a line clear lasts until the fifth animation step, which comes on a multiple of 4 frames
-    setNesDelays() {
-        const height = HEIGHT - 1 - (this.curPiece_row + 2); // 0 in the bottom row
-        this.are = Math.min(NES_ARE_MAX, NES_ARE + NES_ARE_STEP * Math.floor((height + 2) / 4));
-        this.lineAre = this.are;
-        this.lineClearDelay = NES_LINE_CLEAR + (-this.frames & 3);
-    }
+    beforeLock() {} // the piece is about to lock (still where it is)
+    onBlockLocked(cell) {} // one of its blocks was set in the field
+    scoreClear(n, rows) {} // a piece locked, clearing n lines (rows): score, levels, the end
 
     // Timed phases (are, lineclear, rollstart) count phaseCounter up to phaseLength
     setPhase(phase, length) {
@@ -1778,639 +856,26 @@ class RuleGame {
     // Remove emptied rows and let everything above fall (naive gravity)
     collapse(rows) {
         if (rows.length === 0) return;
-        const drop = (grid) => {
-            const kept = grid.filter((_, i) => !rows.includes(i + FIELD_TOP));
-            while (kept.length < grid.length) kept.unshift(new Array(WIDTH).fill(0));
-            return kept;
-        };
-        this.field = drop(this.field);
-        if (this.lockTime) this.lockTime = drop(this.lockTime);
-        if (this.isGarbage) {
-            this.isGarbage = this.isGarbage.filter((_, i) => !rows.includes(i + FIELD_TOP));
-            while (this.isGarbage.length < this.field.length) this.isGarbage.unshift(false);
-        }
+        this.field = this.dropRows(this.field, rows, () => new Array(WIDTH).fill(0));
+        this.onCollapse(rows);
     }
 
-    // After a line clear: the next piece, or the staff roll once the timer has stopped
-    // (level 999, or TAP Death's level 500 reached too late)
+    // A per-row list without the cleared rows, refilled at the top with fill()
+    dropRows(list, rows, fill) {
+        const kept = list.filter((_, i) => !rows.includes(i + FIELD_TOP));
+        while (kept.length < list.length) kept.unshift(fill());
+        return kept;
+    }
+
+    onCollapse(rows) {} // per-row data the rule set keeps falls with the field
+
+    // After a line clear: the next piece
     afterClear() {
-        if (this.timerStopped && !this.roll) this.startRollStart();
-        else this.startAre(this.lineAre);
+        this.startAre(this.lineAre);
     }
 
-    // ----------------------------------------------------------
-    // TGM3 staff roll
-
-    // Level 999: the field is emptied row by row from the bottom, then the roll begins
-    startRollStart() {
-        // as in NullpoMino: a line clear delay, a row every few frames, two frames more
-        this.setPhase("rollstart", this.lineClearDelay + HEIGHT * TGM_ROLL_ROW_FRAMES + 2);
-        if (this.tgm1 || this.tapPlus || this.shirase || this.easy) {
-            this.nextRoll = "visible"; // TGM1: only GM gets the roll
-            return;
-        }
-        if (this.tap) {
-            this.nextRoll = this.variant === "death" ? "visible" : this.mrollEarned() ? "invisible" : "fading";
-            return;
-        }
-        const invisible = this.cools >= TGM_INVISIBLE_COOLS && this.internalGrade >= TGM_INVISIBLE_GRADE;
-        this.nextRoll = invisible ? "invisible" : "fading";
-    }
-
-    advanceRollStart() {
-        const t = this.phaseCounter++ - this.lineClearDelay;
-        if (t >= 0 && t < HEIGHT * TGM_ROLL_ROW_FRAMES && t % TGM_ROLL_ROW_FRAMES === 0) {
-            const r = HEIGHT - 1 - t / TGM_ROLL_ROW_FRAMES;
-            for (let c = 0; c < WIDTH; c++) {
-                const type = this.getCell(r, c);
-                if (type) this.clearedCells.push({ row: r, col: c, type });
-                this.setCell(r, c, 0);
-            }
-        }
-        if (this.phaseCounter < this.phaseLength) return;
-        for (const row of this.field) row.fill(0); // the buffer rows too
-        this.roll = this.nextRoll;
-        this.rollFrames = 0;
-        this.lockTime = this.field.map(() => new Array(WIDTH).fill(0));
-        if (this.shirase) this.setBig();
-        if (this.easy && this.hanabi > 0) this.rollInterval = Math.floor(EASY_ROLL_FRAMES / this.hanabi); // fired ones only
-        this.addAction(this.roll === "invisible" ? (this.tap ? "M-ROLL" : "INVISIBLE ROLL") : "STAFF ROLL", "grade");
-        this.spawn(this.nextFromQueue(), false);
-    }
-
-    // Hidden test setups for TGM3 and TAP (the engine's Ctrl+Shift+digit keys):
-    //  "roll"      straight to the staff roll the player has earned (fading unless qualified)
-    //  "invisible" to the invisible roll: all COOLs, internal grade 27 (TAP Master: the M-roll)
-    //  "gm"        to an invisible roll that ends in Grand Master if survived (TAP Master: the M-roll)
-    //  "rollend"   in the roll: to its last 5 seconds
-    //  "kill"      10 seconds before the 15-minute speed-up (TGM3 only)
-    // Returns whether the setup applied.
+    // Hidden test setups (the engine's Ctrl+Shift+digit keys); TGM only. Returns whether one applied.
     testSetup(name) {
-        if (!this.tgm || this.gameover || this.phase === "ready") return false;
-        if (name === "kill") {
-            if (!this.tiMaster) return false;
-            const skip = TGM_KILL_FRAMES - TEST_KILL_LEAD - this.frames;
-            if (this.timerStopped || skip <= 0) return false;
-            this.frames += skip;
-            this.sectionStart += skip; // the section isn't slower for it (no REGRET)
-            return true;
-        }
-        if (name === "rollend") {
-            if (!this.roll) return false;
-            this.rollFrames = Math.max(this.rollFrames, this.rollLength - TEST_ROLL_LEAD);
-            return true;
-        }
-        if (this.roll || this.phase === "rollstart" || !["roll", "invisible", "gm"].includes(name)) return false;
-        if (this.tgm1) { // the only roll is GM's
-            if (name === "invisible") return false;
-            this.gmQualified = true;
-            this.finalGrade = "GM";
-        } else if (this.tapPlus || this.shirase || this.easy) { // one roll each
-            if (name !== "roll") return false;
-            if (this.shirase) this.sectionsDone = SHIRASE_GRADE_LABELS.length - 1;
-        } else if (this.tap) {
-            if (this.variant === "death") {
-                if (name !== "roll") return false;
-                this.finalGrade = "GM";
-            } else if (name !== "roll") { // M-roll: every condition met, the timer within 8:45
-                this.mrollQualified = true;
-                this.internalGrade = TGM_GRADES.length - 1;
-                this.frames = Math.min(this.frames, TAP_MROLL_FRAMES);
-            }
-        } else if (name === "invisible") {
-            this.cools = TGM_INVISIBLE_COOLS;
-            this.internalGrade = Math.max(this.internalGrade, TGM_INVISIBLE_GRADE);
-        } else if (name === "gm") {
-            this.cools = TGM_INVISIBLE_COOLS;
-            this.internalGrade = TGM_GRADES.length - 1;
-            this.rollPoints = TEST_GM_ROLL_POINTS;
-        }
-        if (this.phase === "lineclear") this.collapse(this.pendingRows);
-        this.pendingRows = [];
-        this.curPiece_type = 0;
-        this.shadowRow = -100;
-        this.level = this.maxLevel;
-        this.timerStopped = true;
-        this.updateTimings();
-        this.startRollStart();
-        return true;
-    }
-
-    // Survived the roll: its bonus, then the final grade
-    endRoll() {
-        this.rollCleared = true;
-        if (this.tapPlus) return this.endGame("EXCELLENT", this.formatTime());
-        if (this.tap) return this.endTapRoll();
-        if (this.tgm1) return this.endGame("GRAND MASTER", `GRADE GM — ${this.formatTime()}`);
-        if (this.shirase) return this.endGame("COMPLETE", `GRADE ${this.gradeLabel()} — ORANGE LINE — ${this.formatTime()}`);
-        if (this.easy) {
-            this.hanabi += EASY_COMPLETE;
-            this.flushHanabi();
-            return this.endGame("EXCELLENT", `HANABI ${this.hanabi} — ${this.formatTime()}`);
-        }
-        this.rollPoints += TGM_ROLL_CLEAR[this.roll];
-        const gm = this.gradeIndex() === TGM_GRADE_LABELS.length - 1;
-        this.endGame(gm ? "GRAND MASTER" : "COMPLETE", `GRADE ${this.gradeLabel()} — ${this.formatTime()}`);
-    }
-
-    // ----------------------------------------------------------
-    // TAP
-
-    // Master: the M-roll needs S9 and 8:45 at level 999 and every section's conditions met
-    mrollEarned() {
-        return this.mrollQualified && this.frames <= TAP_MROLL_FRAMES
-            && TGM_GRADES[this.internalGrade][0] >= TAP_MAX_GRADE;
-    }
-
-    // Master: judge a section against the M-roll conditions once it is finished (the last at 999)
-    updateTapSection() {
-        const section = Math.floor(this.level / 100);
-        if (section === this.section && this.level < TGM_MAX_LEVEL) return;
-        const time = this.frames - this.sectionStart;
-        const s = this.section, times = this.sectionTimes;
-        let limit;
-        if (s < 5) limit = TAP_MROLL_SECTION_FRAMES;
-        else if (s === 5) limit = Math.floor(times.slice(0, 5).reduce((a, b) => a + b, 0) / 5) + TAP_MROLL_SLACK;
-        else limit = times[s - 1] + TAP_MROLL_SLACK;
-        if (time > limit || this.sectionTetrises < TAP_MROLL_TETRISES[s]) this.mrollQualified = false;
-        times.push(time);
-        this.section = section;
-        this.sectionStart = this.frames;
-        this.sectionTetrises = 0;
-    }
-
-    endTapRoll() {
-        const time = this.formatTime();
-        if (this.variant === "death") { // the credits change nothing
-            this.endGame(this.torikan ? "EXCELLENT" : "COMPLETE", `GRADE ${this.gradeLabel()} — ${time}`);
-        } else if (this.roll === "invisible") {
-            this.finalGrade = "GM";
-            this.endGame("GRAND MASTER", `${this.rollLines >= TAP_ORANGE_LINES ? "ORANGE" : "GREEN"} LINE — ${time}`);
-        } else {
-            this.endGame("COMPLETE", `GRADE ${this.gradeLabel()} — ORANGE LINE — ${time}`);
-        }
-    }
-
-    // A clear of n lines (TAP, after scoreTgm). Score = (ceil((level + lines) / 4) + soft + 2 x sonic)
-    // x lines x combo x bravo + ceil(level after / 2) + speed x 7
-    scoreTap(n) {
-        const death = this.variant === "death";
-        const levelBefore = this.level;
-        const levelAfter = Math.min(TGM_MAX_LEVEL, levelBefore + n); // one level per line
-        const { soft, speed } = this.tgmPieceBonus();
-        const bravo = this.fieldEmpty() ? 4 : 1;
-        this.score += (Math.ceil((levelBefore + n) / 4) + soft + 2 * this.sonicMax) * n * this.combo * bravo
-            + Math.ceil(levelAfter / 2) + speed * 7;
-        this.lines += n;
-        this.addClearActions(n);
-        if (bravo > 1) this.addAction("BRAVO", "pc");
-
-        if (n === 4) this.sectionTetrises++;
-        if (this.internalGrading && !death) this.scoreGrade(n, levelBefore);
-        this.level = levelAfter;
-        this.updateTapSection();
-
-        if (death && levelBefore < TAP_DEATH_M_LEVEL && this.level >= TAP_DEATH_M_LEVEL) {
-            if (this.frames <= TAP_DEATH_M_FRAMES) {
-                this.finalGrade = "M";
-                this.addAction("GRADE M", "grade");
-            } else { // too late: the timer stops at 500 and the credits roll (afterClear)
-                this.level = TAP_DEATH_M_LEVEL;
-                this.torikan = true;
-                this.timerStopped = true;
-            }
-        }
-        if (this.level >= TGM_MAX_LEVEL) {
-            this.timerStopped = true; // the staff roll starts after the clear (afterClear)
-            if (death) {
-                this.finalGrade = "GM";
-                this.addAction("GRADE GM", "grade");
-            }
-        }
-        this.updateTimings();
-        this.setShadow();
-    }
-
-    fieldEmpty() {
-        return this.field.every(row => row.every(v => v === 0));
-    }
-
-    // NES and GB: 40/100/300/1200 x (level + 1), at the level before the clear (GB) or after it
-    // (NES), plus the rows soft-dropped if the soft drop locked the piece; capped at 999,999.
-    // B-Type stays at its start level and ends at 25 lines; A-Type levels up (nintendoLevel).
-    scoreGb(n) {
-        if (this.manualLock) this.score += this.softRun;
-        if (n > 0) {
-            const levelBefore = this.level;
-            this.lines += n;
-            if (this.variant !== "btype") this.nintendoLevel();
-            this.score += GB_LINE_SCORES[n] * ((this.nes ? this.level : levelBefore) + 1);
-            this.addAction(CLEAR_NAMES[n], "clear", n);
-        }
-        this.score = Math.min(this.score, GB_MAX_SCORE);
-        if (n > 0 && this.variant === "btype" && this.lines >= GB_B_LINES) {
-            this.endGame("COMPLETE", `${GB_B_LINES} LINES — SCORE ${this.scoreText()}`);
-        }
-    }
-
-    // A-Type level after a clear. GB: a level every 10 lines up to 20, the first after
-    // (start level + 1) x 10 lines. NES: the first after start x 10 + 10 lines, or after
-    // max(100, start x 10 - 50) if that's sooner, then every 10, with no end.
-    nintendoLevel() {
-        const start = this.startLevel;
-        let level;
-        if (this.nes) {
-            const first = Math.min(start * 10 + 10, Math.max(100, start * 10 - 50));
-            level = this.lines < first ? start : start + 1 + Math.floor((this.lines - first) / NES_LINES_PER_LEVEL);
-        } else {
-            level = Math.min(GB_MAX_LEVEL, Math.max(start, Math.floor(this.lines / GB_LINES_PER_LEVEL)));
-        }
-        if (level !== this.level) {
-            this.level = level;
-            this.updateTimings();
-        }
-    }
-
-    // rows: the rows this lock cleared
-    scoreGuideline(n, tspin, rows) {
-        const L = this.level;
-        let base, difficult;
-        if (tspin === "full") {
-            base = [400, 800, 1200, 1600][n];
-            difficult = n > 0;
-            this.addAction("T-SPIN" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
-        } else if (tspin === "mini") {
-            base = [100, 200, 400][n];
-            difficult = n > 0;
-            this.addAction("T-SPIN MINI" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
-        } else {
-            base = [0, 100, 300, 500, 800][n];
-            difficult = n === 4;
-            if (n > 0) this.addAction(CLEAR_NAMES[n], "clear", n);
-        }
-
-        const b2bBefore = this.b2b;
-        let action = base * L;
-        const b2bBonus = n > 0 && difficult && b2bBefore;
-        if (n > 0) {
-            if (b2bBonus) {
-                action = action * 3 / 2;
-                this.addAction("BACK-TO-BACK", "b2b");
-            }
-            this.b2b = difficult; // singles, doubles and triples break the chain
-        }
-        this.score += Math.floor(action);
-
-        if (n > 0) {
-            this.combo++;
-            if (this.combo > 0) {
-                this.score += 50 * this.combo * L;
-                this.addAction(this.combo + " COMBO", "combo", this.chain);
-            }
-            if (this.fieldEmpty()) {
-                const bonus = n === 4 && b2bBefore ? 3200 : [0, 800, 1200, 1800, 2000][n];
-                this.score += bonus * L;
-                this.addAction("PERFECT CLEAR", "pc");
-            }
-            this.lines += n;
-            const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) || this.variant === "variable" ? this.level
-                : this.master ? Math.min(GUIDELINE_MASTER_DELAYS.length, 1 + this.startLevel + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL))
-                : Math.min(GUIDELINE_MAX_LEVEL, 1 + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL));
-            if (level !== this.level) {
-                this.level = level;
-                this.updateTimings();
-            }
-            const goal = GUIDELINE_LINE_GOALS[this.variant];
-            if (goal && this.lines >= goal) this.endGame("COMPLETE", `${goal} LINES — ${this.formatTime()}`);
-            if (this.dig) {
-                this.digCleared += rows.filter(r => this.isGarbage[r - FIELD_TOP]).length;
-                if (this.digCleared >= this.digRows) this.endGame("COMPLETE", `${this.digRows} ROWS — ${this.formatTime()}`);
-            }
-        } else {
-            this.combo = -1;
-        }
-        // variable goal: T-spins without lines count too
-        if (this.variant === "variable" && base > 0) this.addGoalPoints(Math.floor(base * (b2bBonus ? 1.5 : 1) / 100));
-    }
-
-    // Variable goal: the level goes up once its goal is met (the rest is lost), and meeting
-    // level 15's ends the marathon
-    addGoalPoints(points) {
-        this.goalPoints += points;
-        if (this.goalPoints < GUIDELINE_VARIABLE_GOAL * this.level) return;
-        this.goalPoints = 0;
-        if (this.level >= GUIDELINE_MAX_LEVEL) {
-            this.endGame("COMPLETE", `LEVEL ${GUIDELINE_MAX_LEVEL} — ${this.formatTime()}`);
-            return;
-        }
-        this.level++;
-        this.updateTimings();
-    }
-
-    // Grade points decay by one every so many frames while the player controls a piece,
-    // has points and no grade combo is running
-    decayGrade() {
-        if (this.gradePoints === 0 || this.gradeCombo > 0) return;
-        if (++this.gradeDecay < TGM_GRADES[this.internalGrade][1]) return;
-        this.gradeDecay = 0;
-        this.gradePoints--;
-    }
-
-    // Points for a clear of n lines: ceil(base x combo multiplier) x level multiplier
-    gradeAward(n, combo, levelBefore) {
-        const c = Math.min(10, combo) - 1;
-        const mult = this.tap ? (n === 4 ? 1 : TAP_GRADE_COMBO[c][n - 1]) : n === 1 ? 1 : TGM_GRADE_COMBO[c][n - 2];
-        const levelMult = 1 + Math.floor(levelBefore / 250);
-        // in tenths, so the ceiling sees exact integers (50 x 2.2 is 110.00000000000001)
-        const tenths = TGM_GRADES[this.internalGrade][1 + n] * Math.round(mult * 10);
-        return Math.ceil(tenths / 10) * levelMult;
-    }
-
-    // 100 points advance the internal grade and discard the remainder. The first clear of a
-    // combo counts as combo 1, a single before any double too.
-    scoreGrade(n, levelBefore) {
-        this.gradePoints += this.gradeAward(n, Math.max(1, this.gradeCombo), levelBefore);
-        if (this.gradePoints >= TGM_GRADE_POINTS) {
-            this.gradePoints = 0;
-            this.gradeDecay = 0; // the decay timer restarts only with a new internal grade
-            this.internalGrade = Math.min(TGM_GRADES.length - 1, this.internalGrade + 1);
-        }
-    }
-
-    // Section bookkeeping after a level change: judge the COOL at *70, and when a
-    // section ends (the last one at 999) award its COOL or give a REGRET for taking too long
-    updateSection() {
-        if (this.tgm1 || this.easy) return; // TGM1 judges only its GM checkpoints (scoreTgm1)
-        if (this.shirase) return this.updateShiraseSection();
-        if (this.tap) return this.updateTapSection();
-        const section = Math.floor(this.level / 100);
-        const seconds = (this.frames - this.sectionStart) / 60;
-        const finished = section > this.section || this.level >= TGM_MAX_LEVEL;
-        if (!this.coolChecked && this.level % 100 >= 70 && this.section < TGM_COOL_TIME.length) {
-            this.coolChecked = true;
-            if (seconds <= TGM_COOL_TIME[this.section]
-                && (!this.prevCool || seconds <= this.prevCoolTime + TGM_COOL_SLACK)) {
-                this.coolPending = true;
-                this.addAction("COOL!!", "grade");
-            }
-            this.prevCoolTime = seconds;
-        }
-        if (finished) {
-            if (this.coolPending) {
-                this.cools++;
-                this.speedBonus += TGM_COOL_SPEEDUP;
-            }
-            if (seconds > TGM_REGRET_TIME[this.section]) {
-                const boosts = TGM_GRADES[this.internalGrade][0];
-                if (boosts > 0) { // fall back to the highest internal grade with one boost less
-                    while (TGM_GRADES[this.internalGrade][0] >= boosts) this.internalGrade--;
-                }
-                this.gradePoints = 0;
-                this.addAction("REGRET!!", "grade");
-            }
-            this.prevCool = this.coolPending;
-            this.section = section;
-            this.sectionStart = this.frames;
-            this.coolPending = false;
-            this.coolChecked = false;
-        }
-    }
-
-    // TGM3 and TAP: a piece locked, clearing n lines. In the staff roll clears only count lines and
-    // earn roll grade (TGM3) or count towards the orange line (TAP); otherwise the combos are kept
-    // here and the rule set scores the clear (scoreTi, scoreTap)
-    scoreTgm(n, rows) {
-        if (this.roll) {
-            if (n === 0) return;
-            this.lines += n;
-            if (this.tap) this.rollLines += n;
-            else if (this.tiMaster) this.rollPoints += TGM_ROLL_POINTS[this.roll][n];
-            if (this.easy) this.easyHanabi(n, rows, this.level, this.level);
-            this.addClearActions(n);
-            return;
-        }
-        if (n === 0) {
-            this.combo = 1;
-            this.gradeCombo = 0;
-            this.easyCombo = 0;
-            if (this.tapPlus) this.tapPlusGarbage();
-            return;
-        }
-        this.combo = this.combo + 2 * n - 2;
-        if (n >= 2) this.gradeCombo++;
-        if (this.tap) this.scoreTap(n);
-        else if (this.tgm1) this.scoreTgm1(n);
-        else this.scoreTi(n, rows);
-    }
-
-    // A clear of n lines (TGM1, after scoreTgm). Score = (ceil((level + lines) / 4) + soft) x lines
-    // x combo x bravo; the grade follows the score. Level 999 ends the game, or with every GM
-    // checkpoint met gives GM and the staff roll.
-    scoreTgm1(n) {
-        const levelBefore = this.level;
-        const bravo = this.fieldEmpty() ? 4 : 1;
-        this.score += (Math.ceil((levelBefore + n) / 4) + this.tgmPieceBonus().soft) * n * this.combo * bravo;
-        this.lines += n;
-        this.addClearActions(n);
-        if (bravo > 1) this.addAction("BRAVO", "pc");
-
-        this.level = Math.min(TGM_MAX_LEVEL, levelBefore + n); // one level per line
-        for (const [level, score, frames] of TGM1_GM_CHECKS) {
-            if (levelBefore < level && this.level >= level && (this.score < score || this.frames > frames)) this.gmQualified = false;
-        }
-        this.updateTimings();
-        this.setShadow();
-        if (this.level < TGM_MAX_LEVEL) return;
-        this.timerStopped = true;
-        if (this.gmQualified) { // the staff roll starts after the clear (afterClear)
-            this.finalGrade = "GM";
-            this.addAction("GRADE GM", "grade");
-        } else {
-            this.endGame("COMPLETE", `GRADE ${this.gradeLabel()} — ${this.formatTime()}`);
-        }
-    }
-
-    // The clear's name, then the chain length if it continues one (named by chain length: TGM's
-    // combo is a score multiplier, already above 1 for doubles)
-    addClearActions(n) {
-        this.addAction(CLEAR_NAMES[n], "clear", n);
-        if (this.chain > 0) this.addAction(this.chain + " COMBO", "combo", this.chain);
-    }
-
-    // Per-piece score terms: frames of soft drop (locking by hand adds 1) and the speed bonus,
-    // the lock delay left unused
-    tgmPieceBonus() {
-        return {
-            soft: this.softFrames + (this.manualLock ? 1 : 0),
-            speed: Math.max(0, this.lockDelayMax - Math.max(1, this.activeTime)),
-        };
-    }
-
-    // A clear of n lines (TGM3, after scoreTgm). Score = (ceil((level + lines) / 4) + soft + sonic)
-    // x lines x combo + ceil(level after / 2) + speed
-    // Shirase and Easy too (Easy scores fireworks instead, Shirase has no grade points); rows: the rows cleared
-    scoreTi(n, rows) {
-        const levelBefore = this.level;
-        const levelAfter = Math.min(this.maxLevel, levelBefore + TGM_LEVEL_FOR_LINES[n]);
-        if (this.easy) {
-            this.easyHanabi(n, rows, levelBefore, levelAfter);
-        } else {
-            const { soft, speed } = this.tgmPieceBonus();
-            this.score += (Math.ceil((levelBefore + n) / 4) + soft + this.sonicMax) * n * this.combo
-                + Math.ceil(levelAfter / 2) + speed;
-        }
-        this.lines += n;
-        this.addClearActions(n);
-
-        if (this.tiMaster) this.scoreGrade(n, levelBefore);
-        if (this.shirase) this.garbageCount = Math.max(0, this.garbageCount - n);
-        this.level = levelAfter;
-        this.updateSection();
-        this.updateTimings();
-        this.setShadow();
-
-        if (this.level >= this.maxLevel) {
-            this.timerStopped = true; // the staff roll starts after the clear (afterClear)
-        } else if (this.tiMaster && levelBefore < TGM_TORIKAN_LEVEL && this.level >= TGM_TORIKAN_LEVEL && this.frames > TGM_TORIKAN_FRAMES) {
-            this.level = TGM_TORIKAN_LEVEL;
-            this.endGame("LEVEL STOP", "OVER 7:00 AT LEVEL 500");
-        } else if (this.shirase) {
-            for (const [stop, frames] of SHIRASE_TORIKAN[this.ars ? "classic" : "world"]) {
-                if (levelBefore < stop && this.level >= stop && this.frames > frames) {
-                    this.level = stop;
-                    this.endGame("LEVEL STOP", `GRADE ${this.gradeLabel()} — LATE AT LEVEL ${stop}`);
-                }
-            }
-        }
-    }
-
-    // ----------------------------------------------------------
-    // Shirase, TGM+ and ACE
-
-    // Shirase: a section is finished when the level passes its end (the last at 1300); one slower
-    // than the REGRET time takes a grade off
-    updateShiraseSection() {
-        const section = Math.floor(this.level / 100);
-        if (section === this.section) return;
-        const seconds = (this.frames - this.sectionStart) / 60;
-        this.sectionsDone++;
-        if (seconds > SHIRASE_REGRET_TIME(this.section)) {
-            this.regrets++;
-            this.addAction("REGRET!!", "grade");
-        }
-        this.section = section;
-        this.sectionStart = this.frames;
-    }
-
-    // Shirase, as a new piece comes: a copy of the bottom row rises once the counter has reached the
-    // section's quota, then the piece counts
-    shiraseGarbage() {
-        const quota = SHIRASE_GARBAGE[Math.floor(this.level / 100)];
-        if (!quota) return;
-        if (this.garbageCount >= quota) {
-            this.raiseRow([...this.field[this.field.length - 1]]);
-            this.garbageCount = 0;
-        }
-        this.garbageCount++;
-    }
-
-    // TGM+: a piece locked without clearing; enough of them in a row raise the pattern's next row
-    tapPlusGarbage() {
-        if (++this.garbageCount < TAP_PLUS_RISE - Math.floor(this.level / 100)) return;
-        const row = TAP_PLUS_PATTERN[this.garbagePos];
-        this.raiseRow([...row].map(ch => ch === "." ? 0 : 1 + Math.floor(Math.random() * 7)));
-        this.garbagePos = (this.garbagePos + 1) % TAP_PLUS_PATTERN.length;
-        this.garbageCount = 0;
-    }
-
-    // ACE: the time limit of the current level
-    aceLimit() {
-        const limits = ACE_TIME_LIMITS[this.variant === "another" ? "another" : "other"];
-        return limits[Math.min(this.level - 1, limits.length - 1)];
-    }
-
-    // ACE: no score; a level every 10 lines (its clock starts over with the next piece), done at 150
-    scoreAce(n) {
-        if (n === 0) return;
-        this.lines += n;
-        this.addClearActions(n);
-        const goal = ACE_LEVELS * ACE_LINES_PER_LEVEL;
-        if (this.lines >= goal) {
-            this.lines = goal;
-            this.endGame("COMPLETE", `${goal} LINES — ${this.formatTime()}`);
-            return;
-        }
-        const level = 1 + Math.floor(this.lines / ACE_LINES_PER_LEVEL);
-        if (level === this.level) return;
-        this.level = level;
-        this.aceTimer = this.aceLimit();
-        this.acePaused = true;
-        this.updateTimings();
-        this.setShadow();
-    }
-
-    // ----------------------------------------------------------
-    // Easy: fireworks
-
-    // Every frame after the countdown: the streams fire, the bonus timers run, and every 30 s of play
-    // that gained 30 levels earns the next clear a bonus
-    easyFrame() {
-        this.easyClock++;
-        if (this.easyClock % EASY_STREAM_FRAMES === 0) {
-            if (this.hanabiPending > 0) {
-                this.hanabiPending--;
-                this.hanabi++;
-                this.fireTimer = EASY_FIXED_SPEED_FRAMES;
-            }
-            if (this.bravoPending > 0) {
-                this.bravoPending--;
-                this.hanabi++;
-            }
-        }
-        if (this.fireTimer > 0) this.fireTimer--; // the frame it is set too
-        if (this.roll && this.rollInterval && this.easyClock % this.rollInterval === 0) this.hanabi++;
-        if (!this.timerStopped && this.frames % EASY_30S_FRAMES === 0) {
-            if (this.level - this.levelMark30 >= EASY_30S_LEVELS) this.bonus30 = true;
-            this.levelMark30 = this.level;
-        }
-        if (this.phase !== "lineclear" && !(this.phase === "are" && this.clearAre)) this.sinceClear++;
-    }
-
-    // A clear of n lines (rows) from levelBefore to levelAfter: its fireworks join the stream
-    easyHanabi(n, rows, levelBefore, levelAfter) {
-        let combo;
-        if (this.roll) { // frozen combo, singles included
-            combo = EASY_ROLL_COMBO[EASY_ROLL_COMBO_MAP[this.easyCombo]];
-        } else {
-            if (n >= 2) this.easyCombo = Math.min(EASY_COMBO_MAX, this.easyCombo + 1);
-            combo = n >= 2 ? EASY_COMBO[this.easyCombo] : 1;
-        }
-        let m = EASY_BASE[Math.min(n, 4)] * combo;
-        if (this.fireTimer > 0) m *= EASY_FIXED_SPEED;
-        if (rows.some((r, i) => i > 0 && r !== rows[i - 1] + 1)) m *= EASY_SPLIT;
-        // the roll checks the level after the clear less the lines: 200 (203 after a Tetris) - n
-        const lucky = this.roll ? (n === 4 ? 203 : 200) - n : levelBefore;
-        if (EASY_LUCKY_LEVELS.includes(lucky)) m *= EASY_LUCKY;
-        if (this.bonus30) {
-            m *= EASY_30S;
-            this.bonus30 = false;
-        }
-        const L = this.roll ? EASY_MAX_LEVEL : levelAfter;
-        const since = Math.max(2, this.sinceClear), active = Math.max(1, this.activeTime);
-        if (L - since > EASY_VAR_SPEED) m *= (L - since) / EASY_VAR_SPEED;
-        if (L - active > EASY_VAR_FINESSE) m *= (L - active) / EASY_VAR_FINESSE;
-        if (this.lastRotation && this.lockedType !== tetO) {
-            m *= this.lockedType === tetT ? (n === 3 ? EASY_TSPIN_TRIPLE : EASY_TSPIN) : EASY_SPIN;
-        }
-        this.hanabiPending += Math.floor(m + 1e-9); // the multipliers' float error must not round down
-        if (!this.roll && this.fieldEmpty()) this.bravoPending += EASY_BRAVO;
-        this.sinceClear = 0;
-        this.clearAre = true;
-    }
-
-    // The fireworks still waiting in the streams count at the end
-    flushHanabi() {
-        this.hanabi += this.hanabiPending + this.bravoPending;
-        this.hanabiPending = this.bravoPending = 0;
+        return false;
     }
 }

@@ -22,7 +22,8 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 
 There is no build step, bundler or package.json. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
-`game.js → rules.js → sound.js → tiles.js → options.js → renderer.js → backdrop.js → touch.js → engine.js`,
+`game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js →
+sound.js → tiles.js → options.js → renderer.js → backdrop.js → touch.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
 
@@ -31,16 +32,21 @@ when WebGL is unavailable).
 | Path | What it is |
 |---|---|
 | `game/game.js` | Shared definitions only: field size (`WIDTH` 10, `HEIGHT` 22, first visible row `VISIBLE_TOP` 2), piece ids (`tetI`=1 … `tetO`=7), input bitmap bits, SRS `shapes`; `shapeCells()` (a shape table's blocks as offsets) and `clamp()`. |
-| `game/rules.js` | `RuleGame`: the rule sets (Guideline, TGM1, TAP, TGM3 World/Classic, ACE, NES, GB) and their variants. All game logic lives here. |
+| `game/randomizers.js` | The non-bag piece randomizers (TGM3, TAP, TGM1, GB, NES) on the arcade's generator. |
+| `game/rules.js` | `RuleGame`, the rule sets' base class (field, input, frame and phases, collision, SRS rotation, gravity, lock delay, line clears, event queues), mode ids, `registerRules()` and `createGame()`. |
+| `game/rules-guideline.js` | `GuidelineGame`: the Guideline and its modes. |
+| `game/rules-tgm.js` | `TgmGame` and its games: `Tgm1Game`, `TapGame` (Master, Death, TGM+), `TiGame` (TGM3 Master, World or Classic) with `TiEasyGame` and `TiShiraseGame`. |
+| `game/rules-ace.js` | `AceGame`: ACE's five modes. |
+| `game/rules-1989.js` | `Game1989` with `NesGame` and `GbGame`: A-Type and B-Type. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings) and the clear ripples' refraction pass. |
-| `game/tiles.js` | Block styles (`TILESETS`): Radiant (default, glassy glow), Glossy, Flat, Neon, Faceted, Pixel, Mono, Holo (grey metal; styles with `sheen: true` get `Engine.drawSheen()`, an additive colour gloss per block whose strength and hue follow the field's tilt (`updateSheen()`, `HOLO_*`): grey face-on, shimmering when tilted, so grey for good at tilt Off) and Game Boy (monochrome; Game Boy gives each piece its own pattern), Original. Loads the Original PNGs. |
+| `game/tiles.js` | Block styles (`TILESETS`): Radiant (default, glassy glow), Glossy, Flat, Neon, Faceted, Pixel, Mono, Holo (grey metal; styles with `sheen: true` get `Engine.drawSheen()`, an additive colour gloss per block whose strength and hue follow the field's tilt (`updateSheen()`, `HOLO_*`): grey face-on, shimmering when tilted, so grey for good at tilt Off) and 1989 (`retro1989`; monochrome green, each piece its own pattern), Original. Loads the Original PNGs. |
 | `game/options.js` | `Options`: key bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for `rules.js` (~360 checks). |
+| `test/rules.test.js` | Spec checks for the rule sets (~360 checks). |
 
 ## History in one paragraph
 
@@ -121,9 +127,9 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `VISUALS_LIST_H` high and scrolls in logical units (eased in `updateMenuScroll()`, clipped with
   `GLRenderer.clip()`) to keep the selection in view, with a scrollbar beside it.
 
-### Rules engine (`rules.js`)
-`new RuleGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
-`tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gameBoy` (7, GB), `tgmOriginal` (8, TGM1),
+### Rules engine (`rules.js` and the family files)
+`createGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
+`tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gbTetris` (7, GB), `tgmOriginal` (8, TGM1),
 `nesTetris` (9, NES), `tgmAce` (10, ACE) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus the
 Guideline's `"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"` and `"master"`, NES's and GB's
 `"btype"`, TGM1's `"20g"`, TAP's `"plus"` (TGM+), TGM3's `"easy"` and `"shirase"` (with either rule), and
@@ -135,18 +141,36 @@ a fourth, `height` (their B-Type only, clamped to 0–5, `GB_B_HEIGHTS`; Guideli
 `GUIDELINE_DIG_ROWS`), the garbage height; a fifth,
 `handling` (Guideline only, overrides of `GUIDELINE_HANDLING`: `das`, `arr`, `sdf`, `dcd`, `ghost`,
 `dropGuard`; ignored by the others, whose timing is part of their spec).
-Flags: `this.tgm` (TGM1, TGM3 World or Classic, or TAP: levels to 999, delays, grades, staff roll),
-`this.ars` (Classic, TAP or TGM1), `this.plainArs` (TAP or TGM1: basic kicks, no hold, one next
-piece), `this.tap`, `this.tgm1`, `this.gb`, `this.nes`, `this.nintendo` (NES or GB: no hard drop,
-hold, kicks or lock delay, `applyGravityGb()`, `scoreGb()`), `this.hasHold` (false for TGM1, TAP,
-NES and GB). NES and GB are neither `tgm` nor the Guideline: code paths written as `!this.tgm` for
-the Guideline also check `!this.nintendo`. TGM3: `this.ti`, and `this.tiMaster` / `this.easy` /
-`this.shirase` for its modes; `this.tapPlus` (TGM+); `this.internalGrading` (grade points and decay:
-TGM3 Master and TAP Master); `this.maxLevel` (999; Shirase 1300, Easy 200). ACE (`this.ace`) is not
-`tgm`: it takes the Guideline's code paths with TGM3's I kicks, spawn row, randomizer and three next
-pieces, `this.moveLimit` (128 lock resets) and its own timings and `scoreAce()`. `this.big` (Shirase's
-roll, `setBig()`): every block 2 × 2, moves and kicks doubled; `this.curCells` holds the current
-piece's offsets (`pieceCells`, or the doubled ones), which collision and the engine's piece drawing use.
+
+Structure: each family file defines a subclass of `RuleGame` and registers its modes with
+`registerRules(modes, variant => Class)`; `createGame()` picks the class, constructs it (base
+constructor first: common state and defaults; then the subclass sets its configuration) and calls
+`begin()` (first pieces, `updateTimings()`, `setupField()`). Always create games with `createGame()`.
+The base never asks which rule set it is playing: the differences live in the subclasses, through
+configuration fields set in their constructors and hooks they override:
+- Configuration: `setShapes(shapes, palette)`, `nextCount`, `hasHold`, `irs`, `iKicks` (SRS I kicks:
+  Guideline's, or Arika's for TGM3 World and ACE), `moveLimit` (lock resets per piece), `lockOut`,
+  `dropsOnSpawn` (Guideline), `bufferTop` (TGM: blocks locking above it are deleted),
+  `softDropPoints`, `randomizer` (else a 7-bag), `wellTop` / `firstDrawnRow` / `pieceTop`, `level`,
+  `combo`, `handling` (`NO_HANDLING` unless the Guideline's).
+- Hooks: `setTimings()` (are, lineAre, das, arr, lockDelayMax, lineClearDelay, gravity,
+  softGravity; `updateTimings()` then applies the test/death/20g variants), `spawnPosition()`,
+  `beforeSpawn()` / `onNewPiece()` / `afterSpawn()` / `onBlockOut()`, `onClock()` (every frame after
+  the countdown; false ends the frame), `onActiveFrame()`, `dasCharges()`, `canShift()`,
+  `onShiftBlocked()`, `rotate()` (SRS by default), `onMoveReset()`, `advanceDrop()` / `upKey()` (a hard
+  drop by default) / `onGround()` / `onHardDrop()`, `beforeLock()` / `onBlockLocked()`,
+  `scoreClear(n, rows)`, `onCollapse()`, `afterClear()`, `ghostVisible()`, `getStats()`,
+  `setupField()`, `setHandling()`, `testSetup()`.
+- Inside a family, its own flags stay local: `TgmGame` has `ars` / `plainArs` (`useArs()`),
+  `internalGrading` (grade points and decay: TGM3 and TAP Master), `hasKill` (TGM3 Master's 15-minute
+  speed-up), `maxLevel` (999; Shirase 1300, Easy 200) and its own hooks (`delayRow()`, `gravityAt()`,
+  `scoreLines()`, `scoreRollClear()`, `onMiss()`, `rollKind()`, `onRollBegin()`, `prepareTestRoll()`,
+  `finishRoll()`, `statsName()`, `tgmStats()`, `gradeComboMultiplier()`); TGM3's Easy and Shirase
+  override Master's (`scoreTiClear()`, `checkLevelStop()`, `updateSection()`). `TapGame` has
+  `tapPlus` / `death`; `Game1989` has `nes` / `gb` and `levelForLines()`.
+- `this.tgm` is true for the TGM series only (`TgmGame`). `this.big` (Shirase's roll, `setBig()`):
+  every block 2 × 2, moves and kicks doubled; `this.curCells` holds the current piece's offsets
+  (`pieceCells`, or the doubled ones), which collision and the engine's piece drawing use.
 
 The engine drives it with `advanceFrame(inputBitmap)` and reads:
 - `getCell(row, col)`, `getCellAlpha(row, col)` (staff roll), `getCurPiece_*()`, `getShadowRow()` (−100 = no ghost),
@@ -427,14 +451,14 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   whether survived or topped out.
 - 20G (`"20g"`): the hidden 20G mode, Master at 20G from level 0 (no ghost).
 
-### NES (Tetris for the NES, Nintendo, 1989): A-Type and B-Type
+### NES (1989): A-Type and B-Type
 - Sources: tetris.wiki *Tetris (NES, Nintendo)*, *Scoring*; meatfighter.com's NES Tetris AI article
   (orientation table, soft drop, randomizer, level bug).
-- Right-handed Nintendo Rotation System (`NES_SHAPES`): every piece turns about one cell (box cell
+- Right-handed NRS (`NES_SHAPES`): every piece turns about one cell (box cell
   2, 2), which spawns in the top visible row, column 5 (`NES_SPAWN_ROW`); T/L/J flat side up, S/Z two
   states with the vertical one right of the centre, I flat in the centre's row. No kicks, no IRS.
   20-row well; pieces may turn into the two rows above it (`NES_PIECE_TOP`).
-- No hold, no hard drop, no ghost, one next piece. Shares GB's code paths (`this.nintendo`):
+- No hold, no hard drop, no ghost, one next piece. Shares GB's code (`Game1989`):
   `applyGravityGb()`, no lock delay, `scoreGb()`.
 - Gravity in frames per row (`NES_GRAVITY`: 48 at level 0 … 6 at 9, 5/4/3 for 10–18, 2 for 19–28,
   1 from 29). Every row restarts the gravity timer, and gravity keeps going during a soft drop.
@@ -451,13 +475,13 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   min(start × 10 + 10, max(100, start × 10 − 50)) lines (the NES's bug), then every 10, no cap.
   B-Type: as GB's, with `NES_B_ROWS` (0, 3, 5, 8, 10, 12) rows of garbage by height.
 
-### GB (Tetris for the Game Boy, 1989): A-Type and B-Type
+### GB (1989): A-Type and B-Type
 - Sources: tetris.wiki *Tetris (Game Boy)*, *Nintendo Rotation System* (and its GB piece chart);
   TASVideos submission 4536 and the disassembly (randomizer).
-- Left-handed Nintendo Rotation System (`GB_SHAPES`): T/L/J spawn flat side up and turn about the
+- Left-handed NRS (`GB_SHAPES`): T/L/J spawn flat side up and turn about the
   centre of their 3×3 box (pointing up sits in the box's top two rows); S/Z two states, vertical on
   the left; I horizontal in the box's third row, vertical in its second column. No kicks, no IRS.
-  18-row well like the Game Boy's (`GB_WELL_TOP`; the board is drawn 18 rows high). Spawn with the
+  18-row well like the GB's (`GB_WELL_TOP`; the board is drawn 18 rows high). Spawn with the
   box in the well's top row (`GB_SPAWN_ROW`), highest block in the second row; no turning above it.
 - No hold, no hard or sonic drop (the hard drop key does nothing), no ghost, one next piece.
 - Gravity table in frames per row (`GB_GRAVITY`, levels 0–20: 53 … 3), counted per frame
@@ -533,8 +557,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   re-press per piece follows NES behaviour; soft drop points require the drop to lock the piece.
 
 If you change rules, keep `test/rules.test.js` passing and add checks for new behaviour.
-The tests load `game.js` + `rules.js` via `vm` and export names explicitly at the top;
-add new globals there.
+The tests load `game.js` and the rule files (`RULE_FILES`, in `index.html`'s order) via `vm` and
+export names explicitly at the top; add new globals there, and new rule files to `RULE_FILES`.
 
 ## Presentation choices the user made
 
@@ -564,9 +588,9 @@ add new globals there.
   "TGM+", ACE's "Normal", "Hi-Speed 1", "Hi-Speed 2", "Another" and "Another 2", NES's and GB's
   "A-Type" and "B-Type". The GB
   rule set was named "1989" until the NES one came (the user's rename). GB keeps every visual style (Guideline colours,
-  the usual board and effects); only its well is shorter, 18 rows as on the Game Boy (the user's request).
+  the usual board and effects); only its well is shorter, 18 rows as on the GB (the user's request).
   The stats panel shows the rule set and the mode (`getStats()[0]`), never "STANDARD". The generic
-  death variant is hidden from the menu for Guideline and TGM3 (still in `rules.js`); TAP's Death is offered. The title tagline reads "WELCOME" (the user's own edit; keep it) and shows only on the main screen; the Visuals screen puts its heading in its place.
+  death variant is hidden from the menu for Guideline and TGM3 (still in the rules); TAP's Death is offered. The title tagline reads "WELCOME" (the user's own edit; keep it) and shows only on the main screen; the Visuals screen puts its heading in its place.
 - Tunables are constants near the top of `engine.js` (`CONFETTI_*`, `FLASH_LIFE`,
   `DROP_FLASH_LIFE`, `MESSAGE_*`, `COMBO_COLORS`) and `sound.js` (`SOUND_VOLUME`, `CLEAR_NOTES`).
 
