@@ -611,8 +611,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   COMPLETE after 150 lines (`GUIDELINE_LINE_GOALS`). `variable`, `dig`, `master`: Guideline only (above). `sprint`: Guideline only, COMPLETE after 40
   lines with a TIME row (`sprint20`, `sprint100`: 20 or 100). `ultra`: Guideline only, TIME UP after
   2 minutes (`GUIDELINE_ULTRA_FRAMES`; `ultra1`, `ultra3`, `ultra5`: 1, 3 or 5) with a countdown TIME
-  row. The marathons (standard, marathon, variable) start at level 1 + startLevel (to 15) and level up
-  every 10 lines from there. Sprint, ultra and dig stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
+  row. The marathons (standard, marathon, variable) start at level 1 + startLevel (to 15); the fixed
+  goal counts the lines from level 1, as tetris.wiki's Marathon (from level 6, level 7 at 60 lines). Sprint, ultra and dig stay at level 1 (`GUIDELINE_FIXED_LEVEL`; an
   assumption, the sources only give the goals). `death`: constant 20G, no ghost (for TAP it is
   TAP's own Death mode, above). `btype`: NES and GB only (above). `20g`: TGM1 only (above).
   `test`: no gravity (still implemented and tested, but hidden from the menu).

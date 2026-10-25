@@ -2372,9 +2372,12 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
     clearField(m);
     m.lines = 9;
     tapClear(m, 1);
-    check("Marathon start level: from level 1 + startLevel, a level per 10 lines from there",
-        [createGame(guideline, "marathon", 5).level, gravity6 === createGame(guideline, "standard", 5).gravity, m.level, createGame(guideline, "marathon", 40).level],
-        [6, true, 7, 15]);
+    const at10 = m.level;
+    m.lines = 59;
+    tapClear(m, 1);
+    check("Marathon start level: from level 1 + startLevel, the lines a level needs counted from level 1 (tetris.wiki)",
+        [createGame(guideline, "marathon", 5).level, gravity6 === createGame(guideline, "standard", 5).gravity, at10, m.level, createGame(guideline, "marathon", 40).level],
+        [6, true, 6, 7, 15]);
     check("  ...Variable goal from a later level too", stats("variable", 2).slice(1, 3), [["LEVEL", "3"], ["GOAL", "0 / 15"]]);
 }
 

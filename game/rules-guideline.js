@@ -245,9 +245,12 @@ class GuidelineGame extends RuleGame {
                 this.addAction("PERFECT CLEAR", "pc");
             }
             this.lines += n;
+            // a level every 10 lines; a marathon started later needs the lines it would have from
+            // level 1 (tetris.wiki: from level 5, level 6 at 50 lines), Master counts from its start
+            const fromLines = 1 + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL);
             const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) || this.variant === "variable" ? this.level
-                : Math.min(this.master ? GUIDELINE_MASTER_DELAYS.length : GUIDELINE_MAX_LEVEL,
-                    1 + this.startLevel + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL));
+                : this.master ? Math.min(GUIDELINE_MASTER_DELAYS.length, this.startLevel + fromLines)
+                : Math.min(GUIDELINE_MAX_LEVEL, Math.max(1 + this.startLevel, fromLines));
             if (level !== this.level) {
                 this.level = level;
                 this.updateTimings();
