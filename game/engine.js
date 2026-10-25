@@ -28,7 +28,7 @@ const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", 
 const RESTART_ITEM = { name: "Restart", desc: "Start the current game over", accent: tetL, restart: true };
 const MAIN_ITEMS = [
     { name: "Quick Play", desc: "Common modes, straight into the game", accent: tetO, screen: MENU_QUICK },
-    { name: "New Game", desc: "Choose a rule set and mode", accent: tetT, screen: MENU_RULES },
+    { name: "Custom Game", desc: "Choose a rule set and mode", accent: tetT, screen: MENU_RULES },
     { name: "Options", desc: "Keybinds, gamepad, visuals and Guideline handling", accent: tetS, screen: MENU_OPTIONS },
 ];
 
@@ -111,7 +111,7 @@ const RULESETS = [
       ] },
 ];
 // Quick Play: common modes started at once, each with its setup cards' first (or initial) choices,
-// so their records are New Game's for those choices. ruleset and mode: names in RULESETS
+// so their records are Custom Game's for those choices. ruleset and mode: names in RULESETS
 const QUICK_PLAY = [
     { name: "Marathon", ruleset: "Guideline", mode: "Marathon", accent: tetO, desc: "Guideline · 150 lines from level 1" },
     { name: "Sprint", ruleset: "Guideline", mode: "Sprint", accent: tetL, desc: "Guideline · 40 lines as fast as you can" },
@@ -921,7 +921,7 @@ class Engine {
         }
     }
 
-    // Quick Play -> game; New Game -> rule set -> sub-mode -> game; or Options -> Keybinds, Gamepad, Visuals or Guideline handling.
+    // Quick Play -> game; Custom Game -> rule set -> sub-mode -> game; or Options -> Keybinds, Gamepad, Visuals or Guideline handling.
     // Esc goes back a screen, and on the first one resumes a paused game.
     handleMenuInput() {
         // count() is only called for the screen on show: a rule set's modes depend on rulesetpos
