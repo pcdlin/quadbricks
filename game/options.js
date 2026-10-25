@@ -25,8 +25,6 @@ const DEFAULT_KEYS = {
     left: ["ArrowLeft"], right: ["ArrowRight"], soft: ["ArrowDown"], hard: ["ArrowUp"],
     rotl: ["KeyZ"], rotr: ["KeyX"], rot180: ["KeyA"], hold: ["Space"], sound: ["KeyM"],
 };
-// Keys for an action saved settings don't have yet (one added since) when its default is taken
-const SPARE_KEYS = ["KeyA", "KeyS", "KeyC", "KeyQ", "KeyW", "KeyD"];
 const MAX_KEYS_PER_ACTION = 2;
 const defaultKeys = () => Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([id, codes]) => [id, [...codes]]));
 
@@ -82,6 +80,18 @@ const RING_MODES = [
 ];
 const RING_MODE_IDS = RING_MODES.map(m => m.id);
 
+// Line clear confetti: how the bits look and move (Engine.explodeCell(), drawParticles())
+const CONFETTI_STYLES = [
+    { id: "off", name: "Off" },
+    { id: "glow", name: "Glow" },
+    { id: "paper", name: "Paper" },
+    { id: "sparks", name: "Sparks" },
+    { id: "stars", name: "Stars" },
+    { id: "bubbles", name: "Bubbles" },
+    { id: "pixels", name: "Pixels" },
+];
+const CONFETTI_STYLE_IDS = CONFETTI_STYLES.map(s => s.id);
+
 // Guideline handling (Options → Guideline), passed to RuleGame; defaults in GUIDELINE_HANDLING.
 // Frames for DAS, ARR and DCD; soft drop factors (Infinity: instant)
 const frameRange = (min, max) => Array.from({ length: max - min + 1 }, (_, i) => min + i);
@@ -91,6 +101,7 @@ const HANDLING_IDS = ["das", "arr", "sdf", "dcd", "ghost", "dropGuard", "preview
 // Settings stepped through a list of values (Options → Visuals and Guideline), and on/off settings
 const OPTION_CHOICES = {
     tileset: TILESET_IDS,
+    confetti: CONFETTI_STYLE_IDS,
     effects: EFFECT_LEVELS.map((_, i) => i), // 0 off, then an index into EFFECT_LEVELS
     rings: RING_MODE_IDS,
     tilt: TILT_LEVELS.map((_, i) => i),
@@ -112,6 +123,7 @@ class Options {
     constructor() {
         this.keys = defaultKeys();
         this.tileset = TILESET_IDS[0];
+        this.confetti = "glow"; // line clear confetti, an id from CONFETTI_STYLES
         this.effects = DEFAULT_EFFECTS;
         this.backdrop = true; // animated backdrop: colour wash and drifting lights
         this.rings = "ripple"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
@@ -124,32 +136,20 @@ class Options {
         try {
             const saved = JSON.parse(localStorage.getItem(OPTIONS_STORAGE_KEY) || "{}");
             if (saved.keys) {
-                const missing = [];
                 for (const { id } of KEY_ACTIONS) {
-                    let codes = saved.keys[id];
-                    if (typeof codes === "string") codes = [codes]; // older versions: one key per action
-                    if (!Array.isArray(codes)) { missing.push(id); continue; }
-                    codes = [...new Set(codes.filter(c => typeof c === "string" && !RESERVED_KEYS.includes(c)))];
-                    if (codes.length) this.keys[id] = codes.slice(0, MAX_KEYS_PER_ACTION);
-                }
-                // an action added since: its default key, or a spare one, that no other action uses
-                for (const id of missing) {
-                    const taken = KEY_ACTIONS.filter(a => a.id !== id).flatMap(a => this.keys[a.id]);
-                    const free = [...DEFAULT_KEYS[id], ...SPARE_KEYS].find(c => !taken.includes(c));
-                    if (free) this.keys[id] = [free];
+                    const codes = saved.keys[id];
+                    if (!Array.isArray(codes)) continue;
+                    const valid = [...new Set(codes.filter(c => typeof c === "string" && !RESERVED_KEYS.includes(c)))];
+                    if (valid.length) this.keys[id] = valid.slice(0, MAX_KEYS_PER_ACTION);
                 }
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
-            if (saved.tileset === "gameboy") saved.tileset = "retro1989"; // the 1989 style's old id
             for (const [id, values] of Object.entries(OPTION_CHOICES)) {
                 if (values.includes(saved[id])) this[id] = saved[id];
             }
             for (const id of OPTION_TOGGLES) {
                 if (typeof saved[id] === "boolean") this[id] = saved[id];
             }
-            // older versions: effects and rings on/off, rings also as a level
-            if (typeof saved.effects === "boolean") this.effects = saved.effects ? DEFAULT_EFFECTS : 0;
-            if (typeof saved.rings === "boolean" || Number.isInteger(saved.rings)) this.rings = saved.rings ? "rings" : "off";
         } catch (e) { /* storage unavailable or corrupt: defaults */ }
     }
 

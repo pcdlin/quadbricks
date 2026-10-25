@@ -118,6 +118,7 @@ const OPTIONS_ITEMS = [
 // (preview: the card is a little taller and shows the block style preview at its right)
 const VISUAL_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
+    { id: "confetti", name: "Confetti", accent: tetS },
     { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
     { id: "backdrop", name: "Backdrop", accent: tetJ },
@@ -239,14 +240,24 @@ const COUNTDOWN_COLORS = [null, PIECE_COLORS[tetS].light, PIECE_COLORS[tetO].lig
 
 // Confetti for cleared lines: piece colour plus a few party colours
 const CONFETTI_EXTRA = ["#ffffff", "#ff5fd2", "#fff27a"];
-const CONFETTI_PER_CELL = 2;
-const CONFETTI_GRAVITY = 0.06;
-const CONFETTI_LIFE = 50; // frames
-const CONFETTI_ALPHA = 0.45;
+const CONFETTI_COLORS = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFETTI_EXTRA];
+// By confetti style (options.confetti, none when off; fireworks are always glow): bits per cell, size (least,
+// random extra), burst speed factor and upward lift, gravity and air drag per frame, life in
+// frames, alpha, additive blending; spin (radians per frame, at most), sideways flutter, fastest
+// fall, grid (positions and sizes snapped to it)
+const CONFETTI_SPECS = {
+    glow: { count: 2, size: [3, 5], speed: 1, lift: 3, gravity: 0.06, drag: 0.97, life: 50, alpha: 0.45, add: true },
+    paper: { count: 2, size: [5, 4], speed: 0.8, lift: 3.4, gravity: 0.03, drag: 0.95, life: 100, alpha: 0.9, spin: 0.15, sway: 0.6, maxFall: 1.2 },
+    sparks: { count: 3, size: [3, 3], speed: 1.6, lift: 4.8, gravity: 0.1, drag: 0.97, life: 28, alpha: 0.8, add: true },
+    stars: { count: 2, size: [3, 4], speed: 1, lift: 3, gravity: 0.05, drag: 0.96, life: 56, alpha: 0.7, add: true, spin: 0.05 },
+    bubbles: { count: 2, size: [2, 5], speed: 0.4, lift: 2, gravity: -0.012, drag: 0.97, life: 70, alpha: 0.6, add: true, sway: 0.3 },
+    pixels: { count: 2, size: [3, 3], speed: 1, lift: 3, gravity: 0.08, drag: 0.97, life: 50, alpha: 0.9, grid: 3 },
+};
+const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4 }; // rows of the confetti atlas (pixels are plain rects)
 // TGM3 Easy's fireworks: bursts of confetti around the well, at most FIREWORK_MAX_BURSTS a frame
 // (a stream fires one every 10 frames; the end can fire dozens at once)
 const FIREWORK_SPARKS = 26, FIREWORK_SPEED = 3.2, FIREWORK_LIFE = 70, FIREWORK_MAX_BURSTS = 6;
-const GLOW_SPRITE = 64; // texels per confetti glow sprite
+const GLOW_SPRITE = 64; // texels per confetti sprite (each way)
 const ORB_COUNT = 46; // drifting lights in the backdrop
 const HUE_STEP = 28; // backdrop hue shift per line clear
 const RING_LIFE = 46; // frames a clear shockwave expands
@@ -386,7 +397,7 @@ class Engine {
         this.newTiltWaves();
         this.boardLayer = null; // render target the field is drawn into when it moves
         this.blockCache = new Map(); // tileset:size -> sprite atlas
-        this.glowAtlas = null;
+        this.confettiAtlas = null;
         this.sound = new Sound();
     }
 
@@ -961,6 +972,7 @@ class Engine {
             case "tilt": return TILT_LEVELS[o.tilt].name;
             case "scale": return Math.round(o.scale * 100) + "%";
             case "tileset": return TILESETS[o.tileset].name;
+            case "confetti": return CONFETTI_STYLES[CONFETTI_STYLE_IDS.indexOf(o.confetti)].name;
             case "das": return frameValue(o.das);
             case "arr": return o.arr ? frameValue(o.arr) : "Instant";
             case "dcd": return o.dcd ? frameValue(o.dcd) : "Off";
@@ -1101,33 +1113,50 @@ class Engine {
     explodeCell(cell) {
         const cx = this.cellX(cell.col) + CELL / 2;
         const cy = this.cellY(cell.row) + CELL / 2;
-        const count = Math.max(1, Math.round(CONFETTI_PER_CELL * this.options.effectScale));
+        const style = this.options.confetti, spec = CONFETTI_SPECS[style];
+        if (!spec) return; // off
+        const count = Math.max(1, Math.round(spec.count * this.options.effectScale));
         for (let n = 0; n < count; n++) {
             const angle = Math.random() * Math.PI * 2;
-            const speed = 1 + Math.random() * 4.5;
-            this.particles.push({
-                x: cx + (Math.random() - 0.5) * CELL * 0.8,
-                y: cy + (Math.random() - 0.5) * CELL * 0.8,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 3, // bias upwards for a burst
-                size: 3 + Math.random() * 5,
-                twinkle: Math.random() * Math.PI * 2,
-                color: Math.random() < 0.85 ? PIECE_COLORS[cell.type].light
-                    : CONFETTI_EXTRA[Math.floor(Math.random() * CONFETTI_EXTRA.length)],
-                life: CONFETTI_LIFE - Math.floor(Math.random() * 20),
-            });
+            const speed = (1 + Math.random() * 4.5) * spec.speed;
+            const size = spec.grid ? spec.grid * (1 + Math.floor(Math.random() * 2))
+                : spec.size[0] + Math.random() * spec.size[1];
+            const color = Math.random() < 0.85 ? PIECE_COLORS[cell.type].light
+                : CONFETTI_EXTRA[Math.floor(Math.random() * CONFETTI_EXTRA.length)];
+            this.particles.push(this.confettiBit(style,
+                cx + (Math.random() - 0.5) * CELL * 0.8, cy + (Math.random() - 0.5) * CELL * 0.8,
+                Math.cos(angle) * speed, Math.sin(angle) * speed - spec.lift, // bias upwards for a burst
+                size, color, spec.life * (1 - 0.4 * Math.random())));
         }
+    }
+
+    // One bit of confetti in a style of CONFETTI_SPECS, in a colour of CONFETTI_COLORS
+    confettiBit(style, x, y, vx, vy, size, color, life) {
+        const spin = CONFETTI_SPECS[style].spin || 0;
+        return {
+            style, x, y, vx, vy, size, color, life,
+            twinkle: Math.random() * Math.PI * 2,
+            phase: Math.random() * Math.PI * 2, // flutter
+            rot: Math.random() * Math.PI * 2, spin: (Math.random() * 2 - 1) * spin,
+        };
     }
 
     // Lives and speeds are in game frames; dt is the time passed in them
     updateParticles(dt) {
-        const drag = Math.pow(0.97, dt); // air drag
         for (const p of this.particles) {
-            p.vy += CONFETTI_GRAVITY * dt;
+            const spec = CONFETTI_SPECS[p.style];
+            const drag = Math.pow(spec.drag, dt); // air drag
+            p.vy += spec.gravity * dt;
             p.vx *= drag;
             p.vy *= drag;
+            if (spec.maxFall) p.vy = Math.min(p.vy, spec.maxFall);
             p.x += p.vx * dt;
             p.y += p.vy * dt;
+            if (spec.sway) {
+                p.phase += 0.12 * dt;
+                p.x += Math.sin(p.phase) * spec.sway * dt;
+            }
+            p.rot += p.spin * dt;
             p.twinkle += 0.3 * dt;
             p.life -= dt;
         }
@@ -1226,60 +1255,163 @@ class Engine {
     launchFirework() {
         const [vx, vy, vw, vh] = this.layout.view;
         const x = vx + vw * (0.1 + Math.random() * 0.8), y = vy + vh * (0.12 + Math.random() * 0.4);
-        const colors = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFETTI_EXTRA];
-        const color = colors[Math.floor(Math.random() * colors.length)];
+        const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
         const count = Math.max(8, Math.round(FIREWORK_SPARKS * this.options.effectScale));
         const turn = Math.random() * Math.PI * 2;
         for (let n = 0; n < count; n++) {
             const angle = turn + n / count * Math.PI * 2;
             const speed = FIREWORK_SPEED * (0.85 + Math.random() * 0.3);
-            this.particles.push({
-                x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-                size: 3 + Math.random() * 3, twinkle: Math.random() * Math.PI * 2,
-                color, life: FIREWORK_LIFE - Math.floor(Math.random() * 15),
-            });
+            this.particles.push(this.confettiBit("glow", x, y, Math.cos(angle) * speed, Math.sin(angle) * speed,
+                3 + Math.random() * 3, color, FIREWORK_LIFE - Math.floor(Math.random() * 15)));
         }
     }
 
-    // Soft light motes, added together so overlapping bursts bloom
+    // Confetti: the light styles added together so overlapping bursts bloom, then the solid ones
     drawParticles() {
         const r = this.r;
-        const atlas = this.glowSprites();
+        const atlas = this.confettiSprites();
+        const scale = this.options.effectScale;
         r.save();
-        r.blendMode = "add";
-        for (const p of this.particles) {
-            const k = Math.min(1, p.life / 24);
-            const size = p.size * (0.6 + 0.4 * k) * (0.8 + 0.2 * Math.sin(p.twinkle));
-            r.globalAlpha = Math.min(1, CONFETTI_ALPHA * this.options.effectScale) * k;
-            const sx = atlas.index.get(p.color) * GLOW_SPRITE;
-            r.image(atlas.tex, p.x - size * 2, p.y - size * 2, size * 4, size * 4, sx, 0, GLOW_SPRITE, GLOW_SPRITE);
+        for (let pass = 0; pass < 2; pass++) {
+            const add = pass === 0;
+            r.blendMode = add ? "add" : "normal";
+            for (const p of this.particles) {
+                const spec = CONFETTI_SPECS[p.style];
+                if (!spec.add !== !add) continue;
+                const k = Math.min(1, p.life / 24);
+                r.globalAlpha = Math.min(1, spec.alpha * scale) * k;
+                const col = atlas.index.get(p.color);
+                const sx = col * GLOW_SPRITE, sy = CONFETTI_SPRITE_ROWS[p.style] * GLOW_SPRITE;
+                switch (p.style) {
+                    case "glow": {
+                        const size = p.size * (0.6 + 0.4 * k) * (0.8 + 0.2 * Math.sin(p.twinkle));
+                        r.image(atlas.tex, p.x - size * 2, p.y - size * 2, size * 4, size * 4, sx, sy, GLOW_SPRITE, GLOW_SPRITE);
+                        break;
+                    }
+                    case "paper": { // a slip tumbling end over end: its back a little darker
+                        const flip = Math.cos(p.phase * 1.7), hw = p.size * 0.8;
+                        if (flip < 0) r.globalAlpha *= 0.65;
+                        this.confettiQuad(atlas.tex, sx, sy, p.x, p.y, hw, hw * Math.abs(flip), p.rot);
+                        break;
+                    }
+                    case "sparks": { // a streak behind the spark, as long as it is fast
+                        const v = Math.hypot(p.vx, p.vy);
+                        const len = p.size * 0.6 + v * 2.5;
+                        const ux = v > 0.01 ? p.vx / v : 1, uy = v > 0.01 ? p.vy / v : 0;
+                        this.confettiQuad(atlas.tex, sx, sy, p.x - ux * len * 0.45, p.y - uy * len * 0.45,
+                            len / 2, p.size * 1.2, Math.atan2(uy, ux));
+                        break;
+                    }
+                    case "stars": {
+                        const hw = p.size * (0.55 + 0.55 * Math.abs(Math.sin(p.twinkle))) * 1.1;
+                        this.confettiQuad(atlas.tex, sx, sy, p.x, p.y, hw, hw, p.rot);
+                        break;
+                    }
+                    case "bubbles": {
+                        const half = p.size * 1.23;
+                        r.image(atlas.tex, p.x - half, p.y - half, half * 2, half * 2, sx, sy, GLOW_SPRITE, GLOW_SPRITE);
+                        break;
+                    }
+                    case "pixels": { // snapped to a coarse grid, fading in steps
+                        const g = spec.grid;
+                        r.globalAlpha = Math.min(1, spec.alpha * scale) * Math.ceil(k * 4) / 4;
+                        r.rect(Math.round(p.x / g) * g - p.size / 2, Math.round(p.y / g) * g - p.size / 2, p.size, p.size, p.color);
+                        break;
+                    }
+                }
+            }
         }
         r.restore();
     }
 
-    // White-hot centre fading to the colour: one sprite per confetti colour, side by side
-    glowSprites() {
-        if (this.glowAtlas) return this.glowAtlas;
-        const colors = [...PIECE_COLORS.slice(1, 8).map(c => c.light), ...CONFETTI_EXTRA];
+    // The atlas sprite at (sx, sy), centred on (x, y) with half extents hw × hh, turned by angle
+    confettiQuad(tex, sx, sy, x, y, hw, hh, angle) {
+        const r = this.r, s = r.s;
+        const c = Math.cos(angle), n = Math.sin(angle);
+        const px = r.x + x * s, py = r.y + y * s;
+        const ax = c * hw * s, ay = n * hw * s; // half the width
+        const bx = -n * hh * s, by = c * hh * s; // half the height
+        r.quad(tex, px - ax - bx, py - ay - by, 1, px + ax - bx, py + ay - by, 1,
+            px - ax + bx, py - ay + by, 1, px + ax + bx, py + ay + by, 1, sx, sy, GLOW_SPRITE, GLOW_SPRITE);
+    }
+
+    // One sprite per confetti colour, side by side, a row per style (CONFETTI_SPRITE_ROWS)
+    confettiSprites() {
+        if (this.confettiAtlas) return this.confettiAtlas;
+        const n = GLOW_SPRITE, half = n / 2;
         const c = document.createElement("canvas");
-        c.width = GLOW_SPRITE * colors.length;
-        c.height = GLOW_SPRITE;
+        c.width = n * CONFETTI_COLORS.length;
+        c.height = n * Object.keys(CONFETTI_SPRITE_ROWS).length;
         const g = c.getContext("2d");
-        const half = GLOW_SPRITE / 2;
+        const star = (cx, cy, outer, inner) => {
+            g.beginPath();
+            for (let j = 0; j < 8; j++) {
+                const a = j * Math.PI / 4 - Math.PI / 2, d = j % 2 ? inner : outer;
+                g.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+            }
+            g.closePath();
+            g.fill();
+        };
         const index = new Map();
-        colors.forEach((color, i) => {
-            const cx = i * GLOW_SPRITE + half;
-            const grad = g.createRadialGradient(cx, half, 0, cx, half, half);
+        CONFETTI_COLORS.forEach((color, i) => {
+            const x0 = i * n, cx = x0 + half;
+            const row = (id) => CONFETTI_SPRITE_ROWS[id] * n;
+            // Glow: white-hot centre fading to the colour
+            let cy = row("glow") + half;
+            let grad = g.createRadialGradient(cx, cy, 0, cx, cy, half);
             grad.addColorStop(0, "#ffffff");
             grad.addColorStop(0.18, "#ffffff");
             grad.addColorStop(0.35, color + "cc");
             grad.addColorStop(1, color + "00");
             g.fillStyle = grad;
-            g.fillRect(i * GLOW_SPRITE, 0, GLOW_SPRITE, GLOW_SPRITE);
+            g.fillRect(x0, row("glow"), n, n);
+            // Paper: a slip in the middle of the sprite, its top edge catching the light
+            cy = row("paper") + half;
+            g.fillStyle = color;
+            g.fillRect(x0 + 12, cy - 12, 40, 24);
+            g.fillStyle = "rgba(255, 255, 255, 0.3)";
+            g.fillRect(x0 + 12, cy - 12, 40, 6);
+            // Sparks: a tapering streak, the tail at the left, the white-hot head at the right
+            cy = row("sparks") + half;
+            grad = g.createLinearGradient(x0 + 2, 0, x0 + n - 2, 0);
+            grad.addColorStop(0, color + "00");
+            grad.addColorStop(0.5, color);
+            grad.addColorStop(0.9, "#ffffff");
+            g.fillStyle = grad;
+            g.beginPath();
+            g.moveTo(x0 + 2, cy);
+            g.lineTo(x0 + 52, cy - 7);
+            g.arc(x0 + 52, cy, 7, -Math.PI / 2, Math.PI / 2);
+            g.closePath();
+            g.fill();
+            // Stars: a soft halo behind a four-point star with a white core
+            cy = row("stars") + half;
+            grad = g.createRadialGradient(cx, cy, 0, cx, cy, half);
+            grad.addColorStop(0, color + "66");
+            grad.addColorStop(1, color + "00");
+            g.fillStyle = grad;
+            g.fillRect(x0, row("stars"), n, n);
+            g.fillStyle = color;
+            star(cx, cy, 30, 6);
+            g.fillStyle = "#ffffff";
+            star(cx, cy, 14, 3);
+            // Bubbles: a thin ring, faintly filled, with a highlight at its top left
+            cy = row("bubbles") + half;
+            g.fillStyle = color + "22";
+            g.strokeStyle = color;
+            g.lineWidth = 3;
+            g.beginPath();
+            g.arc(cx, cy, 26, 0, Math.PI * 2);
+            g.fill();
+            g.stroke();
+            g.fillStyle = "#ffffff";
+            g.beginPath();
+            g.arc(cx - 10, cy - 10, 4, 0, Math.PI * 2);
+            g.fill();
             index.set(color, i);
         });
-        this.glowAtlas = { tex: this.r.texture(c), index };
-        return this.glowAtlas;
+        this.confettiAtlas = { tex: this.r.texture(c), index };
+        return this.confettiAtlas;
     }
 
     // Slow backdrop drift and colour easing; runs in the menus too
