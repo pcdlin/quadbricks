@@ -104,7 +104,10 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `padCapturing`; the next control pressed on a pad is bound by `GamepadControls.poll()` (`Options.bindPad()`, the same rules
   as keys, `bindIn()`), Start or Esc cancels. Start (`PAD_START`) can't be bound. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
-- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: New Game, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). New Game → `MENU_RULES` (rule sets) →
+- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Quick Play, New Game, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
+  TAP Master, TGM3 Master, NES A-Type, each a `RULESETS` mode named by rule set and mode, started at once with its setup
+  cards' first or `initial` choices (`quickArgs()` → `modeArgs()`), so its records are New Game's for those choices; the
+  list keeps its place like the rule sets'). New Game → `MENU_RULES` (rule sets) →
   `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master for the Guideline, Master/20G
   for TGM1, Normal/Master/Death/TGM+ for TAP, Master/Easy/Shirase for TGM3, Normal/Hi-Speed 1/Hi-Speed 2/
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
@@ -722,7 +725,8 @@ export names explicitly at the top; add new globals there, and new rule files to
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
-- Menu: main screen with New Game and Options (Continue and Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
+- Menu: main screen with Quick Play, New Game and Options (Continue and Restart on top during a game); Quick Play lists
+  common modes with no setup step (the user's request); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
   the rule set and mode lists use tighter cards). Guideline's
   modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master";
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,

@@ -20,13 +20,14 @@ const PUSH_BITS = { left: LEFT_PUSH, right: RIGHT_PUSH, hard: HARD_PUSH, soft: S
 const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELEASE, rotl: ROTL_RELEASE, rotr: ROTR_RELEASE, rot180: ROT180_RELEASE, hold: HOLD_RELEASE };
 
 // Menu screens
-const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8;
-const MENU_DEPTH = [0, 1, 2, 1, 2, 2, 2, 3, 2];   // by screen; deeper = slide in from the right
+const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8, MENU_QUICK = 9;
+const MENU_DEPTH = [0, 1, 2, 1, 2, 2, 2, 3, 2, 1];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
 const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", accent: tetI, resume: true };
 const RESTART_ITEM = { name: "Restart", desc: "Start the current game over", accent: tetL, restart: true };
 const MAIN_ITEMS = [
+    { name: "Quick Play", desc: "Common modes, straight into the game", accent: tetO, screen: MENU_QUICK },
     { name: "New Game", desc: "Choose a rule set and mode", accent: tetT, screen: MENU_RULES },
     { name: "Options", desc: "Keybinds, gamepad, visuals and Guideline handling", accent: tetS, screen: MENU_OPTIONS },
 ];
@@ -109,6 +110,17 @@ const RULESETS = [
           { name: "B-Type", mode: gbTetris, variant: "btype", setup: [levelSetup(GB_START_LEVELS), HEIGHT_SETUP, HEART_SETUP], accent: tetS, desc: "Clear 25 lines, starting over garbage" },
       ] },
 ];
+// Quick Play: common modes started at once, each with its setup cards' first (or initial) choices,
+// so their records are New Game's for those choices. ruleset and mode: names in RULESETS
+const QUICK_PLAY = [
+    { name: "Marathon", ruleset: "Guideline", mode: "Marathon", accent: tetO, desc: "Guideline · 150 lines from level 1" },
+    { name: "Sprint", ruleset: "Guideline", mode: "Sprint", accent: tetL, desc: "Guideline · 40 lines as fast as you can" },
+    { name: "Ultra", ruleset: "Guideline", mode: "Ultra", accent: tetZ, desc: "Guideline · score as much as you can in 2 minutes" },
+    { name: "TGM1 Master", ruleset: "TGM1", mode: "Master", accent: tetI, desc: "Up to level 999, grades 9 to S9, GM by checkpoints" },
+    { name: "TAP Master", ruleset: "TGM2 TAP", mode: "Master", accent: tetT, desc: "Up to level 999, sonic drop, grades 9 to GM" },
+    { name: "TGM3 Master", ruleset: "TGM3 TI", mode: "Master", accent: tetS, desc: "World rule with hold, COOLs, REGRETs and exams" },
+    { name: "NES A-Type", ruleset: "NES", mode: "A-Type", accent: tetJ, desc: "From level 0, faster every 10 lines" },
+].map(item => ({ ...item, modeItem: RULESETS.find(r => r.name === item.ruleset).modes.find(m => m.name === item.mode) }));
 const OPTIONS_ITEMS = [
     { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS },
     { name: "Gamepad", desc: "Change gamepad buttons", accent: tetI, screen: MENU_GAMEPAD },
@@ -366,6 +378,7 @@ class Engine {
         this.mainpos = 0;     // Start or Options
         this.menupos = 0;     // sub-mode
         this.rulesetpos = 0;  // rule set
+        this.quickpos = 0;    // Quick Play
         this.optionspos = 0;  // Keybinds, Gamepad, Visuals or Guideline handling
         this.visualspos = 0;
         this.handlingpos = 0;
@@ -908,12 +921,13 @@ class Engine {
         }
     }
 
-    // Start -> rule set -> sub-mode -> game; or Options -> Keybinds, Gamepad, Visuals or Guideline handling.
+    // Quick Play -> game; New Game -> rule set -> sub-mode -> game; or Options -> Keybinds, Gamepad, Visuals or Guideline handling.
     // Esc goes back a screen, and on the first one resumes a paused game.
     handleMenuInput() {
         // count() is only called for the screen on show: a rule set's modes depend on rulesetpos
         const screens = {
             [MENU_MAIN]: { pos: "mainpos", count: () => this.mainItems().length, back: null },
+            [MENU_QUICK]: { pos: "quickpos", count: () => QUICK_PLAY.length, back: MENU_MAIN },
             [MENU_RULES]: { pos: "rulesetpos", count: () => RULESETS.length, back: MENU_MAIN },
             [MENU_MODES]: { pos: "menupos", count: () => RULESETS[this.rulesetpos].modes.length, back: MENU_RULES },
             [MENU_OPTIONS]: { pos: "optionspos", count: () => OPTIONS_ITEMS.length, back: MENU_MAIN },
@@ -953,8 +967,12 @@ class Engine {
                 } else if (this.menuStep === MENU_MAIN || this.menuStep === MENU_OPTIONS) {
                     const next = (this.menuStep === MENU_MAIN ? this.mainItems() : OPTIONS_ITEMS)[pos].screen;
                     this.menuStep = next;
-                    if (next !== MENU_RULES) this[screens[next].pos] = 0; // the rule set list remembers its place
+                    if (next !== MENU_RULES && next !== MENU_QUICK) this[screens[next].pos] = 0; // the start lists remember their place
                     if (this.menuScroll[next]) this.menuScroll[next] = { at: 0, target: 0 };
+                } else if (this.menuStep === MENU_QUICK) {
+                    this.initGame(...this.quickArgs());
+                    this.GAMESTATE = STATE_GAME;
+                    return;
                 } else if (this.menuStep === MENU_RULES) {
                     this.menuStep = MENU_MODES;
                     this.menupos = 0;
@@ -1048,10 +1066,19 @@ class Engine {
 
     // The chosen mode with its setup cards' choices: initGame's arguments
     chosenArgs() {
-        const { mode, variant, setup = [] } = this.chosenMode();
+        return this.modeArgs(this.chosenMode(), n => this.setupIndex(n));
+    }
+
+    // The selected Quick Play mode with its setup cards' first (or initial) choices
+    quickArgs() {
+        return this.modeArgs(QUICK_PLAY[this.quickpos].modeItem);
+    }
+
+    // A mode's initGame arguments, with label index indexOf(n) on its setup card n
+    modeArgs({ mode, variant, setup = [] }, indexOf = n => setup[n].initial || 0) {
         const args = { mode, variant, startLevel: 0, height: 0 }, options = {};
         setup.forEach((item, n) => {
-            const i = this.setupIndex(n);
+            const i = indexOf(n);
             const value = item.values ? item.values[i] : i;
             if (OPTION_ARGS.includes(item.arg)) options[item.arg] = value;
             else args[item.arg] = value;
@@ -1094,10 +1121,10 @@ class Engine {
         this.recordNote = this.recordNew ? (old ? "NEW BEST" : "FIRST RECORD") : `BEST  ${old.text}`;
     }
 
-    // Under a mode list or setup cards: the best result with the current choices, if any
+    // Under a mode list or setup cards: the best result with the current choices (args), if any
     // (TGM3 Master with exams: the qualified grade with it)
-    drawBest(y) {
-        const args = this.chosenArgs(), [mode, variant, , , options] = args;
+    drawBest(y, args = this.chosenArgs()) {
+        const [mode, variant, , , options] = args;
         const best = this.records.get(this.recordKey(args));
         const parts = best ? [`BEST  ${best.text}`] : [];
         const rule = options.exams && variant === "standard" && !options.big ? this.examRuleFor(mode) : null;
@@ -1997,6 +2024,17 @@ class Engine {
                 this.drawMenuList(this.mainItems(), this.mainpos, listTop);
                 hint = "ENTER  SELECT" + (this.game ? "      ESC  RESUME" : "");
                 break;
+            case MENU_QUICK: {
+                // tighter cards like the rule sets', the best for the selected mode and the hint under them
+                const top = listTop - 20, rowH = 44, gap = 4;
+                heading("QUICK PLAY  ·  CHOOSE A MODE", INK_DIM, top - 26);
+                this.drawMenuList(QUICK_PLAY, this.quickpos, top, rowH, gap);
+                const bottom = top + menuListHeight(QUICK_PLAY, rowH, gap);
+                this.drawBest(bottom + 22, this.quickArgs());
+                hintY = Math.max(hintY, bottom + 46);
+                hint = "ENTER  START      ESC  BACK";
+                break;
+            }
             case MENU_RULES: {
                 // the longest list: tighter cards, from a little higher up, the hint under them
                 const top = listTop - 20, rowH = 44, gap = 4;
