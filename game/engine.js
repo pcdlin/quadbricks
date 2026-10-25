@@ -254,6 +254,8 @@ const PIECE_COLORS = [
     { base: "#b9bcc6", light: "#eceef4", dark: "#80838f" }, // neutral grey-white (Mono, Shirase from 1000)
 ];
 
+const PIECE_GREY = 8; // the colour index every block of a spent held piece takes (desaturated)
+
 // Block offsets of the SRS shapes, for pieces drawn outside a game (menu accents)
 const SRS_CELLS = shapeCells(shapes);
 
@@ -1940,10 +1942,10 @@ class Engine {
 
     // Draw a piece (rotation 0) centred on cx/cy, with a game's shapes and colours if given; item:
     // it carries an item (drawItemMark); flash (0..1): lit up as a hard-dropped piece is
-    drawPieceCentered(type, cx, cy, size, style = "locked", game = null, item = false, flash = 0) {
+    drawPieceCentered(type, cx, cy, size, style = "locked", game = null, item = false, flash = 0, grey = false) {
         if (!type) return;
         const cells = (game ? game.pieceCells : SRS_CELLS)[type][0];
-        const color = game ? game.palette[type] : type;
+        const color = grey ? PIECE_GREY : game ? game.palette[type] : type;
         const rows = cells.map(([i]) => i), cols = cells.map(([, j]) => j);
         const minR = Math.min(...rows), minC = Math.min(...cols);
         const ox = cx - ((Math.max(...cols) - minC + 1) * size) / 2;
@@ -2557,11 +2559,11 @@ class Engine {
     }
 
     // The held piece in the HOLD box. Once a piece has been held (the hold is spent until the
-    // next piece enters, game.canHold), it is greyed out
+    // next piece enters, game.canHold), it is desaturated to the neutral grey and faded
     drawHeldPiece(cx, cy, size) {
         const game = this.game, spent = !game.canHold;
         if (spent) { this.r.save(); this.r.globalAlpha *= MENU_DIMMED_ALPHA; }
-        this.drawPieceCentered(game.getHeldPiece(), cx, cy, size, "locked", game, false, this.holdFlashAlpha());
+        this.drawPieceCentered(game.getHeldPiece(), cx, cy, size, "locked", game, false, this.holdFlashAlpha(), spent);
         if (spent) this.r.restore();
     }
 
