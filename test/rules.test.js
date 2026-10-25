@@ -4,7 +4,7 @@ const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 vm.runInThisContext(fs.readFileSync(dir + "/game.js", "utf8") + "\n" + fs.readFileSync(dir + "/rules.js", "utf8") +
-    "\n;Object.assign(globalThis, {RuleGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gameBoy, tgmOriginal, nesTetris, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
+    "\n;Object.assign(globalThis, {RuleGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gameBoy, tgmOriginal, nesTetris, tgmAce, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -1765,6 +1765,248 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     b.lines = 24;
     tapClear(b, 1, h => { h.curPiece_col = 7; });
     check("  ...ends at 25 lines with the level unchanged", [b.isGameOver(), b.endTitle, b.level], [true, "COMPLETE", 7]);
+}
+
+// ---------------------------------------------------------------- TGM3 Shirase
+function startedMode(mode, variant) {
+    const g = new RuleGame(mode, variant);
+    for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+{
+    const g = startedMode(arika, "shirase");
+    const at = level => { g.level = level; g.updateTimings(); return [g.gravity, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
+    check("Shirase: 20G, ARE / line ARE / DAS / lock / line clear by level",
+        [at(0), at(100), at(200), at(300), at(500), at(600), at(1100), at(1200), at(1300)],
+        [[20, 12, 8, 10, 18, 6], [20, 12, 7, 8, 18, 5], [20, 12, 6, 8, 17, 4], [20, 6, 6, 8, 15, 4], [20, 6, 5, 6, 13, 3],
+         [20, 6, 5, 6, 12, 3], [20, 6, 5, 6, 10, 3], [20, 6, 5, 6, 8, 3], [20, 6, 6, 6, 15, 6]]);
+    const s = startedMode(arika, "shirase");
+    check("  ...stats: rule and mode, grade, level, time, score; no ghost",
+        [s.getStats()[0], s.getStats().map(r => r[0]), s.getStats()[1], s.getShadowRow()],
+        [["TGM3 TI", "WORLD SHIRASE"], ["TGM3 TI", "GRADE", "LEVEL", "TIME", "SCORE"], ["GRADE", "1"], -100]);
+    s.level = 1299; s.curPiece_type = 0; clearField(s);
+    s.spawn(tetT, false);
+    check("  ...levels go to 1300, with a stop at 1299", [s.level, s.getStats()[2]], [1299, ["LEVEL", "1299 / 1300"]]);
+}
+{
+    const g = startedMode(arika, "shirase");
+    clearField(g);
+    g.section = 0; g.sectionStart = 0; g.frames = 61 * 60; g.level = 99;
+    tapClear(g, 1);
+    const slow = [g.level, g.sectionsDone, g.regrets, g.gradeLabel()];
+    g.sectionStart = g.frames; g.frames += 59 * 60; g.level = 199; clearField(g);
+    tapClear(g, 1);
+    check("Shirase grade: sections finished less REGRETs (over 60 s in the first two sections)",
+        [slow, [g.sectionsDone, g.regrets, g.gradeLabel()]], [[100, 1, 1, "1"], [2, 1, "S1"]]);
+    g.sectionStart = g.frames; g.frames += 51 * 60; g.level = 299; clearField(g);
+    tapClear(g, 1);
+    check("  ...and over 50 s from the third", [g.regrets, g.gradeLabel()], [2, "S1"]);
+}
+{
+    const stop = (mode, level, frames) => {
+        const g = startedMode(mode, "shirase");
+        clearField(g);
+        g.level = level; g.section = Math.floor(level / 100); g.sectionsDone = g.section; g.frames = frames; g.sectionStart = frames;
+        tapClear(g, 1);
+        return [g.isGameOver(), g.endTitle, g.level, g.gradeLabel()];
+    };
+    check("Shirase level stops: World 500 after 3:03 and 1000 after 6:06, Classic after 2:28 and 4:56",
+        [stop(arika, 499, 183 * 60), stop(arika, 499, 183 * 60 + 1), stop(arika, 999, 366 * 60 + 1),
+         stop(tgmClassic, 499, 148 * 60 + 1), stop(tgmClassic, 499, 148 * 60)],
+        [[false, null, 500, "S5"], [true, "LEVEL STOP", 500, "S5"], [true, "LEVEL STOP", 1000, "S10"],
+         [true, "LEVEL STOP", 500, "S5"], [false, null, 500, "S5"]]);
+}
+{
+    const g = startedMode(arika, "shirase");
+    clearField(g);
+    g.level = 500;
+    fill(g, ["#########."]);
+    g.garbageCount = 20; g.curPiece_type = 0;
+    g.spawn(tetT, false);
+    const bottom = r => [...Array(WIDTH)].map((_, c) => g.getCell(r, c) ? "#" : ".").join("");
+    check("Shirase garbage: at the section's quota (20 at 500) a copy of the bottom row rises as a piece comes",
+        [bottom(20), bottom(21), g.garbageCount], ["#########.", "#########.", 1]);
+    g.garbageCount = 5;
+    clearField(g);
+    tapClear(g, 2);
+    check("  ...cleared lines count it down", g.garbageCount, 3);
+    const h = startedMode(arika, "shirase");
+    h.level = 400; h.garbageCount = 30; h.curPiece_type = 0; clearField(h);
+    h.spawn(tetT, false);
+    check("  ...none before 500", [h.garbageCount, h.getCell(21, 0)], [30, 0]);
+    h.level = 999; h.updateTimings();
+    const colours = h.palette.slice();
+    h.level = 1000; h.updateTimings();
+    check("  ...monochrome blocks from level 1000", [colours.every(c => c === 5), h.palette.slice(1).every(c => c === 5)], [false, true]);
+}
+{
+    const g = startedMode(arika, "shirase");
+    check("Shirase test setup: only the roll", [g.testSetup("invisible"), g.testSetup("kill"), g.testSetup("roll")], [false, false, true]);
+    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    check("  ...the staff roll after 1300: S13, big pieces, blocks stay visible",
+        [g.roll, g.rollLength, g.big, g.gradeLabel(), g.curCells[tetO][0].length, g.curPiece_col], ["visible", 3238, true, "S13", 16, 2]);
+    clearField(g);
+    place(g, tetO, 0, 10, 2);
+    g.shift(1);
+    check("  ...big pieces move two columns", g.curPiece_col, 4);
+    g.rollFrames = g.rollLength - 1;
+    g.advanceFrame(0);
+    check("  ...surviving it completes the mode", [g.isGameOver(), g.endTitle], [true, "COMPLETE"]);
+}
+
+// ---------------------------------------------------------------- TGM3 Easy
+{
+    const g = startedMode(arika, "easy");
+    const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
+    check("Easy: gravity (1/256 G) by level, delays the same throughout (ARE 48, line ARE 25, DAS 14, lock 30, line clear 40)",
+        [at(0), at(8), at(90), at(101), at(177), at(200)],
+        [[4, 48, 25, 14, 30, 40], [5, 48, 25, 14, 30, 40], [64, 48, 25, 14, 30, 40], [16, 48, 25, 14, 30, 40],
+         [192, 48, 25, 14, 30, 40], [5120, 48, 25, 14, 30, 40]]);
+    const e = startedMode(tgmClassic, "easy");
+    check("  ...stats: rule and mode, fireworks, level, time; levels to 200",
+        [e.getStats(), e.maxLevel], [[["TGM3 TI", "CLASSIC EASY"], ["HANABI", "0"], ["LEVEL", "0 / 100"], ["TIME", e.formatTime()]], 200]);
+}
+{
+    const fireworks = (n, setup = () => {}, rows = null) => {
+        const g = startedMode(arika, "easy");
+        g.level = 10; g.lockedType = tetI; g.lastRotation = false; g.activeTime = 30; g.sinceClear = 30;
+        setup(g);
+        g.easyHanabi(n, rows || [...Array(n)].map((_, i) => 21 - n + 1 + i), g.level, g.level + [0, 1, 2, 4, 6][n]);
+        return g.hanabiPending;
+    };
+    check("Easy fireworks: base 1 / 2.9 / 3.8 / 4.7 truncated", [1, 2, 3, 4].map(n => fireworks(n)), [1, 2, 3, 4]);
+    check("  ...combo: doubles count up (x1, x1.5, x1.9), singles keep it without the bonus, a miss resets it",
+        [fireworks(2, g => { g.easyCombo = 1; }), fireworks(2, g => { g.easyCombo = 2; }), fireworks(1, g => { g.easyCombo = 5; })],
+        [4, 5, 1]);
+    check("  ...spins: x2 (not O), T x3, T triple x4",
+        [fireworks(2, g => { g.lastRotation = true; g.lockedType = tetL; }), fireworks(2, g => { g.lastRotation = true; g.lockedType = tetO; }),
+         fireworks(2, g => { g.lastRotation = true; g.lockedType = tetT; }), fireworks(3, g => { g.lastRotation = true; g.lockedType = tetT; })],
+        [5, 2, 8, 15]);
+    check("  ...split x1.4, lucky level x1.3, a firework fired lately x1.3, the 30 s bonus x1.4 (once)",
+        [fireworks(2, () => {}, [19, 21]), fireworks(3, g => { g.level = 25; }), fireworks(2, g => { g.fireTimer = 50; }),
+         fireworks(2, g => { g.bonus30 = true; })],
+        [4, 4, 3, 4]);
+    check("  ...speed: x (level after - frames since the last clear) / 100 over 100, x (level after - active frames) / 120 over 120",
+        fireworks(2, g => { g.level = 140; g.sinceClear = 10; g.activeTime = 10; }), Math.floor(2.9 * 1.32 * 1.1));
+    const g = startedMode(arika, "easy");
+    clearField(g);
+    g.level = 10;
+    tapClear(g, 4);
+    check("  ...a perfect clear adds 6 in its own stream", [g.hanabiPending, g.bravoPending], [4, 6]);
+    for (let f = 0; f < 70; f++) g.advanceFrame(0);
+    check("  ...the streams fire one each every 10 frames", [g.hanabi, g.hanabiPending, g.bravoPending], [10, 0, 0]);
+}
+{
+    const g = startedMode(arika, "easy");
+    g.frames = 1799; g.level = 40; g.levelMark30 = 5;
+    g.advanceFrame(0);
+    check("Easy 30 s bonus: 30 levels in a 30 s period earn it", [g.bonus30, g.levelMark30], [true, 40]);
+    g.level = 199; g.curPiece_type = 0; clearField(g);
+    g.spawn(tetT, false);
+    check("  ...a stop at 199", g.level, 199);
+}
+{
+    const g = startedMode(arika, "easy");
+    g.hanabi = 100;
+    g.testSetup("roll");
+    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    check("Easy staff roll: 20G, blocks visible, a free firework every 3265 / fireworks frames",
+        [g.roll, g.gravity, g.rollLength, g.rollInterval], ["visible", 20, 3265, 32]);
+    const roll = (combo, n) => {
+        g.easyCombo = combo; g.hanabiPending = 0; g.lockedType = tetI; g.lastRotation = false; g.activeTime = 100; g.sinceClear = 150; g.fireTimer = 0;
+        g.easyHanabi(n, [...Array(n)].map((_, i) => 21 - n + 1 + i), 200, 200);
+        return g.hanabiPending;
+    };
+    check("  ...the combo is frozen and mapped (singles too), 9 mapping to the lowest; singles and Tetrises are lucky",
+        [roll(4, 1), roll(9, 1), roll(0, 2)], [Math.floor(2.9 * 1.3), 1, Math.floor(2.9 * 1.5)]);
+    const before = g.hanabi;
+    g.hanabiPending = 5;
+    g.rollFrames = g.rollLength - 1;
+    g.advanceFrame(0);
+    check("  ...surviving it: EXCELLENT, 24 more and the ones still waiting", [g.endTitle, g.hanabi - before], ["EXCELLENT", 29]);
+}
+
+// ---------------------------------------------------------------- TAP TGM+
+{
+    const g = startedMode(tgmTap, "plus");
+    const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
+    check("TGM+: Master's gravity, Normal's delays at every level",
+        [at(0), at(500), at(900)], [[4, 27, 27, 16, 30, 40], [5120, 27, 27, 16, 30, 40], [5120, 27, 27, 16, 30, 40]]);
+    const s = startedMode(tgmTap, "plus");
+    check("  ...stats: rule set and mode, level, time, score (no grade)",
+        [s.getStats()[0], s.getStats().map(r => r[0])], [["TGM2 TAP", "TGM+"], ["TGM2 TAP", "LEVEL", "TIME", "SCORE"]]);
+}
+{
+    const row = (g, r) => [...Array(WIDTH)].map((_, c) => g.getCell(r, c) ? "#" : ".").join("");
+    const g = startedMode(tgmTap, "plus");
+    clearField(g);
+    const miss = () => { g.curPiece_type = tetO; place(g, tetO, 0, 5, 3); g.lock(); g.setCell(6, 4, 0); g.setCell(6, 5, 0); g.setCell(7, 4, 0); g.setCell(7, 5, 0); };
+    for (let k = 0; k < 12; k++) miss();
+    const before = row(g, 21);
+    miss();
+    check("TGM+ garbage: the 13th piece in a row without a clear raises the pattern's first row",
+        [before, row(g, 21), g.garbageCount], ["..........", ".#########", 0]);
+    for (let k = 0; k < 13; k++) miss();
+    check("  ...then the next", [row(g, 20), row(g, 21)], [".#########", ".#########"]);
+    g.level = 900;
+    for (let k = 0; k < 3; k++) miss();
+    const at900 = row(g, 21);
+    miss();
+    check("  ...every 13 - level / 100 pieces (4 at 900)", [at900, row(g, 21)], [".#########", ".#########"]);
+    check("  ...the pattern has 24 rows", g.garbagePos, 3);
+}
+{
+    const g = startedMode(tgmTap, "plus");
+    clearField(g);
+    g.level = 998;
+    tapClear(g, 1);
+    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    check("TGM+ staff roll at 999: blocks visible, 2024 frames", [g.roll, g.rollLength], ["visible", 2024]);
+    g.curPiece_type = 0;
+    for (let c = 0; c < WIDTH; c++) for (let r = 1; r < 5; r++) g.setCell(r, c, 1);
+    g.spawn(tetT, false);
+    check("  ...topping out in it is still EXCELLENT", [g.isGameOver(), g.endTitle], [true, "EXCELLENT"]);
+}
+
+// ---------------------------------------------------------------- ACE
+{
+    const g = startedMode(tgmAce, "normal");
+    check("ACE: hold, three next pieces, spawn in the top visible rows, 128 lock resets",
+        [g.hasHold, g.nextCount, g.curPiece_row, g.moveLimit, g.tgm], [true, 3, 2, 128, false]);
+    check("  ...stats: mode, level, lines, the level's time limit, time",
+        [g.getStats()[0], g.getStats()[1], g.getStats()[2], g.getStats()[3][0]], [["ACE", "NORMAL"], ["LEVEL", "1 / 15"], ["LINES", "0 / 150"], "LIMIT"]);
+    const grav = (variant, level) => { const h = new RuleGame(tgmAce, variant); h.level = level; h.updateTimings(); return h.gravity * 256; };
+    check("  ...gravity: Normal 4/256 at level 1 to 20G at 13, Hi-Speed 1 84/256 to 20G at 8, the rest 20G",
+        [grav("normal", 1), grav("normal", 12), grav("normal", 13), grav("hispeed1", 1), grav("hispeed1", 8), grav("hispeed2", 1), grav("another", 1)],
+        [4, 1280, 5120, 84, 5120, 5120, 5120]);
+    const delays = (variant, level) => { const h = new RuleGame(tgmAce, variant); h.level = level; h.updateTimings(); return [h.are, h.lineAre, h.das, h.lockDelayMax, h.lineClearDelay]; };
+    check("  ...delays: Normal fixed, Another by level, Another 2 fixed",
+        [delays("normal", 9), delays("another", 1), delays("another", 15), delays("another2", 1)],
+        [[25, 25, 15, 30, 41], [18, 18, 10, 28, 14], [6, 6, 7, 13, 5], [6, 6, 7, 13, 4]]);
+}
+{
+    const g = startedMode(tgmAce, "normal");
+    clearField(g);
+    g.lines = 9;
+    tapClear(g, 1);
+    const up = [g.level, g.aceTimer, g.acePaused];
+    g.lines = 19; clearField(g);
+    tapClear(g, 1);
+    check("ACE levels: every 10 lines; the clock starts over (2:00, 2:00, then 1:30) and waits for the next piece",
+        [up, [g.level, g.aceTimer]], [[2, 7200, true], [3, 5400]]);
+    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    g.advanceFrame(0);
+    check("  ...it runs again once the piece is in play", [g.acePaused, g.aceTimer < 5400], [false, true]);
+    g.aceTimer = 1;
+    g.advanceFrame(0); g.advanceFrame(0);
+    check("  ...running out ends the game", [g.isGameOver(), g.endTitle], [true, "TIME OVER"]);
+    const another = new RuleGame(tgmAce, "another");
+    check("  ...Another: a minute per level", another.aceTimer, 3600);
+    const h = startedMode(tgmAce, "hispeed2");
+    clearField(h);
+    h.lines = 149;
+    tapClear(h, 1);
+    check("  ...150 lines complete it", [h.isGameOver(), h.endTitle, h.lines], [true, "COMPLETE", 150]);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");

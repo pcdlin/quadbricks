@@ -31,7 +31,7 @@ when WebGL is unavailable).
 | Path | What it is |
 |---|---|
 | `game/game.js` | Shared definitions only: field size (`WIDTH` 10, `HEIGHT` 22, first visible row `VISIBLE_TOP` 2), piece ids (`tetI`=1 … `tetO`=7), input bitmap bits, SRS `shapes`; `shapeCells()` (a shape table's blocks as offsets) and `clamp()`. |
-| `game/rules.js` | `RuleGame`: the rule sets (Guideline, TGM1, TAP, TGM3 World/Classic, NES, GB) and their variants. All game logic lives here. |
+| `game/rules.js` | `RuleGame`: the rule sets (Guideline, TGM1, TAP, TGM3 World/Classic, ACE, NES, GB) and their variants. All game logic lives here. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings) and the clear ripples' refraction pass. |
@@ -40,7 +40,7 @@ when WebGL is unavailable).
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for `rules.js` (~310 checks). |
+| `test/rules.test.js` | Spec checks for `rules.js` (~360 checks). |
 
 ## History in one paragraph
 
@@ -78,7 +78,8 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   ends in Grand Master if survived (TAP Master: 2 and 3 both go to the M-roll), 4 to the last 5 s
   of the roll, 5 to 10 s before the 15-minute speed-up (TGM3 only). They call
   `RuleGame.testSetup()`, which refuses during READY, after game over, in the Guideline, and for
-  setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4).
+  setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4; TGM+,
+  Shirase and Easy: 1 and 4; 5 is TGM3 Master's only).
 - Game keys come from `options.keys` (rebindable): each action has a list of one or two key codes
   (`MAX_KEYS_PER_ACTION`). On the Controls screen, Enter then a new key adds it (a third replaces
   the action's oldest); a key the action already has is removed, unless it is its only one
@@ -88,14 +89,17 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   (`MENU_KEYS`); `Escape` can't be bound.
 - Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: New Game, Options; `mainItems()` adds Restart first while a game exists, restarting it with the same settings, and Esc from a game opens the menu on it). New Game → `MENU_RULES` (rule sets) →
   `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master for the Guideline, Master/20G
-  for TGM1, Master/Death for TAP, World/Classic for TGM3, A-Type/B-Type for NES and GB) → game; modes
+  for TGM1, Master/Death/TGM+ for TAP, Master/Easy/Shirase for TGM3, Normal/Hi-Speed 1/Hi-Speed 2/
+  Another/Another 2 for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
-  `labels` for a `RuleGame` argument (`arg`): `"variant"` (the label's entry in `values`: Marathon's
+  `labels` for a `RuleGame` argument (`arg`): `"mode"` or `"variant"` (the label's entry in `values`:
+  TGM3's Rule, World / Classic; Marathon's
   Goal, 150 lines / Variable / Endless), or `"startLevel"` / `"height"` (the label's index: Level
   0–19 for NES, 0–9 for GB, M1–M30 for Master; Height 0–5 for B-Type; Rows 5/10/18 for Dig).
   Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
-  `menuAction()` turns them into arguments). The rule set and mode lists use the Visuals screen's
-  tighter cards (`VISUALS_ROWS`). Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings),
+  `menuAction()` turns them into arguments). The mode lists use the Visuals screen's
+  tighter cards (`VISUALS_ROWS`), the rule set list (seven) tighter still, a little higher, with its
+  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings),
   `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
 - Visuals and Guideline handling are setting screens (`SETTING_ITEMS`: `VISUAL_ITEMS`, `HANDLING_ITEMS`),
@@ -120,9 +124,10 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 ### Rules engine (`rules.js`)
 `new RuleGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
 `tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gameBoy` (7, GB), `tgmOriginal` (8, TGM1),
-`nesTetris` (9, NES) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus the Guideline's
-`"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"` and `"master"`, NES's and GB's `"btype"` and
-TGM1's `"20g"`).
+`nesTetris` (9, NES), `tgmAce` (10, ACE) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus the
+Guideline's `"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"` and `"master"`, NES's and GB's
+`"btype"`, TGM1's `"20g"`, TAP's `"plus"` (TGM+), TGM3's `"easy"` and `"shirase"` (with either rule), and
+ACE's `"normal"`, `"hispeed1"`, `"hispeed2"`, `"another"`, `"another2"`).
 TAP's `"standard"` is its Master mode, `"death"` its Death mode; NES's and GB's `"standard"` is A-Type.
 A third argument, `startLevel` (NES and GB only, clamped to 0–19, `NES_START_LEVELS`, or 0–9,
 `GB_START_LEVELS`; Guideline master: 0–29 for M1–M30), sets the starting level;
@@ -135,7 +140,13 @@ Flags: `this.tgm` (TGM1, TGM3 World or Classic, or TAP: levels to 999, delays, g
 piece), `this.tap`, `this.tgm1`, `this.gb`, `this.nes`, `this.nintendo` (NES or GB: no hard drop,
 hold, kicks or lock delay, `applyGravityGb()`, `scoreGb()`), `this.hasHold` (false for TGM1, TAP,
 NES and GB). NES and GB are neither `tgm` nor the Guideline: code paths written as `!this.tgm` for
-the Guideline also check `!this.nintendo`.
+the Guideline also check `!this.nintendo`. TGM3: `this.ti`, and `this.tiMaster` / `this.easy` /
+`this.shirase` for its modes; `this.tapPlus` (TGM+); `this.internalGrading` (grade points and decay:
+TGM3 Master and TAP Master); `this.maxLevel` (999; Shirase 1300, Easy 200). ACE (`this.ace`) is not
+`tgm`: it takes the Guideline's code paths with TGM3's I kicks, spawn row, randomizer and three next
+pieces, `this.moveLimit` (128 lock resets) and its own timings and `scoreAce()`. `this.big` (Shirase's
+roll, `setBig()`): every block 2 × 2, moves and kicks doubled; `this.curCells` holds the current
+piece's offsets (`pieceCells`, or the doubled ones), which collision and the engine's piece drawing use.
 
 The engine drives it with `advanceFrame(inputBitmap)` and reads:
 - `getCell(row, col)`, `getCellAlpha(row, col)` (staff roll), `getCurPiece_*()`, `getShadowRow()` (−100 = no ghost),
@@ -359,6 +370,46 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   999 gives GM regardless. Death's roll keeps blocks visible and changes nothing; topping out
   in it keeps the grade.
 
+### TAP TGM+
+- Sources: tetris.wiki (TAP page); NullpoMino `GarbageManiaMode.java` (pattern, roll length).
+- TAP Master's rules, gravity and scoring, but Normal mode's delays at every level
+  (`TAP_PLUS_DELAYS`: ARE 27, line ARE 27, DAS 16, lock 30, line clear 40), no grades.
+- Garbage (`tapPlusGarbage()`): a count of pieces locked without a clear (clears don't reset it)
+  raises the next row of a fixed 24-row pattern (`TAP_PLUS_PATTERN`, looping) at 13 − ⌊level/100⌋.
+- Level 999: a 2024-frame staff roll with blocks visible; EXCELLENT whether survived or topped out.
+
+### TGM3 Easy and Shirase (World or Classic rule)
+- Easy: levels to 200 (stops at x99, 199), `EASY_GRAVITY` (1/256 G, 20G at 200), fixed delays
+  (`EASY_DELAYS`: ARE 48, line ARE 25, DAS 14, lock 30, line clear 40), ghost below 100. No score or
+  grade: fireworks (`easyHanabi()`, `easyFrame()`), from the community analysis (THIRD-PARTY-NOTICES):
+  per clear truncate(base 1/2.9/3.8/4.7 × combo × bonuses) into a stream firing every 10 frames;
+  combo (doubles+ add one, to 9; singles keep it without the bonus); ×1.3 if a stream firework fired
+  in the last 100 frames; split ×1.4; lucky levels 25/50/75/125/150/175/199 ×1.3; 30 levels in a 30 s
+  period ×1.4 on the next clear; ×(level − frames since the last clear)/100 over 100 and
+  ×(level − active frames)/120 over 120; spins ×2 (T ×3, T triple ×4, O never); a perfect clear +6 in
+  its own stream. Level 200: a 3265-frame 20G staff roll (blocks visible) with a free firework every
+  ⌊3265 / fireworks fired⌋ frames, the combo frozen and mapped (9 to the lowest, the game's bug);
+  surviving it: EXCELLENT and +24. Fireworks still waiting count at the end. Stats: HANABI, LEVEL, TIME.
+- Shirase: 20G, levels to 1300 (stops at x99), `SHIRASE_DELAYS` by level, no ghost, TGM3 score. Grade
+  S1…S13 = sections finished − REGRETs (a section over 60 s in the first two, 50 s after). Level stops
+  (`SHIRASE_TORIKAN`): 500 after 3:03 (World) / 2:28 (Classic), 1000 after 6:06 / 4:56 end the game.
+  Garbage in 500–999 (`shiraseGarbage()`): +1 per new piece, −1 per line cleared; at the section's
+  quota (20/18/10/9/8) a copy of the bottom row rises before the next piece. Blocks monochrome from
+  1000 (`MONO_PALETTE`, green). Level 1300: a 3238-frame staff roll with big pieces, blocks visible;
+  surviving it completes the mode (orange line), topping out ends it with the grade.
+
+### ACE: Normal, Hi-Speed 1, Hi-Speed 2, Another, Another 2
+- Sources: tetris.wiki *Tetris The Grand Master Ace*; NullpoMino `TimeAttackMode.java` (tables).
+- Arika SRS (TGM3 World's kicks), hold with IHS, three next pieces, TGM3's randomizer, hard drop,
+  ghost (hidden at 20G), lock resets up to 128 per piece (`ACE_MOVE_RESETS`), no score.
+- 15 levels of 10 lines; 150 lines complete it. Each level has a time limit (`ACE_TIME_LIMITS`: 2:00,
+  2:00, then 1:30; Another 1:00), its clock starting over when the next piece comes; running out ends
+  the game (TIME OVER). Stats: LEVEL, LINES, LIMIT (the level's clock), TIME.
+- Gravity (`ACE_GRAVITY`, 1/256 G by level): Normal 4 … 1280 then 20G from 13, Hi-Speed 1 84 … 1280
+  then 20G from 8, the others 20G. Delays: Normal and Hi-Speed ARE 25, line ARE 25, DAS 15, lock 30,
+  line clear 41; Another by level (`ACE_ANOTHER_DELAYS`, ARE 18 → 6, lock 28 → 13); Another 2 at
+  Another's fastest (`ACE_ANOTHER2_DELAYS`, line clear 4).
+
 ### TGM1 (Tetris The Grand Master): Master and 20G
 - Sources: tetris.wiki *Tetris The Grand Master*, *TGM randomizer*; NullpoMino `GradeManiaMode.java`.
 - Plain ARS as in TAP (basic kicks only, IRS, no hold, one next piece, one buffer row), but no
@@ -456,6 +507,15 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   in frames, rounded down. The displayed grade stays S9 during the M-roll (NullpoMino). TAP Death's
   credit roll uses the Master roll length. NullpoMino speeds TAP up after 15:00, but the wiki doesn't
   mention it, so that isn't done.
+- TGM+: delays and roll length per tetris.wiki and NullpoMino; the garbage cells take random
+  colours (no grey block here).
+- TGM3 Easy: the suggested placements before level 100 aren't drawn (the ghost stands in); the
+  wiki's gravity table is taken as it lists it; fireworks are counted, not drawn, and the streams
+  fire on the frames a clock from the game's start divides; the completion bonus comes at the end of
+  the roll. Shirase: the roll length and big roll pieces follow NullpoMino; the green monochrome is
+  used with both rules (Classic's white has no colour here); level 1300 is reached by clears only.
+- ACE: NullpoMino's tables are used as they are (its DAS and ARE may be counted differently from the
+  arcade's); only the SRS rule is offered (not ARS or ARS2); soft drop is 1G and doesn't lock.
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's; the DAS
   charge isn't frozen in the parts of ARE and line clears where TGM1 freezes it. No secret grade,
@@ -496,11 +556,13 @@ add new globals there.
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
-- Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "NES" and "GB" (in that order;
-  the rule set and mode lists use the Visuals screen's tighter cards). Guideline's
+- Menu: main screen with New Game and Options (Restart on top during a game); New Game has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
+  the rule set and mode lists use tighter cards). Guideline's
   modes are "Marathon" (Goal: 150 lines, Variable or Endless), "Sprint", "Ultra", "Dig" and "Master";
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G", TGM3's are
-  "World" and "Classic", TAP's "Master" and "Death", NES's and GB's "A-Type" and "B-Type". The GB
+  "Master", "Easy" and "Shirase" (each with a Rule card, World or Classic), TAP's "Master", "Death" and
+  "TGM+", ACE's "Normal", "Hi-Speed 1", "Hi-Speed 2", "Another" and "Another 2", NES's and GB's
+  "A-Type" and "B-Type". The GB
   rule set was named "1989" until the NES one came (the user's rename). GB keeps every visual style (Guideline colours,
   the usual board and effects); only its well is shorter, 18 rows as on the Game Boy (the user's request).
   The stats panel shows the rule set and the mode (`getStats()[0]`), never "STANDARD". The generic

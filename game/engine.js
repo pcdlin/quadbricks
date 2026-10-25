@@ -31,8 +31,8 @@ const MAIN_ITEMS = [
 ];
 
 // Start step 3 (MENU_SETUP), for modes with `setup`: setting cards changed with ← →, each choosing
-// one of its labels for a RuleGame argument: arg "variant" (the label's entry in values), or
-// "startLevel" and "height" (the label's index). Remembered per mode for the session (setupChoices)
+// one of its labels for a RuleGame argument: arg "mode" or "variant" (the label's entry in values),
+// or "startLevel" and "height" (the label's index). Remembered per mode for the session (setupChoices)
 const indexLabels = count => Array.from({ length: count }, (_, i) => String(i));
 const levelSetup = count => ({ name: "Level", accent: tetT, arg: "startLevel", labels: indexLabels(count) });
 const HEIGHT_SETUP = { name: "Height", accent: tetZ, arg: "height", labels: indexLabels(GB_B_HEIGHTS) };
@@ -40,6 +40,7 @@ const GOAL_SETUP = { name: "Goal", accent: tetO, arg: "variant", labels: ["150 l
     values: ["marathon", "variable", "standard"] };
 const DIG_SETUP = { name: "Rows", accent: tetS, arg: "height", labels: GUIDELINE_DIG_ROWS.map(String) };
 const MASTER_SETUP = { name: "Level", accent: tetT, arg: "startLevel", labels: GUIDELINE_MASTER_DELAYS.map((_, i) => `M${i + 1}`) };
+const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
@@ -61,11 +62,21 @@ const RULESETS = [
       modes: [
           { name: "Master", mode: tgmTap, variant: "standard", accent: tetT, desc: "Up to level 999, grades 9 to GM" },
           { name: "Death", mode: tgmTap, variant: "death", accent: tetZ, desc: "20G from the start, M at 500, GM at 999" },
+          { name: "TGM+", mode: tgmTap, variant: "plus", accent: tetS, desc: "Rising garbage from a fixed pattern, to level 999" },
       ] },
-    { name: "TGM3 TI", accent: tetL, desc: "Master mode — up to level 999",
+    { name: "TGM3 TI", accent: tetL, desc: "World rule (Arika SRS) or Classic (ARS), with hold",
       modes: [
-          { name: "World", mode: arika, variant: "standard", accent: tetL, desc: "Arika SRS, hard drop, limited lock resets" },
-          { name: "Classic", mode: tgmClassic, variant: "standard", accent: tetJ, desc: "Arika Rotation System, sonic drop" },
+          { name: "Master", mode: arika, variant: "standard", setup: [RULE_SETUP], accent: tetL, desc: "Up to level 999, COOLs and REGRETs, grades to GM" },
+          { name: "Easy", mode: arika, variant: "easy", setup: [RULE_SETUP], accent: tetO, desc: "Up to level 200, scored in fireworks" },
+          { name: "Shirase", mode: arika, variant: "shirase", setup: [RULE_SETUP], accent: tetZ, desc: "20G to level 1300, rising garbage, a big staff roll" },
+      ] },
+    { name: "ACE", accent: tetS, desc: "150 lines against the clock — Arika SRS, hold",
+      modes: [
+          { name: "Normal", mode: tgmAce, variant: "normal", accent: tetI, desc: "Gentle start, 20G by level 13" },
+          { name: "Hi-Speed 1", mode: tgmAce, variant: "hispeed1", accent: tetL, desc: "Faster start, 20G by level 8" },
+          { name: "Hi-Speed 2", mode: tgmAce, variant: "hispeed2", accent: tetO, desc: "20G from the start" },
+          { name: "Another", mode: tgmAce, variant: "another", accent: tetZ, desc: "20G, shorter delays every level, a minute each" },
+          { name: "Another 2", mode: tgmAce, variant: "another2", accent: tetJ, desc: "20G at Another's fastest delays" },
       ] },
     { name: "NES", accent: tetJ, desc: "NES (1989) — no hard drop, no hold, no kicks",
       modes: [
@@ -120,7 +131,7 @@ function touchWords(s) {
 }
 
 const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
-const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals, rule set and mode cards, tighter than the other menus
+const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals and mode cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
 // Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
 const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
@@ -867,12 +878,12 @@ class Engine {
     // Activation of menu item: the mode, with its setup cards' choices
     menuAction() {
         const { mode, variant, setup = [] } = this.chosenMode();
-        const args = { variant, startLevel: 0, height: 0 };
+        const args = { mode, variant, startLevel: 0, height: 0 };
         setup.forEach((item, n) => {
             const i = this.setupIndex(n);
             args[item.arg] = item.values ? item.values[i] : i;
         });
-        this.initGame(mode, args.variant, args.startLevel, args.height);
+        this.initGame(args.mode, args.variant, args.startLevel, args.height);
         this.GAMESTATE = STATE_GAME;
     }
 
@@ -1449,11 +1460,15 @@ class Engine {
                 this.drawMenuList(this.mainItems(), this.mainpos, listTop);
                 hint = "ENTER  SELECT" + (this.game ? "      ESC  RESUME" : "");
                 break;
-            case MENU_RULES:
-                heading("START  ·  CHOOSE A RULE SET");
-                this.drawMenuList(RULESETS, this.rulesetpos, listTop, VISUALS_ROWS.rowH, VISUALS_ROWS.gap); // so they all fit
+            case MENU_RULES: {
+                // the longest list: tighter cards, from a little higher up, the hint under them
+                const top = listTop - 20, rowH = 44, gap = 4;
+                heading("START  ·  CHOOSE A RULE SET", INK_DIM, top - 26);
+                this.drawMenuList(RULESETS, this.rulesetpos, top, rowH, gap);
+                hintY = top + menuListHeight(RULESETS, rowH, gap) + 22;
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
+            }
             case MENU_MODES: {
                 // Breadcrumb: the chosen rule set, then its modes
                 const ruleset = RULESETS[this.rulesetpos];
@@ -1687,7 +1702,7 @@ class Engine {
         for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL, this.boardY, 1, this.boardH, grid);
         for (let row = 1; row < HEIGHT - this.wellTop; row++) r.rect(BOARD_X, this.boardY + row * CELL, BOARD_W, 1, grid);
 
-        const cells = game.pieceCells[game.getCurPiece_type()][game.getCurPiece_rotation()];
+        const cells = game.curCells[game.getCurPiece_type()][game.getCurPiece_rotation()]; // big in Shirase's roll
         const pal = game.palette; // piece type -> colour
         const color = pal[game.getCurPiece_type()];
         // Also show the two rows above the well, where pieces spawn (not for GB: they spawn inside)

@@ -9,10 +9,19 @@ people's work went into the repository beyond facts and specifications.
 <https://github.com/nullpomino/nullpomino>
 
 No NullpoMino code is copied. Numeric values and behaviours were taken from its mode
-files and re-implemented in `game/rules.js`: the TGM3 kick order (`ClassicPlusWallkick.java`),
-staff roll and 15-minute timings and delay rows (`GradeMania3Mode.java`), and TAP roll length
-and M-roll section rules (`GradeMania2Mode.java`). As a courtesy, and because its tables
-informed ours, its licence is reproduced:
+files and re-implemented in `game/rules.js`:
+
+- the TGM3 kick order (`ClassicPlusWallkick.java`);
+- staff roll and 15-minute timings and delay rows (`GradeMania3Mode.java`);
+- TAP roll length and M-roll section rules (`GradeMania2Mode.java`);
+- TGM1's GM checkpoints and staff roll length (`GradeManiaMode.java`);
+- the Guideline dig mode's garbage (`DigRaceMode.java`);
+- TGM3 Shirase's staff roll length and big pieces (`SpeedMania2Mode.java`);
+- TAP TGM+'s 24-row garbage pattern (transcribed as a table) and staff roll length
+  (`GarbageManiaMode.java`);
+- the ACE modes' gravity, delay and time limit tables (`TimeAttackMode.java`).
+
+As a courtesy, and because its tables informed ours, its licence is reproduced:
 
 ```
 BSD 3-Clause License
@@ -50,8 +59,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 <https://github.com/raincomplex/randomizers>
 
-Only the piece sequences from its tests are used, as test vectors in `test/rules.test.js`
-(TAP reference sequence, TGM3 attract-mode sequence). No code is included.
+Only piece sequences are used, as test vectors in `test/rules.test.js`: the TAP reference
+sequence and TGM3 attract-mode sequence from its tests, and a TGM1 sequence produced by
+running the algorithm of its `randos/tgm.py`. No code is included.
+
+## TGM3 Easy mode fireworks analysis
+
+<https://docs.google.com/document/d/11J4BAxrkzxI5VYa1dt7oLuWEhI0yhv8OnNpgfbdKS7U>
+(community document "TGM3 Easy mode hanabi", linked from the Korean namu.wiki article on TGM3)
+
+The fireworks rules in `game/rules.js` (base values, combo and bonus multipliers, streams,
+the staff roll's free fireworks) are re-implemented from its description. None of its text
+is included.
+
+## NES Tetris analysis
+
+<https://meatfighter.com/nintendotetrisai/> ("Applying Artificial Intelligence to Nintendo
+Tetris") described the NES orientation table, soft drop, randomizer and level progression
+that `game/rules.js` re-implements. None of its code or text is included.
 
 ## Fonts
 
@@ -60,6 +85,8 @@ bundled in this repository.
 
 ## Trademarks
 
-Tetris is a trademark of The Tetris Company. Game Boy and Nintendo are trademarks of Nintendo.
-"Tetris The Grand Master" and "TAP" are the work of Arika. Quadbricks is not affiliated with or
-endorsed by any of them; the names appear only to identify the rule sets being reproduced.
+Tetris is a trademark of The Tetris Company. Game Boy, NES and Nintendo are trademarks of
+Nintendo. The "Tetris The Grand Master" games (including TAP, Terror-Instinct and Ace) are the
+work of Arika; Tetris Effect is the work of Enhance and Monstars. Quadbricks is not affiliated
+with or endorsed by any of them; the names appear only to identify the rule sets being
+reproduced and the sources they were reproduced from.

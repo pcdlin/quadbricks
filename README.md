@@ -46,18 +46,27 @@ are listed as assumptions in `AGENTS.md`.
 - **Tetris Guideline and general mechanics** (tetris.wiki): *Tetris Guideline*,
   *Super Rotation System*, *Marathon*, *Scoring*, *T-Spin*, *Heboris Unofficial
   Expansion* (rule comparison table), *List of TGM series bugs*.
-- **TGM3** (tetris.wiki): *Tetris The Grand Master 3 Terror-Instinct*, *Arika
-  Rotation System*.
+- **Guideline modes** (tetris.wiki): *Marathon* (variable goal), *Tetris Effect*
+  (Master mode's delays).
+- **TGM1** (tetris.wiki): *Tetris The Grand Master*, *TGM randomizer*.
+- **TGM3** (tetris.wiki): *Tetris The Grand Master 3 Terror-Instinct* (Master, Easy,
+  Shirase), *Arika Rotation System*; Easy's fireworks from the community document
+  linked in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 - **TGM2 Plus / TAP** (tetris.wiki): *Tetris The Absolute The Grand Master 2
   PLUS*, *Grade Recognition System*, *TGM randomizer*.
+- **ACE** (tetris.wiki): *Tetris The Grand Master Ace*.
+- **NES Tetris** (tetris.wiki and meatfighter.com): *Tetris (NES, Nintendo)*,
+  *Scoring*, "Applying Artificial Intelligence to Nintendo Tetris".
 - **Game Boy Tetris** (tetris.wiki and TASVideos): *Tetris (Game Boy)*, *Nintendo
   Rotation System*, TASVideos submission 4536 and its disassembly (randomizer).
 - **Randomizers** (test vectors only): [raincomplex/randomizers](https://github.com/raincomplex/randomizers),
-  `randos/ti.py` (TGM3) and `randos/tgm.py` (TAP, with a reference sequence).
+  `randos/ti.py` (TGM3) and `randos/tgm.py` (TGM1 and TAP).
 - **NullpoMino**: [nullpomino/nullpomino](https://github.com/nullpomino/nullpomino),
   `ClassicPlusWallkick.java` (TGM3-style ARS kick order), `GradeMania3Mode.java`
-  (staff roll and 15-minute timings) and `GradeMania2Mode.java` (TAP roll length
-  and M-roll rules).
+  (staff roll and 15-minute timings), `GradeMania2Mode.java` (TAP roll length
+  and M-roll rules), `GradeManiaMode.java` (TGM1), `DigRaceMode.java` (dig),
+  `SpeedMania2Mode.java` (Shirase), `GarbageManiaMode.java` (TGM+) and
+  `TimeAttackMode.java` (ACE).
 
 Licences and attributions for these sources are in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
