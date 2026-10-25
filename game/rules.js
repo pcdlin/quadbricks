@@ -183,6 +183,11 @@ class RuleGame {
         this.ihs = true; // hold held as the piece enters swaps it (where there is a hold)
         this.rot180 = false; // the 180° rotation key turns the piece (Guideline handling option)
         this.dropsOnSpawn = false; // a new piece drops one row at once (Guideline)
+        // a piece may shift, drop and soft drop on the frame it enters; false (TGM): that frame takes
+        // only IRS and gravity, and shifts and up pressed on it act on the next frame (deferredPush)
+        this.moveOnSpawn = true;
+        this.entering = false; // this frame is such a first frame
+        this.deferredPush = 0;
         this.moveLimit = Infinity; // lock resets per piece (onMoveReset)
         this.lockOut = false; // a piece locked entirely above the visible field ends the game
         this.bufferTop = null; // blocks locking above this row are deleted (TGM)
@@ -519,8 +524,15 @@ class RuleGame {
     // Frame
 
     advanceFrame(input) {
+        // shifts and up pressed on a piece's first frame (moveOnSpawn false), unless let go since
+        let deferred = this.deferredPush;
+        this.deferredPush = 0;
+        if (input & LEFT_RELEASE) deferred &= ~LEFT_PUSH;
+        if (input & RIGHT_RELEASE) deferred &= ~RIGHT_PUSH;
+        input |= deferred;
         const C = (a) => (input & a) === a;
         this.spawnedThisFrame = false;
+        this.entering = false;
         this.actionAge++;
 
         // Key state (pushes and releases come as one bitmap per frame)
@@ -614,7 +626,10 @@ class RuleGame {
             if (C(ROT180_PUSH) && this.rot180) this.rotate(2);
         }
 
-        if ((shiftPushed || (autoShift && !this.dcdWait)) && this.canShift()) {
+        this.entering = this.spawnedThisFrame && !this.moveOnSpawn;
+        if (this.entering) {
+            this.deferredPush = input & (LEFT_PUSH | RIGHT_PUSH | HARD_PUSH);
+        } else if ((shiftPushed || (autoShift && !this.dcdWait)) && this.canShift()) {
             // ARR 0: the auto-shift goes straight to the wall
             let steps = autoShift && this.arr === 0 ? WIDTH : 1, moved = false;
             while (steps-- > 0 && this.shift(this.shiftDir, !moved)) moved = true; // one move sound
@@ -637,7 +652,7 @@ class RuleGame {
     // Drops and locking for the active piece after rotation and shifting: up (a hard drop), then
     // gravity and the lock delay once it rests
     advanceDrop(C) {
-        if (C(HARD_PUSH) && this.upKey()) return;
+        if (C(HARD_PUSH) && !this.entering && this.upKey()) return;
         this.applyGravity();
         if (this.phase !== "active") return;
         if (!this.canFall()) {
@@ -910,8 +925,13 @@ class RuleGame {
         return this.curPieceCells().some(({ col }) => col + dir < 0 || col + dir >= WIDTH);
     }
 
+    // Soft drop held, and the piece may soft drop this frame
+    softHeld() {
+        return this.held.soft && !this.entering;
+    }
+
     applyGravity() {
-        const soft = this.held.soft;
+        const soft = this.softHeld();
         if (soft) this.softFrames++;
         this.gravityAcc += soft ? this.softGravity : this.gravity;
         while (this.gravityAcc >= 1) {

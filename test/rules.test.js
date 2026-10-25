@@ -325,6 +325,63 @@ for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 1
     check(`${name} auto-shift frames after holding left`, shifts.slice(0, expected.length), expected.slice(0, shifts.length));
 }
 
+// TGM: a piece's first frame takes only IRS and gravity (NullpoMino's Classic rules, Cambridge)
+{
+    // TAP Death (20G) with DAS charged: the piece falls in its spawn column, then shifts
+    const g = createGame(tgmTap, "death");
+    while (g.phase !== "active") g.advanceFrame(0);
+    g.advanceFrame(RIGHT_PUSH);
+    for (let f = 0; f < 20; f++) g.advanceFrame(0); // fully charged, the piece against the wall
+    while (g.phase === "active") g.advanceFrame(0);
+    clearField(g); // nothing in the way of the next piece
+    while (g.phase !== "active") g.advanceFrame(0); // the next piece enters, right still held
+    const first = [g.curPiece_col, g.dasCounter];
+    g.advanceFrame(0);
+    check("TGM first frame: a charged DAS doesn't move a 20G piece until its second frame", [first[0], g.curPiece_col], [3, 4]);
+}
+{
+    // A tap and up pressed on the first frame act on the next one
+    const g = createGame(arika); // World rule: up is a hard drop
+    while (g.phase !== "active") g.advanceFrame(0);
+    g.hardDrop();
+    while (g.phase === "are" && g.phaseCounter + 1 < g.phaseLength) g.advanceFrame(0);
+    g.advanceFrame(LEFT_PUSH); // the frame the next piece enters
+    const entered = [g.phase, g.curPiece_col];
+    g.advanceFrame(0);
+    const shifted = g.curPiece_col;
+    g.advanceFrame(LEFT_RELEASE);
+    g.hardDrop();
+    while (g.phase === "are" && g.phaseCounter + 1 < g.phaseLength) g.advanceFrame(0);
+    g.advanceFrame(LEFT_PUSH);
+    g.advanceFrame(LEFT_RELEASE); // let go at once: like the arcade, the tap is lost
+    const lost = g.curPiece_col;
+    g.hardDrop();
+    while (g.phase === "are" && g.phaseCounter + 1 < g.phaseLength) g.advanceFrame(0);
+    g.advanceFrame(HARD_PUSH);
+    const upFirst = g.phase;
+    g.advanceFrame(0);
+    check("  ...a shift pressed on the first frame moves on the next (unless let go), up hard drops on the next",
+        [entered, shifted, lost, upFirst, g.phase], [["active", 3], 2, 3, "active", "are"]);
+}
+{
+    // DAS doesn't charge on the frame a piece enters (tetris.wiki: TGM1, TAP)
+    const g = createGame(tgmTap);
+    while (g.phase !== "active") g.advanceFrame(0);
+    g.hardDrop();
+    while (g.phase === "are" && g.phaseCounter + 1 < g.phaseLength - 3) g.advanceFrame(0);
+    g.advanceFrame(RIGHT_PUSH); // pressed during ARE: it charges there
+    while (g.phase === "are" && g.phaseCounter + 1 < g.phaseLength) g.advanceFrame(0);
+    const before = g.dasCounter;
+    g.advanceFrame(0);
+    check("  ...nor does DAS charge on it", [g.phase, g.dasCounter], ["active", before]);
+    const guide = createGame(guideline);
+    while (guide.phase !== "active") guide.advanceFrame(0);
+    guide.hardDrop();
+    while (guide.phase === "are" && guide.phaseCounter + 1 < guide.phaseLength) guide.advanceFrame(0);
+    guide.advanceFrame(LEFT_PUSH);
+    check("  ...the Guideline's pieces still move on their first frame", guide.curPiece_col, 2);
+}
+
 // ---------------------------------------------------------------- Guideline handling options
 function handlingGame(handling, variant = "test") {
     const g = createGame(guideline, variant, 0, 0, handling);

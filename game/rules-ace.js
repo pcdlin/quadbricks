@@ -89,7 +89,7 @@ class AceGame extends RuleGame {
 
     // ARS2: soft drop locks on the ground
     onGround() {
-        if (this.ars2 && this.held.soft) {
+        if (this.ars2 && this.softHeld()) {
             this.manualLock = true;
             this.lock();
             return;

@@ -234,7 +234,10 @@ Pieces are 4×4 boxes; `curPiece_row/col` is the box's top-left.
 `timerStopped` is set)
 A lock delay of N frames counts the landing frame as the first and locks on the frame after the
 Nth (the piece rests in view for N frames, as in NullpoMino and Cambridge).
-DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
+DAS charges in every phase (TGM: not on the frame a piece enters). In the TGM series a piece's first
+frame takes only IRS and gravity (`moveOnSpawn` false, as NullpoMino's Classic rules and Cambridge):
+shifts and up pressed on it act on the next frame if still held (`deferredPush`), and soft drop waits
+too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
 
 ### Rendering (`engine.js`, `renderer.js`, `backdrop.js`, `tiles.js`)
 - Everything on screen is drawn with WebGL (1) into one canvas, `#screen`; there is no 2D

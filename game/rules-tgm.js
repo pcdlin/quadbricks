@@ -308,6 +308,7 @@ class TgmGame extends RuleGame {
         super(mode, variant);
         this.tgm = true;
         this.dasInclusive = true; // the delay tables are tetris.wiki's, with DAS counted inclusively
+        this.moveOnSpawn = false; // a piece's first frame takes only IRS and gravity (NullpoMino, Cambridge)
         this.level = 0;
         this.combo = 1; // TGM's combo: a score multiplier
         this.bufferTop = TGM_BUFFER_TOP;
@@ -448,6 +449,18 @@ class TgmGame extends RuleGame {
         if (this.internalGrading && !this.roll) this.decayGrade();
     }
 
+    // DAS doesn't charge on the frame a piece enters (tetris.wiki: TGM1, TAP)
+    dasCharges() {
+        return !this.entersThisFrame();
+    }
+
+    // A piece will enter in this frame (asked before the frame advances the phase)
+    entersThisFrame() {
+        if (this.phase === "ready") return this.startdelayCounter + 1 > this.startdelayMax;
+        if (this.phase === "are" || this.phase === "rollstart") return this.phaseCounter + 1 >= this.phaseLength;
+        return false;
+    }
+
     spawnPosition() {
         return [this.ars ? ARS_SPAWN_ROW : TGM_SPAWN_ROW, 3];
     }
@@ -477,8 +490,8 @@ class TgmGame extends RuleGame {
     // Classic: soft drop locks on the ground, and so does a piece whose lock delay was zeroed by
     // rotating after a floor kick
     onGround() {
-        if (this.ars && (this.held.soft || this.lockDelayZeroed)) {
-            this.manualLock = this.held.soft;
+        if (this.ars && (this.softHeld() || this.lockDelayZeroed)) {
+            this.manualLock = this.softHeld();
             this.lock();
             return;
         }
