@@ -2292,6 +2292,21 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
     check("ACE: a 7-bag, the first piece never S, Z or O", [bags, firsts.has(tetS), firsts.has(tetZ), firsts.has(tetO), firsts.size], [true, false, false, false, 4]);
 }
 
+{
+    // ACE: a piece whose entry rows are taken enters up to two rows higher instead of topping out
+    const entering = (mode, filledRows) => {
+        const g = createGame(mode, "normal");
+        while (g.phase !== "active") g.advanceFrame(0);
+        g.hardDrop();
+        clearField(g);
+        for (const r of filledRows) for (let c = 0; c < WIDTH; c++) if (c !== 9) g.setCell(r, c, 1);
+        while (g.phase === "are") g.advanceFrame(0);
+        return [g.isGameOver(), g.isGameOver() || g.curPieceCells().every(c => c.row < 2)];
+    };
+    check("ACE: a blocked entry moves the piece up (to rows 21-22 at most), then it is a block out",
+        [entering(aceArs, [2, 3]), entering(aceArs, [0, 1, 2, 3]), entering(tgmAce, [2, 3])], [[false, true], [true, true], [false, true]]);
+}
+
 // ---------------------------------------------------------------- Guideline Sprint, Ultra and Marathon options
 {
     const stats = (variant, start = 0) => createGame(guideline, variant, start).getStats();

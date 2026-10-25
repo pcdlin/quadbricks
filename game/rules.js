@@ -186,6 +186,7 @@ class RuleGame {
         // a piece may shift, drop and soft drop on the frame it enters; false (TGM): that frame takes
         // only IRS and gravity, and shifts and up pressed on it act on the next frame (deferredPush)
         this.moveOnSpawn = true;
+        this.spawnRise = 0; // rows a piece whose entry is blocked may enter higher instead (ACE: 2)
         this.entering = false; // this frame is such a first frame
         this.deferredPush = 0;
         this.moveLimit = Infinity; // lock resets per piece (onMoveReset)
@@ -755,6 +756,10 @@ class RuleGame {
         this.lockDelayZeroed = false;
         this.onNewPiece();
 
+        const step = this.big ? 2 : 1;
+        for (let up = 0; up < this.spawnRise && !this.movePossible(this.curPiece_row, this.curPiece_col, this.curPiece_rotation); up++) {
+            this.curPiece_row -= step;
+        }
         if (!this.movePossible(this.curPiece_row, this.curPiece_col, this.curPiece_rotation)) {
             this.onBlockOut();
             return;

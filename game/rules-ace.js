@@ -37,6 +37,8 @@ class AceGame extends RuleGame {
         this.iKicks = KICKS_I_ARIKA;
         this.moveLimit = ACE_MOVE_RESETS;
         this.lockOut = true;
+        // a blocked entry moves the piece up, as far as rows 21-22, before it is a block out (tetris.wiki)
+        this.spawnRise = 2;
         this.bagNoSzoFirst = true; // a 7-bag that never starts with S, Z or O (tetris.wiki: TGM randomizer)
         this.ars2 = mode === aceArs2;
         if (mode !== tgmAce) {

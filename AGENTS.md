@@ -516,7 +516,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 - Sources: tetris.wiki *Tetris The Grand Master Ace*; NullpoMino `TimeAttackMode.java` (tables).
 - Hold with IHS, three next pieces, a 7-bag that never deals S, Z or O first (`bagNoSzoFirst`; tetris.wiki
   *TGM randomizer*), ghost (hidden at 20G), lock resets up to 128
-  per piece (`ACE_MOVE_RESETS`, move reset with every rule), no score. Rules (the mode id, the Rule card):
+  per piece (`ACE_MOVE_RESETS`, move reset with every rule), no score. A piece whose entry is blocked
+  enters up to two rows higher, to rows 21-22, before it is a block out (`spawnRise`). Rules (the mode id, the Rule card):
   - SRS (`tgmAce`): Arika SRS (TGM3 World's kicks), hard drop, soft drop 1G.
   - ARS (`aceArs`): TGM3's ARS shapes and kicks (`useArs(false, DEFAULT_PALETTE)`: standard colours)
     with no floor kick limit, no zeroed lock delay after floor kicks, spawn in rows 19-20; up is a hard
