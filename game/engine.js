@@ -923,11 +923,12 @@ class Engine {
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
             [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: MENU_MODES },
         };
-        const settings = this.menuStep === MENU_SETUP ? this.setupItems() : SETTING_ITEMS[this.menuStep];
         while (this.events.length) {
             // repeat: the key is held. Lists and values then stop at their ends instead of wrapping
             const { code, down, repeat } = this.events.shift();
             if (!down) continue;
+            // per event: an earlier key this frame may have changed the screen
+            const settings = this.menuStep === MENU_SETUP ? this.setupItems() : SETTING_ITEMS[this.menuStep];
             const screen = screens[this.menuStep];
             const pos = this[screen.pos];
             const count = screen.count();
