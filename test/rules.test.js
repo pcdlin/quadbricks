@@ -956,6 +956,23 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
     check("COOL: 61 s for 100-170 (limit 52 s) earns none", g.coolPending, false);
 }
 {
+    // Judged at *70, shown at *82 (NullpoMino; tetris.wiki: displayed "around *80")
+    const g = started(arika);
+    const cools = () => g.actions.filter(a => a.text === "COOL!!").length;
+    g.frames = 50 * 60;
+    g.level = 70; g.updateSection();
+    const at70 = [g.coolPending, cools()];
+    g.level = 81; g.updateSection();
+    const at81 = cools();
+    g.level = 85; g.updateSection();
+    const at85 = cools();
+    g.level = 86; g.updateSection();
+    check("COOL: earned at *70 but not shown until *82, then shown once", [at70, at81, at85, cools()], [[true, 0], 0, 1, 1]);
+    g.actions = []; g.level = 100; g.frames = 60 * 60; g.updateSection();
+    g.frames += 60 * 60; g.level = 182; g.updateSection();
+    check("COOL: no message in a section without one", [g.coolPending, cools()], [false, 0]);
+}
+{
     // The 2 s rule compares with the previous section only if that one earned a COOL (NullpoMino)
     const g = started(arika);
     const at = (level, seconds) => { g.level = level; g.frames = g.sectionStart + seconds * 60; g.updateSection(); };

@@ -116,6 +116,8 @@ const TGM_COOL_TIME = [52, 52, 49, 45, 45, 42, 42, 38, 38];
 const TGM_REGRET_TIME = [90, 75, 75, 68, 60, 60, 50, 50, 50, 50];
 const TGM_COOL_SLACK = 2; // after a COOL section, the next may reach *70 at most this much slower
 const TGM_COOL_SPEEDUP = 100; // a COOL moves the speed level 100 ahead once its section is finished
+// A COOL is judged at *70 but its message waits until *82 (NullpoMino; tetris.wiki: "around *80")
+const TGM_COOL_SHOWN = 82;
 
 // ----------------------------------------------------------
 // The secret grade (TGM1, TAP Master and Death, TGM3 Master and Shirase): the ">" pattern built from
@@ -332,6 +334,7 @@ class TgmGame extends RuleGame {
         this.cools = 0; // COOLs from finished sections
         this.coolPending = false; // COOL earned in the current section
         this.coolChecked = false; // this section's *70 mark has been judged
+        this.coolShown = false; // this section's COOL!! has been shown (at *82)
         this.prevCool = false; // the previous section earned a COOL
         this.prevCoolTime = 0; // seconds the previous section took to reach *70
         this.speedBonus = 0; // speed levels added by COOLs
@@ -1234,9 +1237,12 @@ class TiGame extends TgmGame {
             if (seconds <= TGM_COOL_TIME[this.section]
                 && (!this.prevCool || seconds <= this.prevCoolTime + TGM_COOL_SLACK)) {
                 this.coolPending = true;
-                this.addAction("COOL!!", "grade");
             }
             this.prevCoolTime = seconds;
+        }
+        if (this.coolPending && !this.coolShown && this.level % 100 >= TGM_COOL_SHOWN) {
+            this.coolShown = true;
+            this.addAction("COOL!!", "grade");
         }
         if (finished) {
             if (this.coolPending) {
@@ -1258,6 +1264,7 @@ class TiGame extends TgmGame {
             this.sectionStart = this.frames;
             this.coolPending = false;
             this.coolChecked = false;
+            this.coolShown = false;
         }
     }
 
