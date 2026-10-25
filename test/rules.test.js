@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, GB_GRAVITY, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -2348,6 +2348,46 @@ function secretAt(g, rows, cover = true) {
     demoted.endGame("GAME OVER", "");
     check("  ...the banner reports the exam", [g.endNotes(), passed.endNotes(), demoted.endNotes()],
         [["EXAM FAILED — S1 NOT REACHED"], ["EXAM PASSED — QUALIFIED 9"], ["DEMOTED TO S3"]]);
+}
+
+// ---------------------------------------------------------------- Guideline: 180° rotation, previews, hold, IRS, IHS
+{
+    const off = handlingGame({});
+    place(off, tetT, 0, 5, 3);
+    off.advanceFrame(ROT180_PUSH);
+    const on = handlingGame({ rot180: true });
+    place(on, tetT, 0, 5, 3);
+    on.advanceFrame(ROT180_PUSH);
+    check("180° rotation: off by default; on, the key turns the piece half round", [off.curPiece_rotation, on.curPiece_rotation], [0, 2]);
+    const kick = handlingGame({ rot180: true });
+    place(kick, tetT, 0, 5, 3);
+    kick.setCell(7, 4, 1); // where the turned T's point would go
+    kick.advanceFrame(ROT180_PUSH);
+    check("  ...blocked in place it kicks (SRS+ 0->2: one left first); no SRS T-spin upgrade from it",
+        [kick.curPiece_rotation, kick.curPiece_col, kick.lastKick], [2, 2, -1]);
+    const irs = handlingGame({ rot180: true }), noIrs = handlingGame({ rot180: true, irs: false });
+    for (const g of [irs, noIrs]) { g.held.rot180 = true; g.spawn(tetT, false); }
+    check("  ...held as a piece enters it turns it (IRS), unless IRS is off", [irs.curPiece_rotation, noIrs.curPiece_rotation], [2, 0]);
+    const tgm = started(arika);
+    tgm.held.rot180 = true; tgm.spawn(tetT, false);
+    const r0 = tgm.curPiece_rotation;
+    tgm.advanceFrame(ROT180_PUSH);
+    check("  ...the other rule sets ignore the key", [r0, tgm.curPiece_rotation], [0, 0]);
+}
+{
+    const none = handlingGame({ previews: 0 }), three = handlingGame({ previews: 3 });
+    check("Guideline previews: 0-6 next pieces (6 by default), a piece always queued",
+        [handlingGame({}).nextCount, three.nextCount, none.nextCount, none.queue.length >= 1], [6, 3, 0, true]);
+    const g = handlingGame({ holdPiece: false });
+    const type = g.curPiece_type;
+    g.advanceFrame(HOLD_PUSH);
+    check("  ...hold off: no hold, the key does nothing", [g.hasHold, g.curPiece_type, g.getHeldPiece()], [false, type, 0]);
+    const ihs = handlingGame({}), noIhs = handlingGame({ ihs: false });
+    for (const h of [ihs, noIhs]) { h.held.hold = true; h.spawn(tetT, false); }
+    check("  ...IHS: hold held as a piece enters swaps it, unless IHS is off", [ihs.getHeldPiece(), noIhs.getHeldPiece(), noIhs.curPiece_type], [tetT, 0, tetT]);
+    const paused = handlingGame({});
+    paused.setHandling({ holdPiece: false, previews: 1 });
+    check("  ...changed during a game they apply at once", [paused.hasHold, paused.canHold, paused.nextCount], [false, false, 1]);
 }
 
 // ---------------------------------------------------------------- GB heart mode

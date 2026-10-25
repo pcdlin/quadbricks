@@ -45,8 +45,11 @@ const GUIDELINE_SOFT_FACTOR = 20; // soft drop = 20x gravity
 // Player handling for the Guideline (Options → Guideline), the recommended values by default.
 // das, arr: frames (arr 0 shifts straight to the wall); sdf: soft drop factor (Infinity: 20G);
 // dcd: frames a charged auto-shift pauses after a rotation or a new piece; ghost: ghost piece shown;
-// dropGuard: hard drops in a piece's first GUIDELINE_DROP_GUARD frames are ignored
-const GUIDELINE_HANDLING = { das: GUIDELINE_DAS, arr: GUIDELINE_ARR, sdf: GUIDELINE_SOFT_FACTOR, dcd: 0, ghost: true, dropGuard: false };
+// dropGuard: hard drops in a piece's first GUIDELINE_DROP_GUARD frames are ignored; previews: next
+// pieces shown (0-6); holdPiece: the hold; irs, ihs: rotation and hold held as a piece enters apply
+// to it; rot180: the 180° rotation key works (KICKS_180; the Guideline itself has none)
+const GUIDELINE_HANDLING = { das: GUIDELINE_DAS, arr: GUIDELINE_ARR, sdf: GUIDELINE_SOFT_FACTOR, dcd: 0, ghost: true, dropGuard: false,
+    previews: GUIDELINE_NEXT, holdPiece: true, irs: true, ihs: true, rot180: false };
 const GUIDELINE_DROP_GUARD = 8;
 
 class GuidelineGame extends RuleGame {
@@ -63,7 +66,7 @@ class GuidelineGame extends RuleGame {
         this.level = 1 + this.startLevel;
         this.height = this.dig ? clamp(height, 0, GUIDELINE_DIG_ROWS.length - 1) : 0;
         this.goalPoints = 0; // variable goal: points towards the current level's goal
-        this.nextCount = GUIDELINE_NEXT;
+        this.applyPieceHandling();
         this.moveLimit = GUIDELINE_MOVE_LIMIT;
         this.lockOut = true;
         this.dropsOnSpawn = true; // spawn in rows 21-22, then one row down at once
@@ -140,8 +143,22 @@ class GuidelineGame extends RuleGame {
     // Handling changed in the menu during a game applies at once
     setHandling(handling) {
         this.handling = { ...GUIDELINE_HANDLING, ...handling };
+        this.applyPieceHandling();
+        this.fillQueue();
         this.updateTimings();
         this.setShadow();
+    }
+
+    // The handling options that aren't timing: previews, hold, IRS, IHS, 180° rotation (a hold turned
+    // off keeps the piece it holds out of play)
+    applyPieceHandling() {
+        const h = this.handling;
+        this.nextCount = clamp(h.previews, 0, GUIDELINE_NEXT);
+        this.hasHold = h.holdPiece;
+        if (!this.hasHold) this.canHold = false;
+        this.irs = h.irs;
+        this.ihs = h.ihs;
+        this.rot180 = h.rot180;
     }
 
     ghostVisible() {

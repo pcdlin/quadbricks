@@ -70,6 +70,17 @@ const KICKS_I_GUIDELINE = {
     "L->0": [[+1, 0], [-2, 0], [+1, -2], [-2, +1]], "0->L": [[-1, 0], [+2, 0], [-1, +2], [+2, -1]],
 };
 
+// 180° rotation (not in the Guideline; offered as a handling option): Techmino's "SRS+" basic 180
+// kicks, tests 2-5 (x right, y up), the I's mostly the same
+const KICKS_180 = {
+    "0->2": [[-1, 0], [+1, 0], [0, -1], [0, +1]], "2->0": [[+1, 0], [-1, 0], [0, -1], [0, +1]],
+    "R->L": [[0, -1], [-1, 0], [+1, 0], [0, +1]], "L->R": [[0, -1], [-1, 0], [+1, 0], [0, +1]],
+};
+const KICKS_180_I = {
+    ...KICKS_180,
+    "2->0": [[+1, 0], [-1, 0], [0, +1], [0, -1]], "L->R": [[0, -1], [+1, 0], [-1, 0], [0, +1]],
+};
+
 // Arika SRS (TGM3 World rule / ACE): modified I kicks, same JLSTZ data
 const KICKS_I_ARIKA = {
     "0->R": [[-2, 0], [+1, 0], [+1, +2], [-2, -1]], "R->0": [[+2, 0], [-1, 0], [+2, +1], [-1, -2]],
@@ -169,6 +180,8 @@ class RuleGame {
         this.floorKickZeroes = true; // rotating again after a floor kick zeroes the lock delay (TGM3)
         this.sonicTrail = false; // the sonic drop leaves a drop trail (TAP Master)
         this.irs = true; // a rotation held as the piece enters turns it
+        this.ihs = true; // hold held as the piece enters swaps it (where there is a hold)
+        this.rot180 = false; // the 180° rotation key turns the piece (Guideline handling option)
         this.dropsOnSpawn = false; // a new piece drops one row at once (Guideline)
         this.moveLimit = Infinity; // lock resets per piece (onMoveReset)
         this.lockOut = false; // a piece locked entirely above the visible field ends the game
@@ -199,7 +212,7 @@ class RuleGame {
         this.pendingRows = [];
 
         // Input state
-        this.held = { left: false, right: false, soft: false, rotl: false, rotr: false, hold: false };
+        this.held = { left: false, right: false, soft: false, rotl: false, rotr: false, rot180: false, hold: false };
         this.shiftDir = 0;
         this.dasCounter = 0;
         this.arrCounter = 0;
@@ -511,12 +524,14 @@ class RuleGame {
         if (C(SOFT_RELEASE)) this.held.soft = false;
         if (C(ROTL_RELEASE)) this.held.rotl = false;
         if (C(ROTR_RELEASE)) this.held.rotr = false;
+        if (C(ROT180_RELEASE)) this.held.rot180 = false;
         if (C(HOLD_RELEASE)) this.held.hold = false;
         if (C(LEFT_RELEASE)) { this.held.left = false; if (this.shiftDir === -1) this.restartShift(this.held.right ? 1 : 0); }
         if (C(RIGHT_RELEASE)) { this.held.right = false; if (this.shiftDir === 1) this.restartShift(this.held.left ? -1 : 0); }
         if (C(SOFT_PUSH)) this.held.soft = true;
         if (C(ROTL_PUSH)) this.held.rotl = true;
         if (C(ROTR_PUSH)) this.held.rotr = true;
+        if (C(ROT180_PUSH)) this.held.rot180 = true;
         if (C(HOLD_PUSH)) this.held.hold = true;
         let shiftPushed = false;
         if (C(LEFT_PUSH)) { this.held.left = true; this.restartShift(-1); shiftPushed = true; }
@@ -591,6 +606,7 @@ class RuleGame {
         if (!this.spawnedThisFrame) { // IRS already handled rotations held at spawn
             if (C(ROTL_PUSH)) this.rotate(-1);
             if (C(ROTR_PUSH)) this.rotate(1);
+            if (C(ROT180_PUSH) && this.rot180) this.rotate(2);
         }
 
         if ((shiftPushed || (autoShift && !this.dcdWait)) && this.canShift()) {
@@ -672,7 +688,7 @@ class RuleGame {
         this.beforeSpawn(newPiece);
 
         // IHS: hold button held while the piece enters
-        if (!fromHold && this.hasHold && this.held.hold) {
+        if (!fromHold && this.hasHold && this.ihs && this.held.hold) {
             if (this.heldpiece === 0) {
                 this.heldpiece = type;
                 type = this.nextFromQueue();
@@ -687,7 +703,7 @@ class RuleGame {
         this.curPiece_rotation = 0;
 
         // IRS: rotation button held while the piece enters; falls back if blocked
-        const irs = !this.irs ? 0 : this.held.rotr ? 1 : this.held.rotl ? 3 : 0;
+        const irs = !this.irs ? 0 : this.held.rotr ? 1 : this.held.rotl ? 3 : this.rot180 && this.held.rot180 ? 2 : 0;
         if (irs && type !== tetO && this.movePossible(this.curPiece_row, this.curPiece_col, irs)) {
             this.curPiece_rotation = irs;
         }
@@ -771,8 +787,8 @@ class RuleGame {
         }
     }
 
-    // SRS rotation: the kick tests in order (iKicks for the I), twice as far for big pieces; ARS
-    // rules rotate with rotateArs
+    // SRS rotation: the kick tests in order (iKicks for the I), twice as far for big pieces; dir 2:
+    // a 180° turn (KICKS_180); ARS rules rotate with rotateArs
     rotate(dir) {
         if (this.ars) return this.rotateArs(dir);
         const type = this.curPiece_type;
@@ -780,7 +796,7 @@ class RuleGame {
         const from = this.curPiece_rotation;
         const to = (from + dir + 4) % 4;
         const key = STATE_KEYS[from] + "->" + STATE_KEYS[to];
-        const table = type === tetI ? this.iKicks : KICKS_JLSTZ;
+        const table = dir === 2 ? (type === tetI ? KICKS_180_I : KICKS_180) : type === tetI ? this.iKicks : KICKS_JLSTZ;
         const tests = [[0, 0], ...table[key]];
         const size = this.big ? 2 : 1;
         for (let k = 0; k < tests.length; k++) {
@@ -790,7 +806,7 @@ class RuleGame {
                 this.curPiece_row = row;
                 this.curPiece_col = col;
                 this.curPiece_rotation = to;
-                this.lastKick = k;
+                this.lastKick = dir === 2 ? -1 : k; // the T-spin upgrade is for SRS's 1-by-2 kick only
                 if (row > this.lowestRow) this.onFall(); // kicked below the lowest row
                 this.lastRotation = true; // after onFall, which clears it
                 this.onMoveReset(true);

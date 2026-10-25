@@ -46,7 +46,7 @@ when WebGL is unavailable).
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for the rule sets (~395 checks). |
+| `test/rules.test.js` | Spec checks for the rule sets (~425 checks). |
 
 ## History in one paragraph
 
@@ -119,7 +119,9 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   case in `optionValue()` (the card's value text). `changeOption()` needs a case only for side effects.
 - Guideline handling (`HANDLING_ITEMS`, applies to the Guideline modes only): DAS 1–20 F, ARR 0–5 F
   (0 shown as Instant), SDF 5×/10×/20×/40×/Instant (`SDF_STEPS`), DCD 0–20 F (0 = Off), ghost piece,
-  hard drop guard, then a "Reset to defaults" card (`action: true`: Enter resets via
+  hard drop guard, next pieces 0–6 (`previews`; 0 hides the NEXT box), hold (`holdPiece`), IRS, IHS and
+  180° rotation (`rot180`, off by default: the "Rotate 180°" key, `ROT180_PUSH`, does nothing without it;
+  Techmino's SRS+ 180 kicks, `KICKS_180`), then a "Reset to defaults" card (`action: true`: Enter resets via
   `options.resetHandling()`, ← → do nothing, the card shows its own `desc`). Frame values are shown with milliseconds (`frameValue()`). Each item has `help`:
   the abbreviation spelled out and one line on what it does, drawn under the compact card list for
   the selected item. `options.handling` goes to `RuleGame` in `initGame()`; changes made while a
@@ -226,7 +228,7 @@ Pieces are 4×4 boxes; `curPiece_row/col` is the box's top-left.
 **Phases:** `ready` (countdown 3, 2, 1, `COUNTDOWN_STEP_FRAMES` = 30 each; frame 91 is the first to take input) → `active` → `are` / `lineclear` → `active` … (TGM3 and TAP at
 999, TAP Death at a late 500: `lineclear` → `rollstart` → `active` in the roll; it starts once
 `timerStopped` is set)
-DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn.
+DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
 
 ### Rendering (`engine.js`, `renderer.js`, `backdrop.js`, `tiles.js`)
 - Everything on screen is drawn with WebGL (1) into one canvas, `#screen`; there is no 2D
@@ -698,7 +700,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, hold, sound} (lists of key codes; a plain string from older versions is read as one key), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; a plain string from older versions is read as one key; an action missing from saved keys gets its default, or a `SPARE_KEYS` key, that no other action uses), tileset, effects, backdrop, rings, tilt, shake, trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
   qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).

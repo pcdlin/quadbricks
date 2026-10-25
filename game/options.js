@@ -15,6 +15,7 @@ const KEY_ACTIONS = [
     { id: "hard", name: "Hard drop" },
     { id: "rotl", name: "Rotate left" },
     { id: "rotr", name: "Rotate right" },
+    { id: "rot180", name: "Rotate 180°" }, // only with the Guideline's 180° rotation option on
     { id: "hold", name: "Hold" },
     { id: "sound", name: "Sound on/off" },
 ];
@@ -22,8 +23,10 @@ const KEY_ACTIONS = [
 // Each action takes up to MAX_KEYS_PER_ACTION keys (lists of KeyboardEvent.code), at least one
 const DEFAULT_KEYS = {
     left: ["ArrowLeft"], right: ["ArrowRight"], soft: ["ArrowDown"], hard: ["ArrowUp"],
-    rotl: ["KeyZ"], rotr: ["KeyX"], hold: ["Space"], sound: ["KeyM"],
+    rotl: ["KeyZ"], rotr: ["KeyX"], rot180: ["KeyA"], hold: ["Space"], sound: ["KeyM"],
 };
+// Keys for an action saved settings don't have yet (one added since) when its default is taken
+const SPARE_KEYS = ["KeyA", "KeyS", "KeyC", "KeyQ", "KeyW", "KeyD"];
 const MAX_KEYS_PER_ACTION = 2;
 const defaultKeys = () => Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([id, codes]) => [id, [...codes]]));
 
@@ -83,7 +86,7 @@ const RING_MODE_IDS = RING_MODES.map(m => m.id);
 // Frames for DAS, ARR and DCD; soft drop factors (Infinity: instant)
 const frameRange = (min, max) => Array.from({ length: max - min + 1 }, (_, i) => min + i);
 const SDF_STEPS = [5, 10, 20, 40, Infinity];
-const HANDLING_IDS = ["das", "arr", "sdf", "dcd", "ghost", "dropGuard"];
+const HANDLING_IDS = ["das", "arr", "sdf", "dcd", "ghost", "dropGuard", "previews", "holdPiece", "irs", "ihs", "rot180"];
 
 // Settings stepped through a list of values (Options → Visuals and Guideline), and on/off settings
 const OPTION_CHOICES = {
@@ -96,8 +99,9 @@ const OPTION_CHOICES = {
     arr: frameRange(0, 5),
     dcd: frameRange(0, 20),
     sdf: SDF_STEPS,
+    previews: frameRange(0, GUIDELINE_NEXT),
 };
-const OPTION_TOGGLES = ["backdrop", "shake", "trail", "border", "ghost", "dropGuard"];
+const OPTION_TOGGLES = ["backdrop", "shake", "trail", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
 
 // Index i stepped by dir through n values: wraps around, or stops at the ends (held keys)
 function stepIndex(i, dir, n, wrap = true) {
@@ -120,12 +124,19 @@ class Options {
         try {
             const saved = JSON.parse(localStorage.getItem(OPTIONS_STORAGE_KEY) || "{}");
             if (saved.keys) {
+                const missing = [];
                 for (const { id } of KEY_ACTIONS) {
                     let codes = saved.keys[id];
                     if (typeof codes === "string") codes = [codes]; // older versions: one key per action
-                    if (!Array.isArray(codes)) continue;
+                    if (!Array.isArray(codes)) { missing.push(id); continue; }
                     codes = [...new Set(codes.filter(c => typeof c === "string" && !RESERVED_KEYS.includes(c)))];
                     if (codes.length) this.keys[id] = codes.slice(0, MAX_KEYS_PER_ACTION);
+                }
+                // an action added since: its default key, or a spare one, that no other action uses
+                for (const id of missing) {
+                    const taken = KEY_ACTIONS.filter(a => a.id !== id).flatMap(a => this.keys[a.id]);
+                    const free = [...DEFAULT_KEYS[id], ...SPARE_KEYS].find(c => !taken.includes(c));
+                    if (free) this.keys[id] = [free];
                 }
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity

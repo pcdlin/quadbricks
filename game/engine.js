@@ -16,8 +16,8 @@ const MENU_REPEAT_KEYS = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
 const TEST_KEYS = { Digit1: "roll", Digit2: "invisible", Digit3: "gm", Digit4: "rollend", Digit5: "kill" };
 
 // Input bitmap bits per bound action
-const PUSH_BITS = { left: LEFT_PUSH, right: RIGHT_PUSH, hard: HARD_PUSH, soft: SOFT_PUSH, rotl: ROTL_PUSH, rotr: ROTR_PUSH, hold: HOLD_PUSH };
-const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELEASE, rotl: ROTL_RELEASE, rotr: ROTR_RELEASE, hold: HOLD_RELEASE };
+const PUSH_BITS = { left: LEFT_PUSH, right: RIGHT_PUSH, hard: HARD_PUSH, soft: SOFT_PUSH, rotl: ROTL_PUSH, rotr: ROTR_PUSH, rot180: ROT180_PUSH, hold: HOLD_PUSH };
+const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELEASE, rotl: ROTL_RELEASE, rotr: ROTR_RELEASE, rot180: ROT180_RELEASE, hold: HOLD_RELEASE };
 
 // Menu screens
 const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7;
@@ -135,9 +135,14 @@ const HANDLING_ITEMS = [
     { id: "dcd", name: "DCD", accent: tetZ, help: ["DAS Cut Delay", "Pauses sliding briefly after a rotation or a new piece"] },
     { id: "ghost", name: "Ghost piece", accent: tetJ, help: ["Ghost piece", "Shows where the falling piece will land"] },
     { id: "dropGuard", name: "Drop guard", accent: tetO, help: ["Hard drop guard", "Ignores hard drops in a new piece's first 8 frames"] },
+    { id: "previews", name: "Next pieces", accent: tetI, help: ["Next pieces", "How many of the coming pieces are shown, up to six"] },
+    { id: "holdPiece", name: "Hold", accent: tetT, help: ["Hold", "Lets you keep a piece aside and swap it in later"] },
+    { id: "irs", name: "IRS", accent: tetS, help: ["Initial Rotation System", "A rotation held as a piece enters turns it at once"] },
+    { id: "ihs", name: "IHS", accent: tetZ, help: ["Initial Hold System", "Hold held as a piece enters swaps it at once"] },
+    { id: "rot180", name: "180° rotation", accent: tetJ, help: ["180° rotation", "Turns the piece half round with its own key (see Controls)"] },
     // action: Enter does it, ← → do nothing; the card shows desc instead of a value
     { id: "resetHandling", name: "Reset to defaults", accent: tetL, action: true, desc: "Press Enter to restore every setting above",
-      help: ["Reset to defaults", "DAS 10 F, ARR 2 F, SDF 20×, DCD off, ghost on, drop guard off"] },
+      help: ["Reset to defaults", "DAS 10 F, ARR 2 F, SDF 20×, DCD off, ghost on, guard off, 6 next, hold, IRS, IHS, no 180°"] },
 ];
 // A handling time as shown on its card: frames and milliseconds
 function frameValue(frames) {
@@ -927,6 +932,7 @@ class Engine {
             case "arr": return o.arr ? frameValue(o.arr) : "Instant";
             case "dcd": return o.dcd ? frameValue(o.dcd) : "Off";
             case "sdf": return Number.isFinite(o.sdf) ? o.sdf + "×" : "Instant";
+            case "previews": return o.previews ? String(o.previews) : "None";
         }
     }
 
@@ -2204,14 +2210,18 @@ class Engine {
         this.colorStripe(LEFT_X, this.boardY + this.boardH - 26, 70, 3);
         this.text("QUADBRICKS", LEFT_X,this.boardY + this.boardH - 6, { size: 18, weight: 900, color: INK_DIM, spacing: 5 });
 
-        // NEXT
-        this.label("NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
-        this.panel(RIGHT_X, this.boardY + 18, SIDE_W, 110);
-        this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game);
+        // NEXT (none with the Guideline's previews off)
+        if (game.nextCount > 0) {
+            this.label("NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
+            this.panel(RIGHT_X, this.boardY + 18, SIDE_W, 110);
+            this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game);
+        }
         // the rest of the rule set's preview, tighter when there are more than two
         // (none for TAP's single next piece)
         const rest = game.nextCount - 1;
-        if (rest > 0) {
+        if (game.nextCount === 0) {
+            this.drawClearMessage(this.boardY + 20);
+        } else if (rest > 0) {
             const spacing = rest > 2 ? 50 : 80, size = rest > 2 ? 16 : 18;
             const listH = rest * spacing + 10;
             this.panel(RIGHT_X, this.boardY + 140, SIDE_W, listH);
@@ -2258,9 +2268,11 @@ class Engine {
             y += 46;
         });
 
-        this.label("NEXT", rightX, top, sideW, 10, 3);
-        this.panel(rightX, top + 12, sideW, box);
-        this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game);
+        if (game.nextCount > 0) {
+            this.label("NEXT", rightX, top, sideW, 10, 3);
+            this.panel(rightX, top + 12, sideW, box);
+            this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game);
+        }
         const rest = game.nextCount - 1;
         if (rest > 0) {
             const spacing = rest > 2 ? 42 : 50, listTop = top + 12 + box + 10;

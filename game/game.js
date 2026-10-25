@@ -21,12 +21,14 @@ const SOFT_PUSH = 0x0008;
 const ROTL_PUSH = 0x0010;
 const ROTR_PUSH = 0x0020;
 const HOLD_PUSH = 0x0040;
+const ROT180_PUSH = 0x0080; // 180° rotation (Guideline handling option)
 const LEFT_RELEASE = 0x0100;
 const RIGHT_RELEASE = 0x0200;
 const SOFT_RELEASE = 0x0400;
 const ROTL_RELEASE = 0x1000;
 const ROTR_RELEASE = 0x2000;
 const HOLD_RELEASE = 0x4000;
+const ROT180_RELEASE = 0x8000;
 
 // ----------------------------------------------------------
 // PIECE INFO
