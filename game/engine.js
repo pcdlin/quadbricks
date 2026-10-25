@@ -1317,12 +1317,12 @@ class Engine {
 
     // A block lit up at strength t (0..1): the active highlight plus a soft tint of its own colour
     drawBlockFlash(index, x, y, size, t) {
-        const r = this.r;
-        r.globalAlpha = t;
+        const r = this.r, a = r.globalAlpha; // keeps an outer fade (a greyed-out held piece)
+        r.globalAlpha = t * a;
         this.drawBlock(index, x, y, size, "active");
-        r.globalAlpha = 0.4 * t * t;
+        r.globalAlpha = 0.4 * t * t * a;
         r.shape(x + size / 30, y + size / 30, size * 28 / 30, size * 28 / 30, { radius: size * 0.14, fill: this.tileLight(index) });
-        r.globalAlpha = 1;
+        r.globalAlpha = a;
     }
 
     // A soft glow around a piece's blocks in `color` (the piece drawn at `size`, its top-left
@@ -2556,6 +2556,15 @@ class Engine {
         return this.messageCache;
     }
 
+    // The held piece in the HOLD box. Once a piece has been held (the hold is spent until the
+    // next piece enters, game.canHold), it is greyed out
+    drawHeldPiece(cx, cy, size) {
+        const game = this.game, spent = !game.canHold;
+        if (spent) { this.r.save(); this.r.globalAlpha *= MENU_DIMMED_ALPHA; }
+        this.drawPieceCentered(game.getHeldPiece(), cx, cy, size, "locked", game, false, this.holdFlashAlpha());
+        if (spent) this.r.restore();
+    }
+
     drawSidePanels() {
         const game = this.game;
 
@@ -2563,7 +2572,7 @@ class Engine {
         if (game.hasHold) {
             this.label("HOLD", LEFT_X, this.boardY + 4, SIDE_W);
             this.panel(LEFT_X, this.boardY + 18, SIDE_W, 110);
-            this.drawPieceCentered(game.getHeldPiece(), LEFT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game, false, this.holdFlashAlpha());
+            this.drawHeldPiece(LEFT_X + SIDE_W / 2, this.boardY + 18 + 55, 24);
         }
 
         // STATS
@@ -2635,7 +2644,7 @@ class Engine {
         if (game.hasHold) {
             this.label("HOLD", leftX, y, sideW, 10, 3);
             this.panel(leftX, y + 12, sideW, box);
-            this.drawPieceCentered(game.getHeldPiece(), leftX + sideW / 2, y + 12 + box / 2, size, "locked", game, false, this.holdFlashAlpha());
+            this.drawHeldPiece(leftX + sideW / 2, y + 12 + box / 2, size);
             y += 12 + box + 28;
         }
         game.getStats().forEach(([name, value], n) => {
