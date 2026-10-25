@@ -284,7 +284,7 @@ const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 const TILT_MAX = [2.8, 4.8]; // playing field tilt in degrees about the x and y axes, at Normal
 const TILT_SPEED = 0.75; // pace of the tilt drift (1 = waves of 0.15-0.7 rad/s)
 const TILT_DISTANCE = 1100; // camera distance for the tilt's perspective (logical units)
-const FLY_FRAMES = 20; // frames the field takes to fly in from afar during the countdown
+const FLY_FRAMES = 12; // frames the field takes to fly in from afar during the countdown
 const FLY_DEPTH = 10000; // how far behind its place it starts (logical units; about 1/10 its size)
 const FLY_TURN = [-16, 28]; // degrees it starts turned about the x and y axes, unwinding as it comes
 const FLY_FADE = 0.2; // part of the flight over which it fades in
@@ -2156,7 +2156,6 @@ class Engine {
         else this.drawSidePanels();
 
         // Overlays
-        if (game.inStartDelay()) this.drawCountdown(game);
         if (game.isGameOver()) {
             const title = game.endTitle || "GAME OVER";
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
@@ -2262,6 +2261,7 @@ class Engine {
 
         this.drawDropFlashes();
         this.drawFlashes();
+        if (game.inStartDelay()) this.drawCountdown(game); // part of the field: flies in with it
     }
 
     // TGM-style border: a light line along every side of the settled stack that faces an empty

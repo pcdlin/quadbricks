@@ -327,6 +327,7 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
 - The version (`VERSION` in `engine.js`, "0.2") shows faintly in the top left, the FPS in the top right.
 - The READY countdown (`drawCountdown()`) shows each digit sliding in and fading out in its own
   colour (`COUNTDOWN_COLORS`); band and digit are gone on the first frame that takes input.
+  It is drawn as part of the field (end of `drawBoard()`), so it tilts and flies in with it.
   Meanwhile the field flies in from afar (`flyIn()`, `FLY_*`): it starts `FLY_DEPTH` behind its place,
   turned (`FLY_TURN`, either way, `flySide`) and faded out, and eases into place by `FLY_FRAMES`. It is
   part of `boardMotion()` (`dz`, `alpha`; drawn through `drawBoardInMotion()`), the board glow scales
