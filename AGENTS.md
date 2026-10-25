@@ -398,8 +398,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (ARE, line ARE, DAS, lock, line clear by level); ARR 1.
 - Lock reset limits: 8 rotations, 10 moves; soft drop non-locking at 1G; hard drop locks.
 - Ghost only below level 100. Score: ⌈(level+lines)/4⌉ + soft + sonic, × lines × combo,
-  + ⌈level after/2⌉ + speed; soft gets +1 when the player locks the piece (hard drop,
-  Classic soft drop on the ground). No Bravo bonus (removed in TGM3).
+  + ⌈level after/2⌉ + speed; soft is the frames Down was held (a Classic soft drop lock on the
+  ground counts its frame), +1 for a hard drop lock (World; NullpoMino). No Bravo bonus (removed in TGM3).
 - Grade (GRADE row in `getStats()`): internal grade 0–31 with grade points per clear
   (`TGM_GRADES`, combo multipliers `TGM_GRADE_COMBO` by `gradeCombo`: clears of 2+ lines in a
   row, singles keep it, a piece clearing nothing resets it; level multiplier ×1–4 per 250 levels),

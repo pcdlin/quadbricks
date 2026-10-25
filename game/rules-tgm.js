@@ -572,11 +572,12 @@ class TgmGame extends RuleGame {
     scoreLines(n, rows) {} // a clear of n lines (outside the roll)
     updateSection() {} // section bookkeeping after a level change
 
-    // Per-piece score terms: frames of soft drop (locking by hand adds 1) and the speed bonus,
-    // the lock delay left unused
+    // Per-piece score terms: frames of soft drop and the speed bonus, the lock delay left unused. A
+    // soft drop lock on the ground adds 1 by its own frame (tetris.wiki); a hard drop lock (World)
+    // adds 1 too (NullpoMino's manual lock).
     tgmPieceBonus() {
         return {
-            soft: this.softFrames + (this.manualLock ? 1 : 0),
+            soft: this.softFrames + (this.hardDropped ? 1 : 0),
             speed: Math.max(0, this.lockDelayMax - Math.max(1, this.activeTime)),
         };
     }

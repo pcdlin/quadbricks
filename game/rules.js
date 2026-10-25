@@ -744,6 +744,7 @@ class RuleGame {
         this.activeTime = 0;
         this.softFrames = 0;
         this.manualLock = false; // locked by the player: hard drop, or a soft drop that locks
+        this.hardDropped = false; // locked by a hard drop
         this.lastRotation = false;
         this.lastKick = -1;
         this.touched = false;
@@ -987,6 +988,7 @@ class RuleGame {
         this.hardDropDistance = distance;
         this.onHardDrop(distance);
         this.manualLock = true;
+        this.hardDropped = true;
         this.lock(true);
     }
 

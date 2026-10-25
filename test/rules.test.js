@@ -236,9 +236,10 @@ for (const manual of [true, false]) {
     place(g, tetO, 0, 19, 7); // ARS O: box rows 1-2, columns 1-2 -> rows 20-21, columns 8-9
     if (manual) g.advanceFrame(SOFT_PUSH);
     else while (g.phase === "active") g.advanceFrame(0);
-    // ceil(2/4)=1; manual: (1 + soft 1 + 1) * 2 * 3 + ceil(2/2)=1 + speed(30-1=29); else (1) * 2 * 3 + 1 + speed(0)
-    check(`Classic score: ${manual ? "soft drop lock adds 1 to Soft" : "lock delay lock adds nothing"}`,
-        g.score, manual ? 3 * 2 * 3 + 1 + 29 : 1 * 2 * 3 + 1 + 0);
+    // ceil(2/4)=1; manual: (1 + soft 1, the frame Down is held) * 2 * 3 + ceil(2/2)=1 + speed(30-1=29);
+    // else (1) * 2 * 3 + 1 + speed(0). tetris.wiki: the lock frame is the 1 a manual lock adds
+    check(`Classic score: ${manual ? "soft drop lock adds 1 to Soft (its frame, counted once)" : "lock delay lock adds nothing"}`,
+        g.score, manual ? 2 * 2 * 3 + 1 + 29 : 1 * 2 * 3 + 1 + 0);
 }
 {
     // Torikan: reaching 500 after 7:00 ends the game
@@ -1268,11 +1269,11 @@ function tapClear(g, rows, setup = () => {}) {
     g.level = 10; g.score = 0; g.combo = 1;
     tapClear(g, 2, g => { g.softFrames = 5; g.sonicMax = 3; g.activeTime = 20; g.manualLock = false; });
     const double = g.score;
-    // a perfect clear: bravo x4, manual lock adds 1
+    // a perfect clear: bravo x4; locked by Down on the ground: soft 1, that frame
     const h = startedTap();
     clearField(h);
     h.level = 10; h.score = 0; h.combo = 1;
-    tapClear(h, 4, g => { g.activeTime = 40; g.manualLock = true; });
+    tapClear(h, 4, g => { g.activeTime = 40; g.softFrames = 1; g.manualLock = true; });
     check("TAP score: (ceil((lv+n)/4) + soft + 2 sonic) x n x combo x bravo + ceil(lv after/2) + 7 x speed",
         [double, h.score, h.actions.map(a => a.text)],
         [(3 + 5 + 6) * 2 * 3 + 6 + 10 * 7, (4 + 1) * 4 * 7 * 4 + 7, ["QUAD", "BRAVO"]]);
