@@ -255,6 +255,7 @@ class RuleGame {
         this.wallBumped = false;
         this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "clear1".."clear4" (+ "c<chain>" in a combo)
         this.fireworks = 0; // fireworks fired since the engine last looked (TGM3 Easy)
+        this.holds = 0; // holds (IHS included) since the engine last looked
         // Item pieces (TAP Normal): the item the next piece to enter carries (queue[0]), and the
         // current piece's; their settled blocks answer getCellItem
         this.nextItem = null;
@@ -385,6 +386,13 @@ class RuleGame {
     takeFireworks() {
         const n = this.fireworks;
         this.fireworks = 0;
+        return n;
+    }
+
+    // Holds since the last call (the engine flashes the held piece)
+    takeHolds() {
+        const n = this.holds;
+        this.holds = 0;
         return n;
     }
 
@@ -745,6 +753,7 @@ class RuleGame {
                 [this.heldpiece, type] = [type, this.heldpiece];
             }
             fromHold = true;
+            this.holds++;
         }
 
         this.curPiece_type = type;
@@ -819,6 +828,7 @@ class RuleGame {
             next = this.heldpiece;
         }
         this.heldpiece = current;
+        this.holds++;
         this.spawn(next, true);
     }
 

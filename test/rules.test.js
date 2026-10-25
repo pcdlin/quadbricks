@@ -491,6 +491,17 @@ check("Handling options don't change TGM3, TAP or GB timing",
     g.advanceFrame(RIGHT_PUSH);
     check("Moving away from the wall doesn't bump", g.takeBumps(), []);
 }
+{
+    const g = createGame(guideline, "test");
+    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    g.takeHolds();
+    g.advanceFrame(HOLD_PUSH);
+    check("A hold is reported once", [g.takeHolds(), g.takeHolds()], [1, 0]);
+    const h = createGame(guideline, "test");
+    h.advanceFrame(HOLD_PUSH); // held through READY: IHS
+    for (let f = 0; f < 200 && h.phase !== "active"; f++) h.advanceFrame(0);
+    check("IHS is reported as a hold", [h.getHeldPiece() !== 0, h.takeHolds()], [true, 1]);
+}
 
 for (const [rs, level, name, expected] of [
     [guideline, 1, "SRS: ARE 6, no line clear delay", [6, 6]],

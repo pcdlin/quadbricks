@@ -300,6 +300,9 @@ const DROP_TRAIL_GROW = 4; // frames the hard-drop trail takes to reach down to 
 const DROP_TRAIL_FADE = 8; // frames a drop trail then takes to fade out, all at once
 const DROP_TRAIL_ALPHA = 0.38; // peak opacity of the trail
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
+const HOLD_FLASH_LIFE = 12; // frames the newly held piece flashes in the HOLD box
+const HOLD_GLOW_BLUR = 0.7; // the held piece's flash glow: blur radius in block sizes
+const HOLD_GLOW_ALPHA = 0.7; // and its strength at the flash's start (also round the piece entering from hold)
 const TILT_MAX = [2.8, 4.8]; // playing field tilt in degrees about the x and y axes, at Normal
 const TILT_SPEED = 0.75; // pace of the tilt drift (1 = waves of 0.15-0.7 rad/s)
 const TILT_DISTANCE = 1100; // camera distance for the tilt's perspective (logical units)
@@ -428,6 +431,7 @@ class Engine {
         this.boardLayer = null; // render target the field is drawn into when it moves
         this.blockCache = new Map(); // tileset:size -> sprite atlas
         this.confettiAtlas = null;
+        this.glowCache = new Map(); // piece glows (pieceGlow): cells|colour|size -> texture
         this.sound = new Sound();
     }
 
@@ -488,6 +492,8 @@ class Engine {
         // sprites and text are rendered at device resolution: redo them at the new scale
         for (const atlas of this.blockCache.values()) this.r.releaseTexture(atlas.tex);
         this.blockCache.clear();
+        for (const glow of this.glowCache.values()) this.r.releaseTexture(glow.tex);
+        this.glowCache.clear();
         this.clearTextCache();
         if (this.messageCache) this.r.releaseTexture(this.messageCache.tex);
         this.messageCache = null;
@@ -614,7 +620,10 @@ class Engine {
                         this.sound.play(s);
                         // from the event, not the dropped cells: those a clear removed aren't listed
                         if (s === "harddrop" && this.options.shakeScale) this.kickShake(this.game.hardDropDistance);
+                        if (s === "lock" || s === "harddrop") this.enterGlow = 0; // the piece from hold is gone
                     }
+                    // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
+                    if (this.game.takeHolds() && this.options.effects) this.holdFlash = this.enterGlow = HOLD_FLASH_LIFE;
                     for (const dir of this.game.takeBumps()) if (this.options.shakeScale) this.bumpShake(dir);
                     const fireworks = this.game.takeFireworks();
                     if (this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
@@ -751,6 +760,8 @@ class Engine {
         this.particles = [];
         this.flashes = [];
         this.dropFlashes = [];
+        this.holdFlash = 0; // frames left of the held piece's flash
+        this.enterGlow = 0; // and of the glow round the piece entering from hold (gone when it locks)
         this.rings = [];
         this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 }; // px, py: before the last step
     }
@@ -1238,6 +1249,8 @@ class Engine {
         this.rings = age(this.rings);
         this.flashes = age(this.flashes);
         this.dropFlashes = age(this.dropFlashes);
+        this.holdFlash = Math.max(0, this.holdFlash - dt);
+        this.enterGlow = Math.max(0, this.enterGlow - dt);
     }
 
     // Effects strength for the soft, large ones (backdrop wash, trails): never quite off, and
@@ -1297,14 +1310,59 @@ class Engine {
             const t = Math.max(0, f.life / DROP_FLASH_LIFE);
             for (const cell of f.cells) {
                 if (cell.row < this.wellTop || cell.cleared) continue; // hidden rows; cleared: nothing left to light up
-                const x = this.cellX(cell.col), y = this.cellY(cell.row);
-                r.globalAlpha = t;
-                this.drawBlock(cell.type, x, y, CELL, "active");
-                r.globalAlpha = 0.4 * t * t;
-                r.shape(x + 1, y + 1, CELL - 2, CELL - 2, { radius: CELL * 0.14, fill: this.tileLight(cell.type) });
-                r.globalAlpha = 1;
+                this.drawBlockFlash(cell.type, this.cellX(cell.col), this.cellY(cell.row), CELL, t);
             }
         }
+    }
+
+    // A block lit up at strength t (0..1): the active highlight plus a soft tint of its own colour
+    drawBlockFlash(index, x, y, size, t) {
+        const r = this.r;
+        r.globalAlpha = t;
+        this.drawBlock(index, x, y, size, "active");
+        r.globalAlpha = 0.4 * t * t;
+        r.shape(x + size / 30, y + size / 30, size * 28 / 30, size * 28 / 30, { radius: size * 0.14, fill: this.tileLight(index) });
+        r.globalAlpha = 1;
+    }
+
+    // A soft glow around a piece's blocks in `color` (the piece drawn at `size`, its top-left
+    // block corner at the texture's pad), rendered once at device resolution
+    pieceGlow(cells, minR, minC, color, size) {
+        const key = cells.join(";") + "|" + color + "|" + size;
+        let glow = this.glowCache.get(key);
+        if (glow) return glow;
+        const blur = HOLD_GLOW_BLUR * size, pad = blur * 2;
+        const w = (Math.max(...cells.map(([, j]) => j)) - minC + 1) * size + 2 * pad;
+        const h = (Math.max(...cells.map(([i]) => i)) - minR + 1) * size + 2 * pad;
+        const s = this.pixelScale, c = document.createElement("canvas");
+        c.width = Math.ceil(w * s);
+        c.height = Math.ceil(h * s);
+        const g = c.getContext("2d");
+        g.setTransform(s, 0, 0, s, 0, 0);
+        g.shadowColor = color;
+        g.shadowBlur = blur * s; // shadowBlur is in device pixels, unscaled by the transform
+        g.fillStyle = color;
+        for (const [i, j] of cells) g.fillRect(pad + (j - minC) * size, pad + (i - minR) * size, size, size);
+        glow = { tex: this.r.texture(c), pad, w, h };
+        this.glowCache.set(key, glow);
+        return glow;
+    }
+
+    // pieceGlow() added at strength t (0..1) round a piece whose top-left block corner is at x, y
+    drawPieceGlow(cells, color, size, x, y, t) {
+        const minR = Math.min(...cells.map(([i]) => i)), minC = Math.min(...cells.map(([, j]) => j));
+        const glow = this.pieceGlow(cells, minR, minC, this.tileLight(color), size);
+        const r = this.r;
+        r.save();
+        r.blendMode = "add";
+        r.globalAlpha = HOLD_GLOW_ALPHA * t;
+        r.image(glow.tex, x - glow.pad, y - glow.pad, glow.w, glow.h);
+        r.restore();
+    }
+
+    // Strength (0..1) of a hold's flash or glow with `frames` of it left, fading out from the hold
+    holdFlashAlpha(frames = this.holdFlash) {
+        return Math.min(1, frames / HOLD_FLASH_LIFE * this.options.effectScale);
     }
 
     // Faint streak per column from where the piece started to where it landed, brightest at
@@ -1881,8 +1939,8 @@ class Engine {
     }
 
     // Draw a piece (rotation 0) centred on cx/cy, with a game's shapes and colours if given; item:
-    // it carries an item (drawItemMark)
-    drawPieceCentered(type, cx, cy, size, style = "locked", game = null, item = false) {
+    // it carries an item (drawItemMark); flash (0..1): lit up as a hard-dropped piece is
+    drawPieceCentered(type, cx, cy, size, style = "locked", game = null, item = false, flash = 0) {
         if (!type) return;
         const cells = (game ? game.pieceCells : SRS_CELLS)[type][0];
         const color = game ? game.palette[type] : type;
@@ -1890,9 +1948,11 @@ class Engine {
         const minR = Math.min(...rows), minC = Math.min(...cols);
         const ox = cx - ((Math.max(...cols) - minC + 1) * size) / 2;
         const oy = cy - ((Math.max(...rows) - minR + 1) * size) / 2;
+        if (flash > 0) this.drawPieceGlow(cells, color, size, ox, oy, flash);
         for (const [i, j] of cells) {
             const x = ox + (j - minC) * size, y = oy + (i - minR) * size;
             this.drawBlock(color, x, y, size, style);
+            if (flash > 0) this.drawBlockFlash(color, x, y, size, flash);
             if (item) this.drawItemMark(x, y, size);
         }
     }
@@ -2345,6 +2405,12 @@ class Engine {
         // Draw current Piece: the highlight fades from "active" to "locked" as the
         // lock delay runs out, and comes back whenever a move resets the delay
         const lockLeft = 1 - Math.min(1, game.curPiece_lockDelay / game.lockDelayMax);
+        if (this.enterGlow > 0) { // it came from hold: glows as the held one flashes
+            const shown = cells.map(([i, j]) => [this.rev ? -i : i, j]); // as on screen (Rev: upside down)
+            const x = this.cellX(col + Math.min(...cells.map(([, j]) => j)));
+            const y = Math.min(...cells.map(([i]) => this.cellY(game.getCurPiece_row() + i)));
+            this.drawPieceGlow(shown, color, CELL, x, y, this.holdFlashAlpha(this.enterGlow));
+        }
         for (const [i, j] of cells) {
             const row = game.getCurPiece_row() + i;
             if (row < firstRow) continue;
@@ -2497,7 +2563,7 @@ class Engine {
         if (game.hasHold) {
             this.label("HOLD", LEFT_X, this.boardY + 4, SIDE_W);
             this.panel(LEFT_X, this.boardY + 18, SIDE_W, 110);
-            this.drawPieceCentered(game.getHeldPiece(), LEFT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game);
+            this.drawPieceCentered(game.getHeldPiece(), LEFT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game, false, this.holdFlashAlpha());
         }
 
         // STATS
@@ -2569,7 +2635,7 @@ class Engine {
         if (game.hasHold) {
             this.label("HOLD", leftX, y, sideW, 10, 3);
             this.panel(leftX, y + 12, sideW, box);
-            this.drawPieceCentered(game.getHeldPiece(), leftX + sideW / 2, y + 12 + box / 2, size, "locked", game);
+            this.drawPieceCentered(game.getHeldPiece(), leftX + sideW / 2, y + 12 + box / 2, size, "locked", game, false, this.holdFlashAlpha());
             y += 12 + box + 28;
         }
         game.getStats().forEach(([name, value], n) => {
