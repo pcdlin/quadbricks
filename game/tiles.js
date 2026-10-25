@@ -3,7 +3,10 @@
 // ({base, light, dark}), index the palette index (1..8; 8 is the neutral grey-white) and style "active" (falling
 // piece), "locked" (settled stack) or "ghost" (landing preview). Styles that don't colour
 // blocks by col give trail(index), the CSS colour of their drop trail and hard-drop flash
-// (else col.light).
+// (else col.light). The engine lays a lamp light over every block but the ghost, moving with the
+// field's tilt (Engine.drawLamp()): only while 3D tilt is on, always with lamp: "always", never with
+// lamp: false; lampMask(g, size, index) fills the part of the block it lights (else the face), and
+// lampStrength scales it (else 1).
 
 // Original tile images from the C++ game (gfx/), by palette index
 const TILE_IMAGE_NAMES = [null, "cyan", "purple", "orange", "blue", "green", "red", "yellow"];
@@ -376,6 +379,7 @@ const TILESETS = {
     holo: {
         name: "Holo",
         sheen: true,
+        lampStrength: 0.45, // faint, so it doesn't wash out the sheen
         pad: (style) => style === "active" ? 10 : 0,
         trail: (index) => `hsl(220,6%,${holoLum(index)}%)`, // the settled block's grey
         draw(g, col, size, style, index) {
@@ -426,6 +430,7 @@ const TILESETS = {
     // Monochrome four-shade green, like the 1989 handheld's screen: each piece has its own pattern
     retro1989: {
         name: "1989",
+        lamp: false, // a handheld screen: no light on it
         pad: () => 0,
         // the block's main shade; dark-bodied blocks take the light one, so the trail shows
         trail: (index) => GB_SHADES[index === 4 || index === 7 ? 3 : 2],

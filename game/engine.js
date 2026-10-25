@@ -260,6 +260,17 @@ const HOLO_HUE_PER_DEG = [95, 70]; // hue shift per degree of tilt about the x a
 const HOLO_HUE_ACROSS = 140; // hue spread across the well, as a viewing angle changes over it
 const HOLO_HUE_STEPS = 48; // hues are quantised so their colours can be cached
 const HOLO_ALPHA = 0.55; // sheen opacity at full strength
+// Lamp light (tiles.js lamp): a soft light on the blocks, as from a lamp behind the well, whose
+// pool moves over the well and whose spot moves inside each block as the field tilts
+const LAMP_REST = [0.5, 0.3]; // where the lamp shines face-on, as fractions of the well's width and height
+const LAMP_PER_DEG = [0.07, 0.08]; // how far it moves per degree of tilt about the x and y axes (Normal: about ±0.2 and ±0.4)
+const LAMP_SPREAD = 6; // how quickly the pool fades away from the lamp
+const LAMP_FLOOR = 0.35, LAMP_PEAK = 1.05; // light on every block, and the extra at the lamp
+const LAMP_SPOT_SHIFT = 1.4; // spot offset in a block per unit of distance to the lamp
+const LAMP_SPOT_MIN = 0.15, LAMP_SPOT_MAX = 0.85; // the spot's range inside the block
+const LAMP_STEPS = 5; // spot positions per axis in the atlas, drawn blended between the nearest four
+const LAMP_LOCKED = 0.7; // the stack's light relative to the falling piece's
+const LAMP_TILT_ALPHA = 0.6; // the other styles' lamp at Normal tilt and above (none at Off)
 const BOARD_LAYER_MARGIN = 18; // room around the frame in the tilted layer for block glows
 const BOARD_GLOW_BLUR = [44, 74]; // board glow blur (device px) at rest and at full pulse
 
@@ -1344,7 +1355,8 @@ class Engine {
     }
 
     // Block sprites in a block style (tiles.js), pre-rendered at device resolution: one
-    // atlas per block style and size, a row per sprite style with the seven colours
+    // atlas per block style and size, a row per sprite style with the seven colours, then (but
+    // with lamp: false) a row per lamp spot position (drawLamp())
     blockAtlas(size, tileset) {
         const key = tileset + ":" + size;
         let atlas = this.blockCache.get(key);
@@ -1357,9 +1369,10 @@ class Engine {
             const pad = set.pad(style);
             return { style, pad, px: Math.ceil((size + pad * 2) * s) };
         });
+        const lampPx = Math.ceil(size * s), lampSpots = set.lamp === false ? 0 : LAMP_STEPS * LAMP_STEPS;
         const c = document.createElement("canvas");
         c.width = (PIECE_COLORS.length - 1) * (Math.max(...rows.map(row => row.px)) + gap);
-        c.height = rows.reduce((h, row) => h + row.px + gap, 0);
+        c.height = rows.reduce((h, row) => h + row.px + gap, 0) + lampSpots * (lampPx + gap);
         const g = c.getContext("2d");
         const sprites = {};
         let y = 0;
@@ -1380,22 +1393,106 @@ class Engine {
             }
             y += px + gap;
         }
-        atlas = { tex: this.r.texture(c), sprites };
+        const lamp = PIECE_COLORS.map(() => []);
+        const span = (LAMP_SPOT_MAX - LAMP_SPOT_MIN) / (LAMP_STEPS - 1);
+        for (let spot = 0; spot < lampSpots; spot++) {
+            const cx = size * (LAMP_SPOT_MIN + spot % LAMP_STEPS * span);
+            const cy = size * (LAMP_SPOT_MIN + Math.floor(spot / LAMP_STEPS) * span);
+            for (let type = 1; type < PIECE_COLORS.length; type++) {
+                const x = (type - 1) * (lampPx + gap);
+                g.save();
+                g.beginPath();
+                g.rect(x, y, lampPx, lampPx);
+                g.clip();
+                g.translate(x, y);
+                g.scale(s, s);
+                this.drawLampSprite(g, set, size, type, cx, cy);
+                g.restore();
+                lamp[type][spot] = { sx: x, sy: y, px: lampPx };
+            }
+            y += lampPx + gap;
+        }
+        atlas = { tex: this.r.texture(c), sprites, lamp };
         this.blockCache.set(key, atlas);
         return atlas;
     }
 
-    drawBlock(type, x, y, size, style = "locked", tileset = this.options.tileset) {
+    // One lamp sprite: a soft pool of the block's light colour round (cx, cy) with a white core,
+    // only where the style's lampMask (else the block's face) lets light through
+    drawLampSprite(g, set, size, type, cx, cy) {
+        g.fillStyle = "#fff";
+        if (set.lampMask) set.lampMask(g, size, type);
+        else {
+            g.beginPath();
+            g.roundRect(size * 0.1, size * 0.1, size * 0.8, size * 0.8, size * 0.12);
+            g.fill();
+        }
+        g.globalCompositeOperation = "source-in";
+        const pool = g.createRadialGradient(cx, cy, 0, cx, cy, size * 0.6);
+        pool.addColorStop(0, "rgba(255,255,255,1)");
+        pool.addColorStop(0.35, "rgba(255,255,255,0.4)");
+        pool.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = pool;
+        g.fillRect(0, 0, size, size);
+        g.globalCompositeOperation = "source-atop";
+        g.fillStyle = set.trail ? set.trail(type) : PIECE_COLORS[type].light;
+        g.fillRect(0, 0, size, size);
+        const core = g.createRadialGradient(cx, cy, 0, cx, cy, size * 0.18);
+        core.addColorStop(0, "rgba(255,255,255,0.6)");
+        core.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = core;
+        g.fillRect(0, 0, size, size);
+    }
+
+    // lights false: leave out the light drawn over the block (Holo's sheen, the lamp), for
+    // drawing it in a pass of its own after many blocks (drawLights())
+    drawBlock(type, x, y, size, style = "locked", tileset = this.options.tileset, lights = true) {
         if (!type) return;
         const atlas = this.blockAtlas(size, tileset);
         const sp = atlas.sprites[style][type];
         const w = size + sp.pad * 2;
         this.r.image(atlas.tex, x - sp.pad, y - sp.pad, w, w, sp.sx, sp.sy, sp.px, sp.px);
-        if (TILESETS[tileset].sheen && style !== "ghost") this.drawSheen(x, y, size);
+        if (lights) this.drawLights(type, x, y, size, style, tileset);
+    }
+
+    drawLights(type, x, y, size, style = "locked", tileset = this.options.tileset) {
+        if (!type || style === "ghost") return;
+        if (TILESETS[tileset].sheen) this.drawSheen(x, y, size);
+        this.drawLamp(type, x, y, size, style, tileset);
+    }
+
+    // The lamp's light on a block: brighter the nearer the block is to where the lamp shines
+    // through the well, its spot shifted towards it (blended between the atlas's nearest four)
+    drawLamp(type, x, y, size, style, tileset) {
+        const set = TILESETS[tileset], L = this.lamp;
+        const strength = (set.lamp === "always" ? 1 : set.lamp === false ? 0 : L.tiltAlpha) * (set.lampStrength ?? 1);
+        if (strength <= 0.004) return;
+        const r = this.r;
+        const atlas = this.blockAtlas(size, tileset);
+        const du = L.u - (x + size / 2 - BOARD_X) / BOARD_W, dv = L.v - (y + size / 2 - this.boardY) / this.boardH;
+        const pool = LAMP_FLOOR + LAMP_PEAK * Math.exp(-(du * du * 0.81 + dv * dv * 0.36) * LAMP_SPREAD);
+        const span = LAMP_SPOT_MAX - LAMP_SPOT_MIN, last = LAMP_STEPS - 1;
+        const gx = (clamp(0.5 + du * LAMP_SPOT_SHIFT, LAMP_SPOT_MIN, LAMP_SPOT_MAX) - LAMP_SPOT_MIN) / span * last;
+        const gy = (clamp(0.5 + dv * LAMP_SPOT_SHIFT, LAMP_SPOT_MIN, LAMP_SPOT_MAX) - LAMP_SPOT_MIN) / span * last;
+        const ix = Math.min(Math.floor(gx), last - 1), iy = Math.min(Math.floor(gy), last - 1);
+        const fx = gx - ix, fy = gy - iy;
+        const a = r.globalAlpha * Math.min(1, pool * strength * (style === "active" ? 1 : LAMP_LOCKED));
+        const sprites = atlas.lamp[type];
+        r.save();
+        r.blendMode = "add";
+        for (let k = 0; k < 4; k++) {
+            const wx = k & 1 ? fx : 1 - fx, wy = k & 2 ? fy : 1 - fy;
+            if (wx * wy < 0.01) continue;
+            const sp = sprites[(iy + (k >> 1)) * LAMP_STEPS + ix + (k & 1)];
+            r.globalAlpha = a * wx * wy;
+            r.image(atlas.tex, x, y, size, size, sp.sx, sp.sy, sp.px, sp.px);
+        }
+        r.restore();
     }
 
     // Holo blocks: how strong the colour sheen is and which hue it starts at, from the
     // field's tilt now. Face-on (no tilt) the strength is 0 and the blocks stay grey.
+    // Also where the lamp shines through the well (drawLamp()).
     updateSheen(m) {
         const deg = 180 / Math.PI;
         const tilt = Math.hypot(m.rx, m.ry) * deg / HOLO_FULL_TILT;
@@ -1406,6 +1503,13 @@ class Engine {
         };
         this.sheenColors = this.sheenColors || [];
         this.sheenY = this.sheenY || [0, 0];
+        // the lamp: where it shines through the well, and the other styles' strength at this tilt
+        // and effects level. With effects off they get none, and Stained glass's stays at rest.
+        const fx = this.options.effectScale, moves = fx > 0 ? deg : 0;
+        this.lamp = this.lamp || {};
+        this.lamp.u = LAMP_REST[0] - m.ry * moves * LAMP_PER_DEG[1];
+        this.lamp.v = LAMP_REST[1] + m.rx * moves * LAMP_PER_DEG[0];
+        this.lamp.tiltAlpha = LAMP_TILT_ALPHA * Math.min(1, this.options.tiltAngle) * fx;
     }
 
     // Additive coloured gloss over a block: the hue follows the tilt and also changes across
@@ -1850,7 +1954,18 @@ class Engine {
                 const alpha = game.getCellAlpha(i, j); // TGM3 and TAP staff roll: blocks fade or vanish
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
-                this.drawBlock(pal[game.getCell(i, j)], this.cellX(j), y, CELL, "locked");
+                this.drawBlock(pal[game.getCell(i, j)], this.cellX(j), y, CELL, "locked", this.options.tileset, false);
+            }
+            r.globalAlpha = 1;
+        }
+        // their lights after them, in one go (one blend mode and texture for the whole stack)
+        for (let i = firstRow; i < HEIGHT; i++) {
+            const y = this.cellY(i + game.getDropOffset(i, this.tickPhase));
+            for (let j = 0; j < WIDTH; j++) {
+                const alpha = game.getCellAlpha(i, j);
+                if (alpha <= 0) continue;
+                r.globalAlpha = alpha;
+                this.drawLights(pal[game.getCell(i, j)], this.cellX(j), y, CELL);
             }
             r.globalAlpha = 1;
         }
@@ -1864,7 +1979,11 @@ class Engine {
             const row = game.getCurPiece_row() + i;
             if (row < firstRow) continue;
             const x = this.cellX(col + j), y = this.cellY(row);
-            if (lockLeft < 1) this.drawBlock(color, x, y, CELL, "locked");
+            if (lockLeft < 1) {
+                this.drawBlock(color, x, y, CELL, "locked", this.options.tileset, false);
+                r.globalAlpha = 1 - lockLeft; // the lights cross-fade too, rather than add up
+                this.drawLights(color, x, y, CELL, "locked");
+            }
             r.globalAlpha = lockLeft;
             this.drawBlock(color, x, y, CELL, "active");
             r.globalAlpha = 1;

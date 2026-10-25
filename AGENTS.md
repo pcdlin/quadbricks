@@ -287,6 +287,14 @@ DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn
 - Blocks are pre-rendered sprites in one atlas texture per `tileset:size` (a row per style,
   the seven colours side by side); styles are `active` (falling piece), `locked` (stack),
   `ghost`. The falling piece cross-fades from active to locked as the lock delay runs out.
+- Lamp light (`drawLamp()`, `LAMP_*`): every style but 1989 (`lamp: false`) catches a soft light, as
+  from a lamp behind the well, whose pool moves over the well and whose spot moves inside each block
+  with the field's tilt (`updateSheen()` places it). Stained glass has it always; the others only with
+  3D tilt on (`LAMP_TILT_ALPHA` × tilt × `effectScale`, none at tilt or effects Off, so they look as
+  before); with effects Off Stained glass's lamp stays at rest. The atlas holds
+  `LAMP_STEPS`² spot positions per colour in the block's light colour, masked by the style's
+  `lampMask()` (else its face), scaled by `lampStrength` (Holo 0.45); a block blends the nearest four, additively. Ghosts get none. The stack
+  draws its blocks first and their lights (`drawLights()`: Holo's sheen, the lamp) in a second pass.
 - `PIECE_COLORS` (index 1..7 = cyan, purple, orange, blue, green, red, yellow) were sampled
   from the legacy tile PNGs. Effects receive colour indices (types mapped through
   `game.palette`), so TGM3 Classic's Sega colours work everywhere.
