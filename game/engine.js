@@ -260,6 +260,7 @@ const FIREWORK_SPARKS = 26, FIREWORK_SPEED = 3.2, FIREWORK_LIFE = 70, FIREWORK_M
 const GLOW_SPRITE = 64; // texels per confetti sprite (each way)
 const ORB_COUNT = 46; // drifting lights in the backdrop
 const HUE_STEP = 28; // backdrop hue shift per line clear
+const HUE_DEFAULT = 232; // the backdrop's blue at start, and again at each new game
 const RING_LIFE = 46; // frames a clear shockwave expands
 const RING_ALPHA = 0.8; // ring opacity at the Normal effects level
 const RING_CHAIN_MAX = 8; // combo length after which rings stop getting brighter
@@ -382,8 +383,8 @@ class Engine {
         this.nextframe = 0;
         this.extraWait = 0;
         this.clearEffects();
-        this.hue = 232;       // backdrop colour, eased toward hueTarget
-        this.hueTarget = 232;
+        this.hue = HUE_DEFAULT; // backdrop colour, eased toward hueTarget
+        this.hueTarget = HUE_DEFAULT;
         this.pulse = 0;       // 0..1 kick on line clears, decays
         this.orbs = Array.from({ length: ORB_COUNT }, () => ({
             x: Math.random() * VIEW_W, y: Math.random() * VIEW_H,
@@ -698,6 +699,7 @@ class Engine {
         this.clearEffects();
         this.newTiltWaves();
         this.flySide = Math.random() < 0.5 ? -1 : 1; // which way the field comes in turned
+        this.hue = this.hueTarget = HUE_DEFAULT; // every game starts on the default blue
     }
 
     // Confetti, flashes, rings and the field's shake: none left over from another game
@@ -982,9 +984,10 @@ class Engine {
     }
 
     // Setting cards with their current values, drawn larger than a description (action cards keep
-    // their own description)
-    settingCards(items) {
-        return items.map(item => item.action ? item : { ...item, value: `◀  ${this.optionValue(item.id)}  ▶` });
+    // their own description). enter: Enter does more than step the value (setup cards start the
+    // game), so the selected card keeps its ▶
+    settingCards(items, enter = false) {
+        return items.map(item => item.action ? item : { ...item, value: `◀  ${this.optionValue(item.id)}  ▶`, noArrow: !enter });
     }
 
     // The mode selected on the modes screen
@@ -1914,7 +1917,7 @@ class Engine {
                 // Breadcrumb: rule set and mode, then a generic prompt
                 const ruleset = RULESETS[this.rulesetpos];
                 heading(`${ruleset.name}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase());
-                const items = this.settingCards(this.setupItems());
+                const items = this.settingCards(this.setupItems(), true);
                 this.drawMenuList(items, this.setuppos, listTop);
                 const bottom = listTop + menuListHeight(items, 64, 10);
                 this.drawBest(bottom + 22);
@@ -2073,7 +2076,7 @@ class Engine {
                 this.text(item.name.toUpperCase(), x + 92, y + h / 2 - 7, { size: 20, weight: 800, color: selected ? INK : INK_DIM, spacing: 3 });
                 this.text(item.desc, x + 92, y + h / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
             }
-            if (selected) this.text("▶", x + listW - 26, y + h / 2, { size: 14, color: this.pulseInk(10), align: "center" });
+            if (selected && !item.noArrow) this.text("▶", x + listW - 26, y + h / 2, { size: 14, color: this.pulseInk(10), align: "center" });
             y += h + gap;
         });
     }
