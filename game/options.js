@@ -236,8 +236,11 @@ class Options {
         this.save();
     }
 
-    // Multiplier of the playing field's tilt angles (0 when off)
-    get tiltAngle() { return TILT_LEVELS[this.tilt].angle; }
+    // Multiplier of the playing field's tilt angles (0 when off, or with effects off)
+    get tiltAngle() { return this.effects ? TILT_LEVELS[this.tilt].angle : 0; }
+
+    // Whether hard drops, clears and bumps shake the field (never with effects off)
+    get shakeOn() { return !!(this.effects && this.shake); }
 
     // Strength multiplier of the visual effects (0 when off)
     get effectScale() { return EFFECT_LEVELS[this.effects].scale; }

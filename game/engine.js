@@ -128,18 +128,19 @@ const OPTIONS_ITEMS = [
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
 // Settings changed with ← →, by screen; descriptions show the current setting (optionValue())
-// (preview: the card is a little taller and shows the block style preview at its right)
+// (preview: the card is a little taller and shows the block style preview at its right; fx: the
+// setting does nothing with effects off, and its card is greyed out then)
 const VISUAL_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
-    { id: "confetti", name: "Confetti", accent: tetS },
-    { id: "rings", name: "Clear burst", accent: tetZ },
-    { id: "flash", name: "Row flash", accent: tetI },
+    { id: "confetti", name: "Confetti", accent: tetS, fx: true },
+    { id: "rings", name: "Clear burst", accent: tetZ, fx: true },
+    { id: "flash", name: "Row flash", accent: tetI, fx: true },
     { id: "backdrop", name: "Backdrop", accent: tetJ },
-    { id: "tilt", name: "3D tilt", accent: tetI },
-    { id: "shake", name: "Drop shake", accent: tetS },
-    { id: "trail", name: "Drop trail", accent: tetT },
+    { id: "tilt", name: "3D tilt", accent: tetI, fx: true },
+    { id: "shake", name: "Drop shake", accent: tetS, fx: true },
+    { id: "trail", name: "Drop trail", accent: tetT, fx: true },
     { id: "border", name: "Stack border", accent: tetZ },
 ];
 // Guideline handling; help: the name spelled out and what it does, shown under the list for the selection
@@ -192,6 +193,7 @@ const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
 const PREVIEW_GAP = 6;
 const PREVIEW_RIGHT = 38; // from the preview's right end to the card's, leaving room for the ▶
 const PREVIEW_PAD = 6; // what the preview adds to its card's height
+const MENU_DIMMED_ALPHA = 0.35; // a greyed-out card's contents (a setting effects Off turns off)
 // A menu card's height (cards with preview are taller), and a list's from its first card's top to its last's bottom
 function menuRowHeight(item, rowH) {
     return item.preview ? rowH + PREVIEW_PAD : rowH;
@@ -605,15 +607,15 @@ class Engine {
                     const cleared = this.game.takeClearedCells().map(toColor);
                     this.explodeCells(cleared, this.game.chain);
                     // no jolt for each row the field loses before the staff roll
-                    if (cleared.length && this.options.shake && !this.game.inRollStart()) this.clearShake(cleared, this.game.chain);
+                    if (cleared.length && this.options.shakeOn && !this.game.inRollStart()) this.clearShake(cleared, this.game.chain);
                     const dropped = this.game.takeHardDropCells().map(toColor);
                     if (dropped.length && this.options.effects) this.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 });
                     for (const s of this.game.takeSounds()) {
                         this.sound.play(s);
                         // from the event, not the dropped cells: those a clear removed aren't listed
-                        if (s === "harddrop" && this.options.shake) this.kickShake(this.game.hardDropDistance);
+                        if (s === "harddrop" && this.options.shakeOn) this.kickShake(this.game.hardDropDistance);
                     }
-                    for (const dir of this.game.takeBumps()) if (this.options.shake) this.bumpShake(dir);
+                    for (const dir of this.game.takeBumps()) if (this.options.shakeOn) this.bumpShake(dir);
                     const fireworks = this.game.takeFireworks();
                     if (this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
                     if (this.game.isGameOver() && !this.recordDone) this.submitRecord();
@@ -1037,9 +1039,11 @@ class Engine {
 
     // Setting cards with their current values, drawn larger than a description (action cards keep
     // their own description). enter: Enter does more than step the value (setup cards start the
-    // game), so the selected card keeps its ▶
+    // game), so the selected card keeps its ▶. Cards of settings effects Off turns off are dimmed.
     settingCards(items, enter = false) {
-        return items.map(item => item.action ? item : { ...item, value: `◀  ${this.optionValue(item.id)}  ▶`, noArrow: !enter });
+        return items.map(item => item.action ? item : {
+            ...item, value: `◀  ${this.optionValue(item.id)}  ▶`, noArrow: !enter, dimmed: !!item.fx && !this.options.effects,
+        });
     }
 
     // The mode selected on the modes screen
@@ -2213,7 +2217,8 @@ class Engine {
     }
 
     // Cards with an accent piece, name and description; the selected one is highlighted. Cards
-    // with preview are a little taller and show the block style preview at the right.
+    // with preview are a little taller and show the block style preview at the right; dimmed
+    // ones draw their contents faintly (MENU_DIMMED_ALPHA), the card itself as usual.
     // scroll: logical units scrolled out above the top (fractional while easing)
     drawMenuList(items, selectedIndex, top, rowH = 64, gap = 10, scroll = 0) {
         const listW = 420, x = VIEW_W / 2 - listW / 2;
@@ -2222,6 +2227,7 @@ class Engine {
             const selected = n === selectedIndex;
             const h = menuRowHeight(item, rowH);
             this.card(x, y, listW, h, 10, selected, PIECE_COLORS[item.accent].base, 5);
+            if (item.dimmed) { this.r.save(); this.r.globalAlpha *= MENU_DIMMED_ALPHA; }
             if (item.preview) this.drawTilesetPreview(x + listW - PREVIEW_RIGHT, y + (h - CELL) / 2); // right of the name
 
             this.drawPieceCentered(item.accent, x + 50, y + h / 2, 13, selected ? "active" : "locked");
@@ -2233,6 +2239,7 @@ class Engine {
                 this.text(item.desc, x + 92, y + h / 2 + 14, { size: 12, weight: 500, color: selected ? INK_DIM : "rgba(244,236,220,0.35)" });
             }
             if (selected && !item.noArrow) this.text("▶", x + listW - 26, y + h / 2, { size: 14, color: this.pulseInk(10), align: "center" });
+            if (item.dimmed) this.r.restore();
             y += h + gap;
         });
     }
