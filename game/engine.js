@@ -56,6 +56,11 @@ const RULESETS = [
           { name: "World", mode: arika, variant: "standard", accent: tetL, desc: "Arika SRS, hard drop, limited lock resets" },
           { name: "Classic", mode: tgmClassic, variant: "standard", accent: tetJ, desc: "Arika Rotation System, sonic drop" },
       ] },
+    { name: "NES", accent: tetJ, desc: "NES (1989) — no hard drop, no hold, no kicks",
+      modes: [
+          { name: "A-Type", mode: nesTetris, variant: "standard", startLevels: NES_START_LEVELS, accent: tetL, desc: "Endless, faster every 10 lines, top speed at level 29" },
+          { name: "B-Type", mode: nesTetris, variant: "btype", startLevels: NES_START_LEVELS, startHeights: GB_B_HEIGHTS, accent: tetS, desc: "Clear 25 lines, starting over garbage" },
+      ] },
     { name: "GB", accent: tetO, desc: "Game Boy (1989) — no hard drop, no hold, no kicks",
       modes: [
           { name: "A-Type", mode: gameBoy, variant: "standard", startLevels: GB_START_LEVELS, accent: tetL, desc: "Endless, faster every 10 lines up to level 20" },
@@ -103,7 +108,7 @@ function touchWords(s) {
         .replace(/ESC  BACK/g, "BACK").replace(/ENTER/g, "OK").replace(/ESC/g, "BACK");
 }
 
-// Start step 3 (GB): the starting level, and B-Type's height (levelItems()). choice: the mode's
+// Start step 3 (NES and GB): the starting level, and B-Type's height (levelItems()). choice: the mode's
 // property with the number of values, also the Engine map that remembers the choice per mode
 const LEVEL_ITEMS = [
     { id: "startLevel", name: "Level", accent: tetT, choice: "startLevels" },

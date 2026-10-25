@@ -22,6 +22,10 @@
 //    staff roll that can't be lost
 //    (tetris.wiki: Tetris_The_Grand_Master, TGM_randomizer; GM checks and roll length from
 //     NullpoMino's GradeManiaMode)
+//  - NES: Tetris for the NES (Nintendo, 1989), A-Type (endless, levels 0-29 and on) and B-Type:
+//    right-handed Nintendo Rotation System without kicks, no hard drop, no hold, no lock delay,
+//    entry delay by lock height, the NES randomizer
+//    (tetris.wiki: Tetris_(NES,_Nintendo), Scoring; meatfighter.com's NES Tetris disassembly notes)
 //  - GB: Tetris for the Game Boy (1989), A-Type (endless, levels 0-20) and B-Type (25 lines over
 //    garbage): left-handed Nintendo Rotation System without kicks, no hard drop, no hold, no lock
 //    delay, one next piece, the Game Boy's randomizer with its OR bug
@@ -35,14 +39,14 @@
 //  - marathon: Guideline only: the game ends after 150 lines (standard is endless)
 //  - sprint:   Guideline only: 40 lines as fast as possible, fixed level 1
 //  - ultra:    Guideline only: highest score in 2 minutes, fixed level 1
-//  - btype:    GB only: B-Type, 25 lines starting over rows of garbage
+//  - btype:    NES and GB only: B-Type, 25 lines starting over rows of garbage
 //  - 20g:      TGM1 only: its hidden 20G mode, 20G from the start
 //
 // RuleGame is driven by the engine one frame at a time (advanceFrame with an input
 // bitmap) and read through getCell, getCurPiece_*, takeClearedCells, getStats, ...
 // Row coordinates: visible rows are 2..21; rows above are the buffer zone.
 
-const guideline = 3, arika = 4, tgmClassic = 5, tgmTap = 6, gameBoy = 7, tgmOriginal = 8;
+const guideline = 3, arika = 4, tgmClassic = 5, tgmTap = 6, gameBoy = 7, tgmOriginal = 8, nesTetris = 9;
 // Shown under the rule set name; standard is named after the rule set instead (see getStats)
 const VARIANT_NAMES = { test: "TEST", death: "DEATH", marathon: "MARATHON", sprint: "SPRINT", ultra: "ULTRA", btype: "B-TYPE", "20g": "20G" };
 
@@ -284,6 +288,36 @@ const TGM1_ROLL_HIDE = { visible: Infinity };
 const TGM1_ROLLS = 4; // randomizer: four rolls against a history that starts Z Z Z Z
 
 // ----------------------------------------------------------
+// NES (Tetris for the NES, Nintendo, 1989)
+
+// Right-handed Nintendo Rotation System: every piece turns about one cell (box cell 2, 2) and
+// spawns with it in the top visible row; T, L and J spawn flat side up, S and Z have two states
+// with the vertical one right of the centre, the I lies in the centre's row. No kicks.
+const NES_SHAPES = parseShapes([
+    [["....", "....", "IIII", "...."], ["..I.", "..I.", "..I.", "..I."], ["....", "....", "IIII", "...."], ["..I.", "..I.", "..I.", "..I."]],
+    [["....", "....", ".TTT", "..T."], ["....", "..T.", ".TT.", "..T."], ["....", "..T.", ".TTT", "...."], ["....", "..T.", "..TT", "..T."]],
+    [["....", "....", ".LLL", ".L.."], ["....", ".LL.", "..L.", "..L."], ["....", "...L", ".LLL", "...."], ["....", "..L.", "..L.", "..LL"]],
+    [["....", "....", ".JJJ", "...J"], ["....", "..J.", "..J.", ".JJ."], ["....", ".J..", ".JJJ", "...."], ["....", "..JJ", "..J.", "..J."]],
+    [["....", "....", "..SS", ".SS."], ["....", "..S.", "..SS", "...S"], ["....", "....", "..SS", ".SS."], ["....", "..S.", "..SS", "...S"]],
+    [["....", "....", ".ZZ.", "..ZZ"], ["....", "...Z", "..ZZ", "..Z."], ["....", "....", ".ZZ.", "..ZZ"], ["....", "...Z", "..ZZ", "..Z."]],
+    [["....", "....", ".OO.", ".OO."], ["....", "....", ".OO.", ".OO."], ["....", "....", ".OO.", ".OO."], ["....", "....", ".OO.", ".OO."]],
+]);
+
+const NES_SPAWN_ROW = VISIBLE_TOP - 2; // the centre in the top visible row
+const NES_PIECE_TOP = 0; // pieces may turn up to two rows above the well, no further
+// Frames per row by level; 1 from level 29 on
+const NES_GRAVITY = [48, 43, 38, 33, 28, 23, 18, 13, 8, 6, 5, 5, 5, 4, 4, 4, 3, 3, 3,
+    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1];
+const NES_START_LEVELS = 20; // 0-19 (10-19 with A held on the NES)
+const NES_SOFT_FRAMES = 2, NES_SOFT_FIRST = 3; // soft drop: the first row on the third frame, then every second
+const NES_DAS = 16, NES_ARR = 6;
+// Entry delay: 10 frames after locking in the bottom two rows, 2 more for each 4 rows above, at most 18
+const NES_ARE = 10, NES_ARE_STEP = 2, NES_ARE_MAX = 18;
+const NES_LINE_CLEAR = 17; // plus 0-3 frames: the animation steps on frames that are multiples of 4
+const NES_B_ROWS = [0, 3, 5, 8, 10, 12]; // B-Type: rows of garbage by height 0-5
+const NES_LINES_PER_LEVEL = 10;
+
+// ----------------------------------------------------------
 // GB (Tetris for the Game Boy, 1989)
 
 // Left-handed Nintendo Rotation System, as drawn on tetris.wiki: T, L and J spawn flat side up and
@@ -309,9 +343,9 @@ const GB_START_LEVELS = 10; // the player starts at level 0-9
 const GB_SOFT_FRAMES = 3; // soft drop: a row every 3 frames
 const GB_DAS = 24, GB_ARR = 9;
 const GB_ARE = 2, GB_LINE_CLEAR = 91; // ARE 2; ARE and line clear together 93
-const GB_LINE_SCORES = [0, 40, 100, 300, 1200]; // x (level + 1)
-const GB_MAX_SCORE = 999999;
-const GB_B_LINES = 25; // B-Type: 25 lines
+const GB_LINE_SCORES = [0, 40, 100, 300, 1200]; // x (level + 1); NES too
+const GB_MAX_SCORE = 999999; // NES too
+const GB_B_LINES = 25; // B-Type: 25 lines; NES too
 const GB_B_HEIGHTS = 6, GB_ROWS_PER_HEIGHT = 2; // B-Type height 0-5: 0 to 10 rows of garbage
 const GB_GARBAGE_FILL = 0.5; // chance of a block in each garbage cell
 
@@ -485,11 +519,32 @@ class GbRandomizer extends LcgRandomizer {
 }
 
 // ----------------------------------------------------------
+// NES randomizer: a roll of 0-7 is taken unless it is 7 (no piece) or the previous piece; then a
+// second roll of 0-6 is taken as it comes. The NES reads its rolls from a 16-bit LFSR that runs
+// every frame; here they come from the shared generator.
+
+const NES_PIECES = [tetT, tetJ, tetZ, tetO, tetS, tetL, tetI]; // the game's order
+
+class NesRandomizer extends LcgRandomizer {
+    constructor(seed) {
+        super(seed, NES_PIECES);
+        this.prev = -1;
+    }
+
+    nextIndex() {
+        let piece = this.rand(8);
+        if (piece === 7 || piece === this.prev) piece = this.rand(7);
+        this.prev = piece;
+        return piece;
+    }
+}
+
+// ----------------------------------------------------------
 
 class RuleGame {
-    // startLevel: GB only, 0 to GB_START_LEVELS - 1; height: GB B-Type only, 0 to GB_B_HEIGHTS - 1
-    // (both chosen in the menu, as on the Game Boy); handling: Guideline only, overrides of
-    // GUIDELINE_HANDLING (the other rule sets keep their specified timing)
+    // startLevel: NES and GB only, 0 to NES_START_LEVELS or GB_START_LEVELS - 1; height: their B-Type
+    // only, 0 to GB_B_HEIGHTS - 1 (both chosen in the menu, as on the consoles); handling: Guideline
+    // only, overrides of GUIDELINE_HANDLING (the other rule sets keep their specified timing)
     constructor(mode, variant = "standard", startLevel = 0, height = 0, handling = {}) {
         this.gamemode = mode;
         this.variant = variant;
@@ -500,23 +555,25 @@ class RuleGame {
         // TGM1, TGM3 and TAP: levels to 999, ARE and line clear delays, grades, staff roll
         this.tgm = mode === arika || this.ars;
         this.gb = mode === gameBoy;
-        this.hasHold = !this.plainArs && !this.gb;
-        this.handling = { ...GUIDELINE_HANDLING, ...(this.tgm || this.gb ? {} : handling) };
-        this.shapes = this.ars ? ARS_SHAPES : this.gb ? GB_SHAPES : shapes;
+        this.nes = mode === nesTetris;
+        this.nintendo = this.gb || this.nes; // no hard drop, hold, kicks or lock delay; Nintendo scoring
+        this.hasHold = !this.plainArs && !this.nintendo;
+        this.handling = { ...GUIDELINE_HANDLING, ...(this.tgm || this.nintendo ? {} : handling) };
+        this.shapes = this.ars ? ARS_SHAPES : this.gb ? GB_SHAPES : this.nes ? NES_SHAPES : shapes;
         this.pieceCells = shapeCells(this.shapes); // [type][rotation] -> [row, col] offsets
         this.palette = this.ars ? ARS_PALETTE : DEFAULT_PALETTE;
         // First row of the well (the engine sizes the board to it), and the first row the engine
         // draws: the two rows above the well too, except for GB, whose pieces never leave the well
         this.wellTop = this.gb ? GB_WELL_TOP : VISIBLE_TOP;
         this.firstDrawnRow = this.gb ? GB_WELL_TOP : 0;
-        this.pieceTop = this.gb ? GB_WELL_TOP : FIELD_TOP; // highest row a piece may occupy
+        this.pieceTop = this.gb ? GB_WELL_TOP : this.nes ? NES_PIECE_TOP : FIELD_TOP; // highest row a piece may occupy
 
         this.field = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) this.field.push(new Array(WIDTH).fill(0));
 
-        this.startLevel = this.gb ? clamp(startLevel, 0, GB_START_LEVELS - 1) : 0;
-        this.level = this.gb ? this.startLevel : this.tgm ? 0 : 1;
-        this.height = this.gb && variant === "btype" ? clamp(height, 0, GB_B_HEIGHTS - 1) : 0;
+        this.startLevel = this.nintendo ? clamp(startLevel, 0, (this.nes ? NES_START_LEVELS : GB_START_LEVELS) - 1) : 0;
+        this.level = this.nintendo ? this.startLevel : this.tgm ? 0 : 1;
+        this.height = this.nintendo && variant === "btype" ? clamp(height, 0, GB_B_HEIGHTS - 1) : 0;
         this.lines = 0;
         this.score = 0;
         this.frames = 0;
@@ -597,18 +654,19 @@ class RuleGame {
         this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "clear1".."clear4" (+ "c<chain>" in a combo)
 
         this.queue = [];
-        this.nextCount = this.plainArs ? TAP_NEXT : this.gb ? GB_NEXT : this.tgm ? TGM_NEXT : GUIDELINE_NEXT; // pieces shown in the preview
+        this.nextCount = this.plainArs ? TAP_NEXT : this.nintendo ? GB_NEXT : this.tgm ? TGM_NEXT : GUIDELINE_NEXT; // pieces shown in the preview
         if (this.tap) this.randomizer = new TapRandomizer(Date.now());
         else if (this.tgm1) this.randomizer = new Tgm1Randomizer(Date.now());
         else if (this.gb) this.randomizer = new GbRandomizer(Date.now());
+        else if (this.nes) this.randomizer = new NesRandomizer(Date.now());
         else if (this.tgm) this.randomizer = new TiRandomizer(Date.now());
         else this.bag = [];
         this.fillQueue();
         this.updateTimings();
-        if (this.height) this.fillGarbage(this.height * GB_ROWS_PER_HEIGHT);
+        if (this.height) this.fillGarbage(this.nes ? NES_B_ROWS[this.height] : this.height * GB_ROWS_PER_HEIGHT);
     }
 
-    // GB B-Type: random blocks in the bottom rows, each row with at least one block and one hole
+    // NES and GB B-Type: random blocks in the bottom rows, each row with at least one block and one hole
     fillGarbage(rows) {
         for (let r = HEIGHT - rows; r < HEIGHT; r++) {
             let cells;
@@ -721,6 +779,7 @@ class RuleGame {
         const rule = this.ars ? "CLASSIC" : "WORLD";
         const variantName = VARIANT_NAMES[this.variant];
         const mode = this.gb ? ["GB", variantName || "A-TYPE"]
+            : this.nes ? ["NES", variantName || "A-TYPE"]
             : this.tgm1 ? ["TGM1", variantName || "MASTER"]
             : this.tap ? ["TGM2 TAP", variantName || "MASTER"]
             : this.tgm ? ["TGM3 TI", variantName ? `${rule} ${variantName}` : rule]
@@ -731,7 +790,7 @@ class RuleGame {
             const time = this.roll ? ["ROLL", this.formatTime(Math.max(0, this.rollLength - this.rollFrames))] : ["TIME", this.formatTime()];
             return [mode, ["GRADE", this.gradeLabel()], ["LEVEL", `${this.level} / ${stop}`], time, ["SCORE", score]];
         }
-        const goal = this.gb ? (this.variant === "btype" ? GB_B_LINES : 0) : GUIDELINE_LINE_GOALS[this.variant];
+        const goal = this.nintendo ? (this.variant === "btype" ? GB_B_LINES : 0) : GUIDELINE_LINE_GOALS[this.variant];
         const lines = ["LINES", goal ? `${this.lines} / ${goal}` : String(this.lines)];
         if (this.variant === "sprint") return [mode, ["TIME", this.formatTime()], lines, ["SCORE", score]];
         if (this.variant === "ultra") {
@@ -789,16 +848,18 @@ class RuleGame {
                 this.gravity = 20;
             }
             this.softGravity = Math.max(this.gravity, 1); // World rule soft drop: fixed 1G, non-locking
-        } else if (this.gb) {
-            this.are = GB_ARE;
-            this.lineAre = GB_ARE;
-            this.das = GB_DAS;
-            this.arr = GB_ARR;
-            this.lineClearDelay = GB_LINE_CLEAR;
-            this.gbFrames = GB_GRAVITY[Math.min(this.level, GB_MAX_LEVEL)]; // the gravity timer (applyGravityGb)
+        } else if (this.nintendo) {
+            const nes = this.nes;
+            this.are = nes ? NES_ARE : GB_ARE; // NES: set by the lock height (setNesDelays)
+            this.lineAre = this.are;
+            this.das = nes ? NES_DAS : GB_DAS;
+            this.arr = nes ? NES_ARR : GB_ARR;
+            this.lineClearDelay = nes ? NES_LINE_CLEAR : GB_LINE_CLEAR;
+            // the gravity timer (applyGravityGb)
+            this.gbFrames = nes ? NES_GRAVITY[Math.min(this.level, NES_GRAVITY.length - 1)] : GB_GRAVITY[Math.min(this.level, GB_MAX_LEVEL)];
             this.lockDelayMax = this.gbFrames; // no lock delay: shown as the time left to the next gravity row
             this.gravity = 1 / this.gbFrames;
-            this.softGravity = 1 / GB_SOFT_FRAMES;
+            this.softGravity = 1 / (nes ? NES_SOFT_FRAMES : GB_SOFT_FRAMES);
         } else {
             this.are = GUIDELINE_ARE;
             this.lineAre = GUIDELINE_ARE;
@@ -821,14 +882,14 @@ class RuleGame {
 
     // Guideline: handling changed in the menu during a game
     setHandling(handling) {
-        if (this.tgm || this.gb) return;
+        if (this.tgm || this.nintendo) return;
         this.handling = { ...GUIDELINE_HANDLING, ...handling };
         this.updateTimings();
         this.setShadow();
     }
 
     ghostVisible() {
-        if (this.variant === "death" || this.variant === "20g" || this.gb || !this.handling.ghost) return false;
+        if (this.variant === "death" || this.variant === "20g" || this.nintendo || !this.handling.ghost) return false;
         return !this.tgm || this.level < TGM_GHOST_UNTIL;
     }
 
@@ -915,8 +976,9 @@ class RuleGame {
 
         // DAS charges in every phase, including ARE and line clears. The first
         // auto-shift comes DAS frames after the press, then one every ARR frames.
+        // NES: DAS doesn't charge outside the active phase
         let autoShift = false;
-        if (this.shiftDir !== 0 && !shiftPushed) {
+        if (this.shiftDir !== 0 && !shiftPushed && (!this.nes || this.phase === "active")) {
             if (this.dasCounter < this.das) {
                 if (++this.dasCounter >= this.das) {
                     autoShift = true;
@@ -994,13 +1056,18 @@ class RuleGame {
             if (C(ROTR_PUSH)) this.rotate(1);
         }
 
-        if (shiftPushed || (autoShift && !this.dcdWait)) {
+        // NES: no shifting while down is held
+        if ((shiftPushed || (autoShift && !this.dcdWait)) && !(this.nes && this.held.soft)) {
             // ARR 0: the auto-shift goes straight to the wall
             let steps = autoShift && this.arr === 0 ? WIDTH : 1, moved = false;
             while (steps-- > 0 && this.shift(this.shiftDir, !moved)) moved = true; // one move sound
+            if (this.nes && !moved) { // NES: blocked, DAS is (or stays) fully charged and tries again every frame
+                this.dasCounter = this.das;
+                this.arrCounter = this.arr - 1;
+            }
         }
 
-        if (this.gb) { // no hard or sonic drop; locks when gravity or soft drop can't move it down
+        if (this.nintendo) { // no hard or sonic drop; locks when gravity or soft drop can't move it down
             this.applyGravityGb(C(SOFT_PUSH));
             return;
         }
@@ -1079,11 +1146,12 @@ class RuleGame {
 
         this.curPiece_type = type;
         this.curPiece_col = 3;
-        this.curPiece_row = this.ars ? ARS_SPAWN_ROW : this.gb ? GB_SPAWN_ROW : this.tgm ? TGM_SPAWN_ROW : 0; // Guideline: rows 21-22
+        this.curPiece_row = this.ars ? ARS_SPAWN_ROW : this.gb ? GB_SPAWN_ROW : this.nes ? NES_SPAWN_ROW
+            : this.tgm ? TGM_SPAWN_ROW : 0; // Guideline: rows 21-22
         this.curPiece_rotation = 0;
 
-        // IRS: rotation button held while the piece enters; falls back if blocked (GB has none)
-        const irs = this.gb ? 0 : this.held.rotr ? 1 : this.held.rotl ? 3 : 0;
+        // IRS: rotation button held while the piece enters; falls back if blocked (NES and GB have none)
+        const irs = this.nintendo ? 0 : this.held.rotr ? 1 : this.held.rotl ? 3 : 0;
         if (irs && type !== tetO && this.movePossible(this.curPiece_row, this.curPiece_col, irs)) {
             this.curPiece_rotation = irs;
         }
@@ -1107,9 +1175,9 @@ class RuleGame {
         this.tFloorKicks = 0;
         this.floorKicked = false;
         this.lockDelayZeroed = false;
-        this.softArmed = false; // GB: soft drop needs a fresh press for each piece
+        this.softArmed = false; // NES and GB: soft drop needs a fresh press for each piece
         this.softCounter = 0;
-        this.softRun = 0; // GB: rows soft-dropped since the last press
+        this.softRun = 0; // NES and GB: rows soft-dropped since the last press
 
         // Block out
         if (!this.movePossible(this.curPiece_row, this.curPiece_col, this.curPiece_rotation)) {
@@ -1120,7 +1188,7 @@ class RuleGame {
         }
 
         // Guideline: drops one row immediately after appearing
-        if (!this.tgm && !this.gb && this.canFall()) this.curPiece_row++;
+        if (!this.tgm && !this.nintendo && this.canFall()) this.curPiece_row++;
         this.lowestRow = this.curPiece_row;
 
         // TGM: level +1 per new piece, except at section stops (x99 and 998) and in the staff roll
@@ -1148,7 +1216,7 @@ class RuleGame {
 
     // Successful move or rotation: move reset, within the rule's limits
     onMoveReset(isRotation) {
-        if (this.ars || this.gb || !this.touched) return; // Classic: step reset only; GB: no lock delay
+        if (this.ars || this.nintendo || !this.touched) return; // ARS: step reset only; NES and GB: no lock delay
         if (this.tgm) {
             if (isRotation) {
                 if (this.rotationResets >= TGM_ROTATION_RESETS) return;
@@ -1241,7 +1309,7 @@ class RuleGame {
         if (type === tetO) return false;
         const from = this.curPiece_rotation;
         const to = (from + dir + 4) % 4;
-        if (this.gb) { // no kicks: turns in place or not at all
+        if (this.nintendo) { // no kicks: turns in place or not at all
             if (!this.movePossible(this.curPiece_row, this.curPiece_col, to)) return false;
             this.curPiece_rotation = to;
             this.sounds.push("rotate");
@@ -1306,36 +1374,40 @@ class RuleGame {
         }
     }
 
-    // GB: the gravity timer moves the piece a row every gbFrames frames, and a held soft drop (pressed
-    // for this piece) every GB_SOFT_FRAMES instead; a piece that can't move when a row is due locks
-    // at once. Soft drop doesn't reset the gravity timer.
+    // NES and GB: the gravity timer moves the piece a row every gbFrames frames, and a held soft drop
+    // (pressed for this piece) every few frames; a piece that can't move when a row is due locks at
+    // once. GB: a soft drop replaces gravity and doesn't reset its timer, its first row comes with the
+    // press. NES: gravity goes on during a soft drop, every row restarts its timer, the soft drop's
+    // first row comes on the third frame and holding left or right with down ends it.
     applyGravityGb(softPushed) {
+        const nes = this.nes, softFrames = nes ? NES_SOFT_FRAMES : GB_SOFT_FRAMES;
         if (softPushed) {
             this.softArmed = true;
-            this.softCounter = GB_SOFT_FRAMES - 1; // the first row comes with the press
+            this.softCounter = softFrames - (nes ? NES_SOFT_FIRST : 1); // counts up to softFrames
         }
-        if (!this.held.soft) {
+        if (!this.held.soft || (nes && (this.held.left || this.held.right))) {
             this.softArmed = false;
             this.softRun = 0;
         }
         const soft = this.softArmed;
-        let due = false;
+        let gravityDue = false, softDue = false;
         if (++this.gravityAcc >= this.gbFrames) {
             this.gravityAcc = 0;
-            due = !soft;
+            gravityDue = nes || !soft;
         }
-        if (soft && ++this.softCounter >= GB_SOFT_FRAMES) {
+        if (soft && ++this.softCounter >= softFrames) {
             this.softCounter = 0;
-            due = true;
+            softDue = true;
         }
-        if (due) {
+        if (gravityDue || softDue) {
             if (!this.canFall()) {
-                this.manualLock = soft;
+                this.manualLock = softDue;
                 this.lock();
                 return;
             }
             this.curPiece_row++;
-            if (soft) this.softRun++;
+            if (softDue) this.softRun++;
+            if (nes) this.gravityAcc = 0;
             this.onFall();
         }
         this.curPiece_lockDelay = this.canFall() ? 0 : this.gravityAcc; // lock fade
@@ -1388,7 +1460,7 @@ class RuleGame {
 
     lock(fromHardDrop = false) {
         const type = this.curPiece_type;
-        const tspin = !this.tgm && !this.gb && type === tetT && this.lastRotation ? this.detectTSpin() : null;
+        const tspin = !this.tgm && !this.nintendo && type === tetT && this.lastRotation ? this.detectTSpin() : null;
         this.sounds.push(fromHardDrop ? "harddrop" : "lock");
 
         const cells = this.curPieceCells();
@@ -1405,7 +1477,7 @@ class RuleGame {
         this.shadowRow = -100;
 
         // Guideline lock out: piece locked entirely above the visible field
-        if (!this.tgm && !this.gb && allAbove) {
+        if (!this.tgm && !this.nintendo && allAbove) {
             this.endGame("GAME OVER", "LOCK OUT — ESC FOR MENU");
             return;
         }
@@ -1426,9 +1498,10 @@ class RuleGame {
         if (n > 0) this.sounds.push("clear" + n + (this.chain > 0 ? "c" + this.chain : "")); // e.g. "clear2c3"
 
         if (this.tgm) this.scoreTgm(n);
-        else if (this.gb) this.scoreGb(n);
+        else if (this.nintendo) this.scoreGb(n);
         else this.scoreGuideline(n, tspin);
         if (this.gameover) return;
+        if (this.nes) this.setNesDelays();
 
         const collapseNow = n > 0 && this.lineClearDelay === 0;
         if (fromHardDrop) {
@@ -1449,6 +1522,15 @@ class RuleGame {
             this.setPhase("lineclear", this.lineClearDelay);
             this.pendingRows = rows;
         }
+    }
+
+    // NES, after a lock: the entry delay grows with the height of the piece's centre (box cell 2, 2),
+    // and a line clear lasts until the fifth animation step, which comes on a multiple of 4 frames
+    setNesDelays() {
+        const height = HEIGHT - 1 - (this.curPiece_row + 2); // 0 in the bottom row
+        this.are = Math.min(NES_ARE_MAX, NES_ARE + NES_ARE_STEP * Math.floor((height + 2) / 4));
+        this.lineAre = this.are;
+        this.lineClearDelay = NES_LINE_CLEAR + (-this.frames & 3);
     }
 
     // Timed phases (are, lineclear, rollstart) count phaseCounter up to phaseLength
@@ -1662,23 +1744,36 @@ class RuleGame {
         return this.field.every(row => row.every(v => v === 0));
     }
 
-    // GB: 40/100/300/1200 x (level + 1), plus the rows soft-dropped if the soft drop locked the
-    // piece; capped at 999,999. A-Type goes up a level every 10 lines to 20, the first time
-    // after (start level + 1) x 10 lines; B-Type stays at its start level and ends at 25 lines.
+    // NES and GB: 40/100/300/1200 x (level + 1), at the level before the clear (GB) or after it
+    // (NES), plus the rows soft-dropped if the soft drop locked the piece; capped at 999,999.
+    // B-Type stays at its start level and ends at 25 lines; A-Type levels up (nintendoLevel).
     scoreGb(n) {
         if (this.manualLock) this.score += this.softRun;
         if (n > 0) {
-            this.score += GB_LINE_SCORES[n] * (this.level + 1);
+            const levelBefore = this.level;
             this.lines += n;
+            if (this.variant !== "btype") this.nintendoLevel();
+            this.score += GB_LINE_SCORES[n] * ((this.nes ? this.level : levelBefore) + 1);
             this.addAction(CLEAR_NAMES[n], "clear", n);
         }
         this.score = Math.min(this.score, GB_MAX_SCORE);
-        if (n === 0) return;
-        if (this.variant === "btype") {
-            if (this.lines >= GB_B_LINES) this.endGame("COMPLETE", `${GB_B_LINES} LINES — SCORE ${this.scoreText()}`);
-            return;
+        if (n > 0 && this.variant === "btype" && this.lines >= GB_B_LINES) {
+            this.endGame("COMPLETE", `${GB_B_LINES} LINES — SCORE ${this.scoreText()}`);
         }
-        const level = Math.min(GB_MAX_LEVEL, Math.max(this.startLevel, Math.floor(this.lines / GB_LINES_PER_LEVEL)));
+    }
+
+    // A-Type level after a clear. GB: a level every 10 lines up to 20, the first after
+    // (start level + 1) x 10 lines. NES: the first after start x 10 + 10 lines, or after
+    // max(100, start x 10 - 50) if that's sooner, then every 10, with no end.
+    nintendoLevel() {
+        const start = this.startLevel;
+        let level;
+        if (this.nes) {
+            const first = Math.min(start * 10 + 10, Math.max(100, start * 10 - 50));
+            level = this.lines < first ? start : start + 1 + Math.floor((this.lines - first) / NES_LINES_PER_LEVEL);
+        } else {
+            level = Math.min(GB_MAX_LEVEL, Math.max(start, Math.floor(this.lines / GB_LINES_PER_LEVEL)));
+        }
         if (level !== this.level) {
             this.level = level;
             this.updateTimings();

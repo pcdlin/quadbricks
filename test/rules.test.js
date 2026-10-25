@@ -1,10 +1,10 @@
-// Spec checks for game/rules.js against the Guideline, TGM1, TGM3, TAP and GB references.
+// Spec checks for game/rules.js against the Guideline, TGM1, TGM3, TAP, NES and GB references.
 // Usage: node test/rules.test.js
 const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 vm.runInThisContext(fs.readFileSync(dir + "/game.js", "utf8") + "\n" + fs.readFileSync(dir + "/rules.js", "utf8") +
-    "\n;Object.assign(globalThis, {RuleGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, guideline, arika, tgmClassic, tgmTap, gameBoy, tgmOriginal, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
+    "\n;Object.assign(globalThis, {RuleGame, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gameBoy, tgmOriginal, nesTetris, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -1507,6 +1507,182 @@ function tgm1To999(score, frames = 600 * 60) {
         [false, false, true, "visible", "GM"]);
 }
 
+// ---------------------------------------------------------------- NES (Tetris for the NES)
+function startedNes(variant = "standard", level = 0, height = 0) {
+    const g = new RuleGame(nesTetris, variant, level, height);
+    for (let f = 0; f < 100 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+{
+    const r = new NesRandomizer(12345);
+    const counts = [0, 0, 0, 0, 0, 0, 0], N = 700000;
+    let prev = -1, repeats = 0;
+    for (let i = 0; i < N; i++) { const p = r.nextIndex(); counts[p]++; if (p === prev) repeats++; prev = p; }
+    const pct = counts.map(c => 100 * c / N);
+    check("NES randomizer: about 1/7 each, and a repeat only from the reroll (1/4 x 1/7 = 3.6%)",
+        [pct.every(p => p > 13 && p < 15.5), Math.round(1000 * repeats / N) / 10], [true, 3.6]);
+    const s = new NesRandomizer(1);
+    s.prev = 3;
+    s.rand = (() => { const rolls = [3, 3]; return () => rolls.shift(); })();
+    const t = new NesRandomizer(1);
+    t.rand = (() => { const rolls = [7, 2]; return () => rolls.shift(); })();
+    check("  ...rerolls the previous piece and 7 once, taking the reroll as it comes", [s.nextIndex(), t.nextIndex()], [3, 2]);
+}
+{
+    const g = startedNes();
+    check("NES: no hold, one next piece, no ghost, a 20-row well, starts at level 0",
+        [g.hasHold, g.nextCount, g.getShadowRow(), g.wellTop, g.level], [false, 1, -100, 2, 0]);
+    check("  ...stats name the rule set and mode", [g.getStats()[0], startedNes("btype").getStats()[0]], [["NES", "A-TYPE"], ["NES", "B-TYPE"]]);
+    clearField(g);
+    const spawned = type => { g.curPiece_type = 0; g.spawn(type, false); return cellsOf(g); };
+    check("  ...T spawns flat side up in the top two visible rows, its centre in column 5",
+        spawned(tetT), [[2, 4], [2, 5], [2, 6], [3, 5]]);
+    check("  ...I spawns flat in the top row, O in columns 4-5", [spawned(tetI), spawned(tetO)],
+        [[[2, 3], [2, 4], [2, 5], [2, 6]], [[2, 4], [2, 5], [3, 4], [3, 5]]]);
+}
+{
+    const g = startedNes();
+    clearField(g);
+    placeGb(g, tetT, 0, 10, 3);
+    g.rotate(1);
+    const cw = cellsOf(g);
+    g.rotate(1);
+    check("NES: T turns clockwise about its centre (12, 5): pointing left, then up", [cw, cellsOf(g)],
+        [[[11, 5], [12, 4], [12, 5], [13, 5]], [[11, 5], [12, 4], [12, 5], [12, 6]]]);
+    placeGb(g, tetZ, 0, 10, 3);
+    g.rotate(1);
+    check("  ...Z and S stand right-handed (right of the centre)", cellsOf(g), [[11, 6], [12, 5], [12, 6], [13, 5]]);
+    placeGb(g, tetS, 0, 10, 3);
+    g.rotate(-1);
+    check("  ...S", cellsOf(g), [[11, 5], [12, 5], [12, 6], [13, 6]]);
+    placeGb(g, tetI, 1, 10, -2); // vertical I in column 0
+    check("  ...no wall kicks: the I against the wall can't turn", [g.rotate(1), g.curPiece_rotation], [false, 1]);
+    placeGb(g, tetI, 0, 0, 3); // flat I at spawn: may turn up into the two rows above the well
+    check("  ...pieces turn into the two rows above the well, no higher", [g.rotate(1), g.movePossible(-1, 3, 1, tetI)], [true, false]);
+    g.held.rotr = true;
+    g.curPiece_type = 0;
+    g.spawn(tetT, false);
+    g.held.rotr = false;
+    check("  ...no IRS", g.curPiece_rotation, 0);
+}
+{
+    const g = startedNes();
+    clearField(g);
+    placeGb(g, tetO, 0, 10, 3);
+    g.advanceFrame(HARD_PUSH);
+    check("NES: no hard drop", [g.curPiece_row, g.phase], [10, "active"]);
+    const frames = level => { g.level = level; g.updateTimings(); return g.gbFrames; };
+    check("  ...gravity in frames per row: 48 at 0, 6 at 9, 3 at 18, 2 at 19-28, 1 from 29",
+        [0, 1, 8, 9, 10, 13, 16, 18, 19, 28, 29, 40].map(frames), [48, 43, 8, 6, 5, 4, 3, 3, 2, 2, 1, 1]);
+    g.level = 0; g.updateTimings();
+    const rows = [];
+    placeGb(g, tetO, 0, 5, 3);
+    for (let f = 1; f <= 96; f++) { const r = g.curPiece_row; g.advanceFrame(0); if (g.curPiece_row !== r) rows.push(f); }
+    check("  ...level 0: a row every 48 frames", rows, [48, 96]);
+}
+{
+    const g = startedNes();
+    clearField(g);
+    placeGb(g, tetO, 0, 5, 3);
+    const rows = [];
+    for (let f = 0; f < 9; f++) { const r = g.curPiece_row; g.advanceFrame(f === 0 ? SOFT_PUSH : 0); if (g.curPiece_row !== r) rows.push(f); }
+    check("NES soft drop: the first row on the third frame, then every second", rows, [2, 4, 6, 8]);
+    while (g.phase === "active") g.advanceFrame(0);
+    check("  ...locking by soft drop scores the rows dropped", g.score, 18 - 5);
+    while (g.phase !== "active") g.advanceFrame(0);
+    const r = g.curPiece_row;
+    for (let f = 0; f < 10; f++) g.advanceFrame(0);
+    check("  ...still holding it doesn't drop the next piece", g.curPiece_row, r);
+    g.advanceFrame(SOFT_RELEASE);
+    clearField(g);
+    placeGb(g, tetO, 0, 5, 3);
+    g.advanceFrame(LEFT_PUSH);
+    const col = g.curPiece_col;
+    for (let f = 0; f < 10; f++) g.advanceFrame(f === 0 ? SOFT_PUSH : 0);
+    check("  ...not while left or right is held", g.curPiece_row, 5);
+    g.advanceFrame(LEFT_RELEASE);
+    for (let f = 0; f < 30; f++) g.advanceFrame(f === 0 ? RIGHT_PUSH : 0);
+    check("  ...and while down is held the piece can't shift", g.curPiece_col, col);
+}
+{
+    const g = startedNes();
+    clearField(g);
+    placeGb(g, tetO, 0, 10, 7);
+    const shifts = [];
+    for (let f = 0; f <= 30; f++) {
+        const before = g.curPiece_col;
+        g.advanceFrame(f === 0 ? LEFT_PUSH : 0);
+        if (g.curPiece_col !== before) shifts.push(f);
+    }
+    check("NES auto-shift frames after holding left (DAS 16, ARR 6)", shifts, [0, 16, 22, 28]);
+    g.advanceFrame(LEFT_RELEASE);
+    clearField(g);
+    placeGb(g, tetO, 0, 10, 1); // O in columns 2-3, a block left of it
+    g.setCell(12, 1, 1);
+    const charged = [];
+    for (let f = 0; f <= 8; f++) {
+        if (f === 4) g.setCell(12, 1, 0);
+        const before = g.curPiece_col;
+        g.advanceFrame(f === 0 ? LEFT_PUSH : 0);
+        if (g.curPiece_col !== before) charged.push(f);
+    }
+    check("  ...a blocked shift leaves DAS charged: it moves on the first frame there's room", charged, [4]);
+    g.advanceFrame(LEFT_RELEASE);
+    clearField(g);
+    placeGb(g, tetO, 0, 18, 3);
+    g.lock();
+    g.advanceFrame(RIGHT_PUSH); // pressed and held through the entry delay
+    let f = 0;
+    while (g.phase !== "active") { g.advanceFrame(0); f++; }
+    const spawnCol = g.curPiece_col;
+    for (f = 0; f < 15; f++) g.advanceFrame(0);
+    const before16 = g.curPiece_col;
+    g.advanceFrame(0);
+    check("  ...DAS doesn't charge during the entry delay", [before16 - spawnCol, g.curPiece_col - spawnCol], [0, 1]);
+}
+{
+    const g = startedNes();
+    const areAfter = row => { clearField(g); g.frames = 0; placeGb(g, tetO, 0, row, 7); g.lock(); return framesToNextPiece(g); };
+    // the O's centre is its top row (box row 2): 18 + 2 = 20, one row above the bottom
+    check("NES entry delay by the height of the centre: 10 in the bottom two rows, +2 per 4 rows, at most 18",
+        [areAfter(18), areAfter(17), areAfter(14), areAfter(13), areAfter(4), areAfter(0)], [10, 12, 12, 14, 18, 18]);
+    const clear = frames => {
+        clearField(g);
+        for (let c = 0; c < 8; c++) { g.setCell(20, c, 1); g.setCell(21, c, 1); }
+        placeGb(g, tetO, 0, 18, 7);
+        g.frames = frames;
+        g.lock();
+        return framesToNextPiece(g);
+    };
+    check("  ...a line clear adds 17-20 frames, to the next multiple of 4", [clear(100), clear(101), clear(102), clear(103)], [27, 30, 29, 28]);
+}
+{
+    const nesLevel = (start, lines) => { const g = new RuleGame(nesTetris, "standard", start); g.lines = lines; g.nintendoLevel(); return g.level; };
+    check("NES levels: first level-up after start x 10 + 10 lines, or max(100, start x 10 - 50) if sooner, then every 10",
+        [[0, 9], [0, 10], [5, 59], [5, 60], [5, 70], [12, 99], [12, 100], [12, 110], [16, 109], [16, 110], [19, 139], [19, 140], [0, 290]].map(([s, l]) => nesLevel(s, l)),
+        [0, 1, 5, 6, 7, 12, 13, 14, 16, 17, 19, 20, 29]);
+    check("NES start levels 0-19", [new RuleGame(nesTetris, "standard", 25).level, new RuleGame(nesTetris, "standard", -1).level, new RuleGame(nesTetris, "standard", 19).gbFrames], [19, 0, 2]);
+    const g = startedNes();
+    clearField(g);
+    g.lines = 8;
+    for (let c = 0; c < 8; c++) { g.setCell(20, c, 1); g.setCell(21, c, 1); }
+    placeGb(g, tetO, 0, 18, 7);
+    g.lock();
+    check("NES score at the level after the clear: a double reaching level 1 scores 100 x 2", [g.level, g.score], [1, 200]);
+    g.lines = 205; g.score = 999000;
+    clearField(g);
+    tapClear(g, 4, h => { h.curPiece_col = 7; });
+    check("  ...no level cap, score capped at 999,999", [g.level, g.score], [20, 999999]);
+}
+{
+    const g = startedNes("btype", 0, 5);
+    check("NES B-Type: height 5 is 12 rows of garbage, height 1 is 3", [garbageRows(g).filter(x => x).length, garbageRows(startedNes("btype", 0, 1)).filter(x => x).length], [12, 3]);
+    const b = startedNes("btype", 7);
+    clearField(b);
+    b.lines = 24;
+    tapClear(b, 1, h => { h.curPiece_col = 7; });
+    check("  ...ends at 25 lines with the level unchanged", [b.isGameOver(), b.endTitle, b.level], [true, "COMPLETE", 7]);
+}
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);
