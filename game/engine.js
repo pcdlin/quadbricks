@@ -1182,14 +1182,40 @@ class Engine {
         return set.trail ? set.trail(index) : PIECE_COLORS[index].light;
     }
 
-    // A drop trail streak in a column, from y0 down to y1 (the blocks), fading in towards them;
-    // drawn only down to yEnd while it grows, at `alpha` while it fades
-    drawTrail(col, y0, y1, index, yEnd = y1, alpha = 1) {
-        const r = this.r;
-        const color = parseColor(this.tileLight(index));
-        r.globalAlpha = DROP_TRAIL_ALPHA * this.softEffectScale() * alpha;
-        // from y0 to yEnd, whichever way up (Rev)
-        r.shape(this.cellX(col), Math.min(y0, yEnd), CELL, Math.abs(yEnd - y0), { fill: [[color[0], color[1], color[2], 0], color], fillY: [y0, y1] });
+    // A drop trail's fit to the block style's blocks: [inset from the cell's sides, how far it
+    // reaches past the cell's edge into the block, under its rounded corners] (that way on screen:
+    // down, or up when the well is upside down). Drawn under the field, it runs into the blocks.
+    trailFit() {
+        const [inset, round] = TILESETS[this.options.tileset].face || [0, 0];
+        return [inset, (this.rev ? -1 : 1) * (inset + round * CELL)];
+    }
+
+    // Drop trail streaks, one per column ({ col, y0, y1, index, yEnd, alpha }): each from y0 down
+    // to y1 (the blocks' cell edge), fading in towards them, and on to yEnd inside the blocks; drawn
+    // only down to yEnd while it grows, at `alpha` while it fades. Neighbouring streaks are joined
+    // across the gap between their blocks where both are above the blocks, so a piece's trail is
+    // one area, inset only at its outer sides.
+    drawTrails(streaks) {
+        const r = this.r, [inset] = this.trailFit(), scale = DROP_TRAIL_ALPHA * this.softEffectScale();
+        const streak = (s, x, w, ya, yb) => {
+            const color = parseColor(this.tileLight(s.index));
+            r.globalAlpha = scale * s.alpha;
+            r.shape(x, ya, w, yb - ya, { fill: [[color[0], color[1], color[2], 0], color], fillY: [s.y0, s.y1] });
+        };
+        // whichever way up (Rev): the span drawn, and the part of it above the blocks
+        const span = (s, yEnd) => [Math.min(s.y0, yEnd), Math.max(s.y0, yEnd)];
+        const above = s => span(s, (s.yEnd - s.y1) * (s.y1 - s.y0) > 0 ? s.y1 : s.yEnd);
+        for (const s of streaks) {
+            const [ya, yb] = span(s, s.yEnd);
+            streak(s, this.cellX(s.col) + inset, CELL - 2 * inset, ya, yb);
+            const n = inset && streaks.find(t => t.col === s.col + 1);
+            if (!n) continue;
+            const [a0, a1] = above(s), [b0, b1] = above(n);
+            const ya2 = Math.max(a0, b0), yb2 = Math.min(a1, b1);
+            // the join takes the fainter streak's fade (the one starting further down)
+            const f = (n.y0 - s.y0) * (s.y1 - s.y0) > 0 ? n : s;
+            if (yb2 > ya2) streak(f, this.cellX(n.col) - inset, 2 * inset, ya2, yb2);
+        }
         r.globalAlpha = 1;
     }
 
@@ -1198,7 +1224,6 @@ class Engine {
     drawDropFlashes() {
         const r = this.r;
         for (const f of this.dropFlashes) {
-            if (this.options.trail) this.drawDropTrail(f);
             const t = Math.max(0, f.life / DROP_FLASH_LIFE);
             for (const cell of f.cells) {
                 if (cell.row < this.wellTop || cell.cleared) continue; // hidden rows; cleared: nothing left to light up
@@ -1212,23 +1237,31 @@ class Engine {
         }
     }
 
-    // Faint streak per column from where the piece started to where it landed,
-    // brightest at the piece and fading upwards; it grows down to the piece, then fades out
+    // Faint streak per column from where the piece started to where it landed, brightest at
+    // the piece and fading upwards, reaching down to the column's lowest block of the piece;
+    // it grows down to the piece, then fades out
     drawDropTrail(f) {
         const n = DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 - f.life; // frames shown, from 1
         const grown = Math.min(1, n / DROP_TRAIL_GROW); // share of the trail drawn so far
         const alpha = 1 - Math.max(0, n - DROP_TRAIL_GROW) / (DROP_TRAIL_FADE + 1);
-        const cols = new Map(); // col -> topmost landed cell
+        const cols = new Map(); // col -> [topmost landed cell, lowest landed row]
         for (const cell of f.cells) {
             const c = cols.get(cell.col);
-            if (!c || cell.row < c.row) cols.set(cell.col, cell);
+            if (!c) cols.set(cell.col, [cell, cell.row]);
+            else {
+                if (cell.row < c[0].row) c[0] = cell;
+                c[1] = Math.max(c[1], cell.row);
+            }
         }
-        for (const cell of cols.values()) {
+        const depth = this.trailFit()[1], streaks = [];
+        for (const [cell, bottom] of cols.values()) {
             const top = Math.max(cell.row - cell.dist, this.wellTop);
             if (cell.dist <= 0 || cell.row <= top) continue;
             const [y0, y1] = this.trailYs(top, cell.row);
-            this.drawTrail(cell.col, y0, y1, cell.type, y0 + (y1 - y0) * grown, alpha);
+            const yFar = this.trailYs(bottom, bottom)[1] + depth; // inside the lowest block
+            streaks.push({ col: cell.col, y0, y1, index: cell.type, yEnd: y0 + (yFar - y0) * grown, alpha });
         }
+        this.drawTrails(streaks);
     }
 
     // Line clear delay: a streak above each column of the falling stack, from where it
@@ -1236,7 +1269,7 @@ class Engine {
     // blocks falling together; drawn under the field, so only the gap above them shows.
     drawLineDropTrails(firstRow) {
         const game = this.game;
-        const top = Math.max(firstRow, this.wellTop);
+        const top = Math.max(firstRow, this.wellTop), depth = this.trailFit()[1];
         for (let i = firstRow; i < HEIGHT; i++) {
             const dist = game.getDropDistance(i);
             if (!dist) continue;
@@ -1245,12 +1278,14 @@ class Engine {
             const alpha = landed < 0 ? 1 : 1 - (landed + 1) / (DROP_TRAIL_FADE + 1);
             const [y0, y1] = this.trailYs(Math.max(i, top), i + game.getDropOffset(i, this.tickPhase));
             if (this.rev ? y0 <= y1 : y0 >= y1) continue;
+            const yEnd = y1 + depth, streaks = [];
             for (let j = 0; j < WIDTH; j++) {
                 const cell = game.getCell(i, j);
                 if (!cell || game.getCellAlpha(i, j) <= 0) continue;
                 if (i > firstRow && game.getCell(i - 1, j) && game.getDropDistance(i - 1) === dist) continue; // not the run's top
-                this.drawTrail(j, y0, y1, game.palette[cell], y1, alpha);
+                streaks.push({ col: j, y0, y1, index: game.palette[cell], yEnd, alpha });
             }
+            this.drawTrails(streaks);
         }
     }
 
@@ -2168,7 +2203,10 @@ class Engine {
         }
 
         // Draw Field
-        if (this.options.effects && this.options.trail) this.drawLineDropTrails(firstRow);
+        if (this.options.effects && this.options.trail) {
+            this.drawLineDropTrails(firstRow);
+            for (const f of this.dropFlashes) this.drawDropTrail(f);
+        }
         for (let i = firstRow; i < HEIGHT; i++) {
             const y = this.cellY(i + game.getDropOffset(i, this.tickPhase)); // rows fall into place during a line clear
             for (let j = 0; j < WIDTH; j++) {

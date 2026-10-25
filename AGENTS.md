@@ -690,8 +690,11 @@ export names explicitly at the top; add new globals there, and new rule files to
 - Line clears: no artificial delay outside TGM3; confetti (moderately prominent) plus a row flash.
 - Lock-delay fade on the falling piece; hard-drop flash in the piece's own colour, not white.
 - Options → Visuals → Drop trail (`options.trail`, on by default; shown only with effects on): a
-  streak per column behind a hard-dropped piece, down to that column's top block, and behind the
-  stack falling during a line clear delay. Trails and the hard-drop flash take the piece's light
+  streak per column behind a hard-dropped piece, and behind the stack falling during a line clear
+  delay (`drawTrails()`). Drawn under the field, each runs into the
+  column's blocks, down to the piece's lowest one, inset to the blocks' width and under their rounded
+  tops (the style's `face`, `trailFit()`); neighbouring columns join across the gap between blocks
+  above them, so a piece's trail is one area. Trails and the hard-drop flash take the piece's light
   colour, or the block style's `trail(index)` for styles that don't colour blocks by piece (Mono,
   Holo, 1989; `Engine.tileLight()`).
 - Options → Visuals → Stack border (`options.border`, off by default): a TGM-style light line

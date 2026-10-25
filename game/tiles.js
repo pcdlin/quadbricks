@@ -6,7 +6,8 @@
 // (else col.light). The engine lays a lamp light over every block but the ghost, moving with the
 // field's tilt (Engine.drawLamp()): only while 3D tilt is on, always with lamp: "always", never with
 // lamp: false; lampMask(g, size, index) fills the part of the block it lights (else the face), and
-// lampStrength scales it (else 1).
+// lampStrength scales it (else 1). face: [inset, corner radius / size] of the block's outline, for
+// styles whose blocks don't fill their cell (else [0, 0]); drop trails are shaped to it.
 
 // Original tile images from the C++ game (gfx/), by palette index
 const TILE_IMAGE_NAMES = [null, "cyan", "purple", "orange", "blue", "green", "red", "yellow"];
@@ -62,11 +63,12 @@ const TILESETS = {
     // Solid colour, square-ish, no gloss
     flat: {
         name: "Flat",
+        face: [1.5, 0.06],
         pad: () => 0,
         draw(g, col, size, style) {
-            const inset = 1.5;
+            const [inset, round] = this.face;
             const w = size - inset * 2;
-            const r = size * 0.06;
+            const r = size * round;
             g.beginPath();
             g.roundRect(inset, inset, w, w, r);
             if (style === "ghost") {
@@ -100,12 +102,13 @@ const TILESETS = {
     // Pieces differ only in lightness, so the stack stays readable when the sheen is faint.
     holo: {
         name: "Holo",
+        face: [1.5, 0.1],
         sheen: true,
         lampStrength: 0.45, // faint, so it doesn't wash out the sheen
         pad: (style) => style === "active" ? 10 : 0,
         trail: (index) => `hsl(220,6%,${holoLum(index)}%)`, // the settled block's grey
         draw(g, col, size, style, index) {
-            const inset = 1.5, w = size - inset * 2, r = size * 0.1;
+            const [inset, round] = this.face, w = size - inset * 2, r = size * round;
             const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
             if (style === "ghost") {
                 path();
@@ -152,11 +155,12 @@ const TILESETS = {
     // Translucent, luminous glass cells that bloom into the backdrop (Tetris Effect look)
     radiant: {
         name: "Radiant",
+        face: [1.5, 0.2],
         pad: (style) => style === "active" ? 14 : style === "ghost" ? 4 : 7,
         draw(g, col, size, style) {
-            const inset = 1.5;
+            const [inset, round] = this.face;
             const w = size - inset * 2;
-            const r = size * 0.2;
+            const r = size * round;
             const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
 
             if (style === "ghost") {
@@ -217,11 +221,12 @@ const TILESETS = {
     // Bevelled, glossy blocks with a glowing falling piece
     glossy: {
         name: "Glossy",
+        face: [1, 0.14],
         pad: (style) => style === "active" ? 10 : 0, // room for the glow
         draw(g, col, size, style) {
-            const inset = 1;
+            const [inset, round] = this.face;
             const w = size - inset * 2;
-            const r = size * 0.14;
+            const r = size * round;
 
             if (style === "ghost") {
                 g.beginPath();
@@ -307,11 +312,12 @@ const TILESETS = {
     // Dark glass cells with glowing coloured outlines
     neon: {
         name: "Neon",
+        face: [2.5, 0.12],
         pad: (style) => style === "active" ? 20 : style === "ghost" ? 0 : 10,
         draw(g, col, size, style) {
-            const inset = 2.5;
+            const [inset, round] = this.face;
             const w = size - inset * 2;
-            const r = size * 0.12;
+            const r = size * round;
             g.beginPath();
             g.roundRect(inset, inset, w, w, r);
             if (style === "ghost") {
@@ -409,9 +415,10 @@ const TILESETS = {
     // Bevelled pyramid blocks: four lit facets around a flat face, as on 8- and 16-bit consoles
     faceted: {
         name: "Faceted",
+        face: [1, 0],
         pad: (style) => style === "active" ? 8 : 0,
         draw(g, col, size, style) {
-            const inset = 1, w = size - inset * 2, a = inset, b = inset + w;
+            const [inset] = this.face, w = size - inset * 2, a = inset, b = inset + w;
             const bevel = size * 0.2, fa = a + bevel, fb = b - bevel;
             if (style === "ghost") {
                 g.fillStyle = col.base + "1c";
@@ -486,11 +493,12 @@ const TILESETS = {
     // Monochrome: every piece in the same warm gallery white, soft rims, no colour at all
     mono: {
         name: "Mono",
+        face: [1.5, 0.1],
         pad: (style) => style === "active" ? 10 : 0,
         trail: () => `rgb(${MONO_INK})`,
         draw(g, col, size, style) {
             const ink = MONO_INK;
-            const inset = 1.5, w = size - inset * 2, r = size * 0.1;
+            const [inset, round] = this.face, w = size - inset * 2, r = size * round;
             const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
             if (style === "ghost") {
                 path();
