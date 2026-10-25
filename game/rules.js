@@ -647,13 +647,15 @@ class RuleGame {
         return true;
     }
 
-    // The piece rests on something: the lock delay runs; out of lock resets it locks at once
+    // The piece rests on something: the lock delay runs; out of lock resets it locks at once. The
+    // landing frame counts as the first, so a lock delay of N locks N frames after it (as in
+    // NullpoMino and Cambridge: the piece rests in view for N frames)
     onGround() {
         if (this.moveResets >= this.moveLimit) {
             this.lock();
             return;
         }
-        if (++this.curPiece_lockDelay >= this.lockDelayMax) this.lock();
+        if (++this.curPiece_lockDelay > this.lockDelayMax) this.lock();
     }
 
     restartShift(dir) {

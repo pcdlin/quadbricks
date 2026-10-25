@@ -230,6 +230,8 @@ Pieces are 4×4 boxes; `curPiece_row/col` is the box's top-left.
 **Phases:** `ready` (countdown 3, 2, 1, `COUNTDOWN_STEP_FRAMES` = 60 each, one second; frame 181 is the first to take input) → `active` → `are` / `lineclear` → `active` … (TGM3 and TAP at
 999, TAP Death at a late 500: `lineclear` → `rollstart` → `active` in the roll; it starts once
 `timerStopped` is set)
+A lock delay of N frames counts the landing frame as the first and locks on the frame after the
+Nth (the piece rests in view for N frames, as in NullpoMino and Cambridge).
 DAS charges in every phase. IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
 
 ### Rendering (`engine.js`, `renderer.js`, `backdrop.js`, `tiles.js`)

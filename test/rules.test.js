@@ -122,12 +122,13 @@ const piecesOf = g => g.queue.slice();
     check("Guideline move reset: wiggling on the floor locks after 15 resets", { locked, resetsUsed: g.moveResets }, { locked: true, resetsUsed: 15 });
 }
 {
-    // Lock delay is 30 frames with no input
+    // Lock delay is 30 frames with no input: the piece rests in view for 30 frames, the first of them
+    // the one it lands on, and locks on the next (as NullpoMino and Cambridge count it)
     const g = started(guideline);
     place(g, tetO, 0, 20, 3);
     let f = 0;
     while (g.phase === "active" && f < 100) { g.advanceFrame(0); f++; }
-    check("Guideline lock delay: 30 frames (0.5 s) on the ground", f, 30);
+    check("Guideline lock delay: 30 frames (0.5 s) on the ground, locking on the 31st", f, 31);
 }
 {
     // Level: 10 lines per level
@@ -423,7 +424,16 @@ for (const [rs, level, expected] of [[guideline, 1, 30], [guideline, 15, 30], [a
     place(g, tetO, 0, 20, 3);
     let f = 0;
     while (g.phase === "active" && f < 200) { g.advanceFrame(0); f++; }
-    check(`Lock delay, ${rs === arika ? "TGM3 World" : "Guideline"} level ${level}: ${expected} frames`, f, expected);
+    check(`Lock delay, ${rs === arika ? "TGM3 World" : "Guideline"} level ${level}: ${expected} frames resting, locking on the next`, f, expected + 1);
+}
+{
+    // At 20G a piece lands on the frame it enters: TAP Death's 30 frames then run from that frame
+    const g = createGame(tgmTap, "death");
+    while (g.phase !== "active") g.advanceFrame(0);
+    const enteredResting = !g.canFall();
+    let f = 0;
+    while (g.phase === "active" && f < 100) { g.advanceFrame(0); f++; }
+    check("Lock delay at 20G: a piece landing as it enters locks 30 frames after that frame", [enteredResting, f], [true, 30]);
 }
 
 // ---------------------------------------------------------------- T-spin classification
@@ -548,8 +558,8 @@ function classicAt(type, rot, row, col, blocks) {
     const w = classicAt(tetT, 0, 20, 4, []);
     let wf = 0;
     while (w.phase === "active" && wf < 200) { w.advanceFrame(wf % 2 ? LEFT_PUSH | RIGHT_RELEASE : RIGHT_PUSH | LEFT_RELEASE); wf++; }
-    check("Classic: sonic drop doesn't lock (locks 30 frames later) / soft drop locks on the ground / moving doesn't reset lock delay",
-        [landed, f, s.phase, wf], [["active", 19], 30, "are", 30]); // ARS O sits in box rows 1-2
+    check("Classic: sonic drop doesn't lock (locks 30 frames after landing) / soft drop locks on the ground / moving doesn't reset lock delay",
+        [landed, f, s.phase, wf], [["active", 19], 31, "are", 31]); // ARS O sits in box rows 1-2
 }
 
 // ---------------------------------------------------------------- Next preview
