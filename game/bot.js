@@ -1,0 +1,777 @@
+// A computer player. It plays any rule set through the same input bitmap a human produces and sees
+// only what a human sees: the field, the current piece, the visible next pieces and the hold.
+// Nothing here touches the rules; it has no DOM or engine dependencies (the engine only calls
+// Bot.input() once per game frame, test/bot.test.js drives it headless).
+//
+//  - Probe + explorer: finds every place the piece can reach with the keys the bot presses, using
+//    the game's own rotate() and shift() on a throwaway object that inherits from the game (so
+//    SRS, Arika SRS, ARS and NRS kicks are never re-implemented), with a gravity model: after each
+//    action the piece falls as far as gravity takes it in the frames the action costs, so at 20G it
+//    only slides along the stack surface, and at low gravity it hovers.
+//  - Brain: Thiery and Scherrer's evaluator (landing height, eroded cells, transitions, holes, wells,
+//    ...) over bit-row boards, with a beam search over the visible next pieces and the hold.
+//  - Hands: turns the chosen route into one input bitmap per frame, closed loop (the route is found
+//    again from where the piece actually is after every action), with a level's reaction time, key
+//    interval, DAS use, mistakes and noise; the upper levels also choose during the entry delay how
+//    the next piece should enter and hold that rotation key through it (IRS).
+//
+// Left out for now: T-spins, IHS, DAS pre-charged during ARE, finesse.
+
+const BOT_ROWS = HEIGHT - FIELD_TOP;
+const BOT_FULL = (1 << WIDTH) - 1;
+
+// One level of proficiency: reaction (frames after a piece appears before the first input),
+// interval (frames per action), das (long moves by DAS), hard (share of pieces it hard or sonic
+// drops; the rest are soft dropped), depth and beam (lookahead over the visible next pieces), hold
+// (what using the hold costs in evaluation points; Infinity: never), noise (σ of each evaluation
+// weight, per game), temp (softmax temperature over the best placements), misdrop (chance of
+// aiming one column or rotation off), irs (turns a piece as it enters by holding the key through
+// ARE), tucks (waits and soft-drops to slide under overhangs)
+const BOT_LEVELS = [
+    { name: "Novice", irs: false, reaction: 30, interval: 8, das: false, hard: 0.3, depth: 0, beam: 1, hold: Infinity, noise: 0.35, temp: 1, misdrop: 0.06, tucks: false },
+    { name: "Casual", irs: false, reaction: 15, interval: 5, das: false, hard: 0.7, depth: 0, beam: 1, hold: 12, noise: 0.2, temp: 0.5, misdrop: 0.03, tucks: false },
+    { name: "Skilled", irs: false, reaction: 8, interval: 3, das: true, hard: 1, depth: 1, beam: 4, hold: 0, noise: 0.1, temp: 0.2, misdrop: 0.01, tucks: true },
+    { name: "Expert", irs: true, reaction: 3, interval: 2, das: true, hard: 1, depth: 2, beam: 8, hold: 0, noise: 0.03, temp: 0.03, misdrop: 0.002, tucks: true },
+    { name: "Master", irs: true, reaction: 0, interval: 1, das: true, hard: 1, depth: 3, beam: 16, hold: 0, noise: 0, temp: 0, misdrop: 0, tucks: true },
+];
+
+// Evaluation weights (Thiery and Scherrer's BCTS set); clear: bonus per lines cleared at a low stack.
+// "tetris" keeps the right column open and pays for Tetrises, "survival" takes every clear.
+const BOT_WEIGHTS = {
+    survival: { landing: -12.63, eroded: 6.6, rowTrans: -9.22, colTrans: -19.77, holes: -13.08, wells: -10.49, holeDepth: -1.61, holeRows: -24.04, clear: [0, 0, 0, 0, 0], edgeWell: false },
+    tetris: { landing: -12.63, eroded: 6.6, rowTrans: -9.22, colTrans: -19.77, holes: -13.08, wells: -10.49, holeDepth: -1.61, holeRows: -24.04, clear: [0, -25, -20, -12, 45], edgeWell: true },
+};
+const BOT_TETRIS_MAX_STACK = 12; // rows: above this every clear is welcome
+const BOT_DANGER = -1e6;         // the next piece could not enter
+
+const BOT_TMAX = 240;            // frames the explorer looks ahead
+const BOT_MAXN = 9000;           // explorer nodes
+const BOT_COLS = 28, BOT_COL_OFF = 8;
+const BOT_DAS_MIN = 4;           // moves in a row that are worth a held key
+
+// actions
+const BOT_CW = 0, BOT_CCW = 1, BOT_R180 = 2, BOT_LEFT = 3, BOT_RIGHT = 4, BOT_DOWN = 5, BOT_WAIT = 6;
+
+// [key, push bit, release bit]
+const BOT_KEYS = [
+    ["left", LEFT_PUSH, LEFT_RELEASE], ["right", RIGHT_PUSH, RIGHT_RELEASE], ["soft", SOFT_PUSH, SOFT_RELEASE],
+    ["rotl", ROTL_PUSH, ROTL_RELEASE], ["rotr", ROTR_PUSH, ROTR_RELEASE], ["rot180", ROT180_PUSH, ROT180_RELEASE],
+    ["hold", HOLD_PUSH, HOLD_RELEASE],
+];
+
+function botRng(seed) { // mulberry32; never Math.random, which drives the 7-bag
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = Math.imul(a ^ (a >>> 15), a | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function botPop(x) {
+    x = x - ((x >> 1) & 0x55555555);
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+    return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >>> 24;
+}
+
+// How the piece is finished: "hard" (up drops and locks), "sonic" (up drops, soft drop locks on
+// the ground) or "soft" (soft drop only: TGM1, NES, GB)
+function botLockStyle(game) {
+    if (game.nes || game.gb || game.gamemode === tgmOriginal) return "soft";
+    if (game.ars2 || (game.tgm && game.ars)) return "sonic";
+    return "hard";
+}
+
+// Evaluation set for the game's mode (measured with tools/bot-bench.js): stacking for Tetrises pays
+// where the score or grade counts lines (Guideline marathons and Ultra, TGM1, TGM3 Master, NES, GB);
+// the modes about time or survival (Sprint, Dig, ACE, TAP, Easy, Shirase) take every clear
+function botProfile(game) {
+    if (game.nes || game.gb || game.gamemode === tgmOriginal) return "tetris";
+    if (game.gamemode === guideline) return /^(sprint|dig)/.test(game.variant) ? "survival" : "tetris";
+    if ((game.gamemode === arika || game.gamemode === tgmClassic) && game.variant === "standard") return "tetris";
+    return "survival";
+}
+
+// ----------------------------------------------------------
+// Boards: one integer per row (bit c set = filled), rows FIELD_TOP..HEIGHT-1 from index 0
+
+function botBoardFrom(game, rows) {
+    for (let i = 0; i < BOT_ROWS; i++) {
+        const line = game.field[i];
+        let m = 0;
+        for (let c = 0; c < WIDTH; c++) if (line[c] !== 0) m |= 1 << c;
+        rows[i] = m;
+    }
+}
+
+// Some empty cell has a block above it: only then can a piece slide under something (a tuck)
+function botHasOverhang(rows) {
+    let covered = 0;
+    for (let i = 0; i < BOT_ROWS; i++) {
+        if (~rows[i] & covered & BOT_FULL) return true;
+        covered |= rows[i];
+    }
+    return false;
+}
+
+// Per type: its distinct rotations (cells as the game uses them, big pieces doubled)
+let botShapeCache = { cells: null, table: null };
+function botShapes(game) {
+    if (botShapeCache.cells === game.curCells) return botShapeCache.table;
+    const table = [null];
+    for (let type = 1; type <= 7; type++) {
+        const rots = [], seen = new Set();
+        for (let rot = 0; rot < 4; rot++) {
+            const list = game.curCells[type][rot];
+            const minI = Math.min(...list.map(a => a[0])), minJ = Math.min(...list.map(a => a[1]));
+            const key = list.map(([i, j]) => (i - minI) * 16 + (j - minJ)).sort((a, b) => a - b).join();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            rots.push({ rot, cells: list, minJ, maxJ: Math.max(...list.map(a => a[1])) });
+        }
+        table.push(rots);
+    }
+    table.spawn = [null]; // [row, col] each type enters at
+    for (let type = 1; type <= 7; type++) table.spawn.push(game.big ? game.bigSpawnPosition(type) : game.spawnPosition(type));
+    botShapeCache = { cells: game.curCells, table };
+    return table;
+}
+
+function botFits(game, rows, cells, row, col) {
+    for (let k = 0; k < cells.length; k++) {
+        const r = row + cells[k][0], c = col + cells[k][1];
+        if (c < 0 || c >= WIDTH || r >= HEIGHT || r < game.pieceTop || (rows[r - FIELD_TOP] >> c & 1)) return false;
+    }
+    return true;
+}
+
+// The piece locks at (row, col) on src; the result, with full rows removed, goes to dst. Returns
+// the rows cleared, or -1 when a block would lie above the field. botLocked: what the lock did.
+// above: every block above the visible field (a lock out where the rule set has one)
+const botLocked = { eroded: 0, landing: 0, above: false };
+function botLock(src, dst, cells, row, col) {
+    dst.set(src);
+    let landing = 0, lowest = FIELD_TOP;
+    for (let k = 0; k < cells.length; k++) {
+        const r = row + cells[k][0];
+        if (r < FIELD_TOP) return -1;
+        dst[r - FIELD_TOP] |= 1 << (col + cells[k][1]);
+        landing += HEIGHT - r;
+        if (r > lowest) lowest = r;
+    }
+    botLocked.above = lowest < VISIBLE_TOP;
+    let inCleared = 0;
+    for (let k = 0; k < cells.length; k++) if (dst[row + cells[k][0] - FIELD_TOP] === BOT_FULL) inCleared++;
+    let w = BOT_ROWS - 1, cleared = 0;
+    for (let r = BOT_ROWS - 1; r >= 0; r--) {
+        if (dst[r] === BOT_FULL) cleared++;
+        else dst[w--] = dst[r];
+    }
+    while (w >= 0) dst[w--] = 0;
+    botLocked.eroded = cleared * inCleared;
+    botLocked.landing = landing / cells.length;
+    return cleared;
+}
+
+// The lock just made ends the game: a lock out, or the next piece can't enter
+function botDead(game, rows, next) {
+    return (game.lockOut && botLocked.above) || botBlocked(game, rows, next);
+}
+
+// The next piece can't enter on this board
+function botBlocked(game, rows, type) {
+    const [r, c] = botShapes(game).spawn[type];
+    const cells = game.curCells[type][0];
+    for (let k = 0; k < cells.length; k++) {
+        const rr = r + cells[k][0];
+        if (rr >= FIELD_TOP && rr < HEIGHT && (rows[rr - FIELD_TOP] >> (c + cells[k][1]) & 1)) return true;
+    }
+    return false;
+}
+
+const botHeight = new Int32Array(WIDTH), botCount = new Int32Array(WIDTH);
+
+// How good a board is (not counting the move that led to it)
+function botBoardScore(rows, w) {
+    let top = 0;
+    while (top < BOT_ROWS && rows[top] === 0) top++;
+    if (top === BOT_ROWS) return 0;
+    botHeight.fill(0);
+    botCount.fill(0);
+    let rowTrans = 0, colTrans = 0, holes = 0, holeDepth = 0, holeRows = 0, covered = 0, prev = 0;
+    for (let r = top; r < BOT_ROWS; r++) {
+        const bits = rows[r];
+        const ext = 0x801 | (bits << 1); // the walls count as filled
+        rowTrans += botPop((ext ^ (ext >> 1)) & 0x7FF);
+        colTrans += botPop(bits ^ prev);
+        prev = bits;
+        let holeBits = ~bits & covered & BOT_FULL;
+        if (holeBits) {
+            holes += botPop(holeBits);
+            holeRows++;
+            for (let c = 0; holeBits; c++, holeBits >>= 1) if (holeBits & 1) holeDepth += botCount[c];
+        }
+        for (let b = bits; b; b &= b - 1) botCount[31 - Math.clz32(b & -b)]++; // each set bit
+        for (let b = bits & ~covered; b; b &= b - 1) botHeight[31 - Math.clz32(b & -b)] = BOT_ROWS - r;
+        covered |= bits;
+    }
+    colTrans += botPop(BOT_FULL ^ prev); // the floor
+    let wells = 0;
+    for (let c = 0; c < WIDTH; c++) {
+        if (w.edgeWell && c === WIDTH - 1) continue;
+        const left = c > 0 ? botHeight[c - 1] : 99, right = c < WIDTH - 1 ? botHeight[c + 1] : 99;
+        const d = Math.min(left, right) - botHeight[c];
+        if (d > 0) wells += d * (d + 1) / 2;
+    }
+    return w.rowTrans * rowTrans + w.colTrans * colTrans + w.holes * holes + w.wells * wells
+        + w.holeDepth * holeDepth + w.holeRows * holeRows;
+}
+
+// What the move itself earned: landing height, eroded cells, a bonus for the lines it cleared
+// (big pieces: two rows make a line)
+function botStepScore(game, rows, w, cleared) {
+    let s = w.landing * botLocked.landing + w.eroded * botLocked.eroded;
+    const lines = game.big ? cleared >> 1 : cleared;
+    if (lines > 0) {
+        let top = 0;
+        while (top < BOT_ROWS && rows[top] === 0) top++;
+        if (BOT_ROWS - top <= BOT_TETRIS_MAX_STACK) s += w.clear[Math.min(lines, 4)];
+    }
+    return s;
+}
+
+// Every place a piece comes to rest when dropped straight down from its spawn row in each column,
+// without regard to how it gets there (used for the pieces beyond the current one)
+function botDrops(game, rows, type, shapes, fn) {
+    const spawn = shapes.spawn[type];
+    const step = game.big ? 2 : 1; // big pieces move two columns: only the spawn column's parity
+    for (const shape of shapes[type]) {
+        let first = spawn[1];
+        while (first - step >= -shape.minJ) first -= step;
+        for (let col = first; col + shape.maxJ < WIDTH; col += step) {
+            let row = spawn[0];
+            if (!botFits(game, rows, shape.cells, row, col)) continue;
+            while (botFits(game, rows, shape.cells, row + 1, col)) row++;
+            fn(shape, col, row);
+        }
+    }
+}
+
+// ----------------------------------------------------------
+// The explorer: every pose the piece can reach, in order of the frames the keys take
+
+class BotExplorer {
+    constructor() {
+        const n = BOT_MAXN, poses = BOT_ROWS * BOT_COLS * 4;
+        this.row = new Int16Array(n); this.col = new Int16Array(n); this.rot = new Int8Array(n);
+        this.acc = new Float32Array(n); this.ga = new Int16Array(n); this.time = new Int16Array(n);
+        // ARS floor kicks so far (I, T) and flags (1: floor kicked, 2: lock delay zeroed), per node
+        this.ik = new Int8Array(n); this.tk = new Int8Array(n); this.fk = new Int8Array(n);
+        this.parent = new Int32Array(n); this.act = new Int8Array(n); this.key = new Int32Array(n); this.next = new Int32Array(n);
+        this.best = new Int16Array(poses);
+        this.cand = new Int32Array(poses); // landing pose key -> the first node that lands there
+        this.head = new Int32Array(BOT_TMAX + 1);
+        this.cands = [];
+        this.n = 0;
+    }
+
+    poseKey(row, col, rot) {
+        const c = col + BOT_COL_OFF;
+        if (row < FIELD_TOP || row >= HEIGHT || c < 0 || c >= BOT_COLS) return -1;
+        return ((row - FIELD_TOP) * BOT_COLS + c) * 4 + rot;
+    }
+
+    add(row, col, rot, acc, ga, time, parent, act, ik, tk, fk) {
+        const key = this.poseKey(row, col, rot);
+        if (key < 0 || time > BOT_TMAX || this.n >= BOT_MAXN || time >= this.best[key]) return;
+        const id = this.n++;
+        this.best[key] = time;
+        this.row[id] = row; this.col[id] = col; this.rot[id] = rot; this.acc[id] = acc; this.ga[id] = ga;
+        this.ik[id] = ik; this.tk[id] = tk; this.fk[id] = fk;
+        this.time[id] = time; this.parent[id] = parent; this.act[id] = act; this.key[id] = key;
+        this.next[id] = this.head[time];
+        this.head[time] = id;
+    }
+
+    // o: game, probe, type, row, col, rot, acc (gravity owed), ga and gaMax (grounded actions made
+    // and allowed before the piece locks), interval, softCost, rot180, down, wait, goal. Without a
+    // goal, fills `cands` (landing pose keys, first-found node in `cand`); with one, returns the
+    // node that stands where its drop lands on goal.land, or -1.
+    run(o) {
+        const g = o.game, p = o.probe, type = o.type, goal = o.goal;
+        p.curPiece_type = type;
+        this.best.fill(32767);
+        this.head.fill(-1);
+        this.cand.fill(-1);
+        this.cands.length = 0;
+        this.n = 0;
+        const gravity = g.gravity;
+        this.add(o.row, o.col, o.rot, o.acc, o.ga, 0, -1, -1, g.iFloorKicks | 0, g.tFloorKicks | 0,
+            (g.floorKicked ? 1 : 0) | (g.lockDelayZeroed ? 2 : 0));
+        for (let t = 0; t <= BOT_TMAX; t++) {
+            for (let id = this.head[t]; id !== -1; id = this.next[id]) {
+                if (this.time[id] !== this.best[this.key[id]]) continue; // reached sooner another way
+                const r = this.row[id], c = this.col[id], rt = this.rot[id];
+                let land = r;
+                while (g.movePossible(land + 1, c, rt, type)) land++;
+                const lk = this.poseKey(land, c, rt);
+                if (lk >= 0 && this.cand[lk] === -1) { this.cand[lk] = id; this.cands.push(lk); }
+                if (goal && c === goal.col && rt === goal.rot && land === goal.land) return id;
+                const grounded = land === r;
+                // grounded: each action uses up a lock reset (or lock delay); TGM3: after a floor
+                // kick and another turn the lock delay is zero, so it locks where it rests
+                if (grounded && (this.ga[id] >= o.gaMax || this.fk[id] & 2)) continue;
+                const ga = this.ga[id] + (grounded ? 1 : 0);
+                for (let a = 0; a <= BOT_WAIT; a++) {
+                    if (a === BOT_R180 && !o.rot180) continue;
+                    if (a === BOT_DOWN && !o.down) continue;
+                    if (a === BOT_WAIT && !o.wait) continue;
+                    p.curPiece_row = r; p.curPiece_col = c; p.curPiece_rotation = rt;
+                    p.iFloorKicks = this.ik[id]; p.tFloorKicks = this.tk[id];
+                    p.floorKicked = (this.fk[id] & 1) !== 0; p.lockDelayZeroed = (this.fk[id] & 2) !== 0;
+                    let cost = o.interval, ok = false, acc = this.acc[id];
+                    switch (a) {
+                        case BOT_CW: ok = p.rotate(1); break;
+                        case BOT_CCW: ok = p.rotate(-1); break;
+                        case BOT_R180: ok = p.rotate(2); break;
+                        case BOT_LEFT: ok = p.shift(-1, false); break;
+                        case BOT_RIGHT: ok = p.shift(1, false); break;
+                        case BOT_DOWN:
+                            ok = g.movePossible(r + 1, c, rt, type);
+                            if (ok) { p.curPiece_row = r + 1; cost = o.softCost; }
+                            break;
+                        case BOT_WAIT: // until gravity takes the piece one row
+                            ok = gravity > 0 && gravity < 1 && g.movePossible(r + 1, c, rt, type);
+                            if (ok) { p.curPiece_row = r + 1; cost = Math.max(1, Math.ceil((1 - acc) / gravity)); acc = 0; }
+                            break;
+                    }
+                    if (!ok) continue;
+                    let nr = p.curPiece_row;
+                    const nc = p.curPiece_col, nrot = p.curPiece_rotation;
+                    if (a !== BOT_DOWN && a !== BOT_WAIT) { // the piece falls while the key is pressed
+                        acc += gravity * cost;
+                        while (acc >= 1 && g.movePossible(nr + 1, nc, nrot, type)) { nr++; acc--; }
+                        if (acc >= 1) acc = 0;
+                    }
+                    // a fall restarts the lock delay and the resets (step reset; move reset at a new lowest row)
+                    this.add(nr, nc, nrot, acc, nr > r ? 0 : ga, t + cost, id, a, p.iFloorKicks | 0, p.tFloorKicks | 0,
+                        (p.floorKicked ? 1 : 0) | (p.lockDelayZeroed ? 2 : 0));
+                }
+            }
+        }
+        return -1;
+    }
+
+    // The actions from the start to node id: [{ act, row, col, rot, cost }]
+    path(id) {
+        const out = [];
+        for (; this.parent[id] !== -1; id = this.parent[id]) {
+            out.push({ act: this.act[id], row: this.row[id], col: this.col[id], rot: this.rot[id], cost: this.time[id] - this.time[this.parent[id]] });
+        }
+        return out.reverse();
+    }
+}
+
+// ----------------------------------------------------------
+
+class Bot {
+    // level: an index into BOT_LEVELS; seed: for its noise and mistakes
+    constructor(level = 3, seed = 1) {
+        this.explorer = new BotExplorer();
+        this.board = new Int32Array(BOT_ROWS);
+        this.deepBuf = new Int32Array(BOT_ROWS);
+        this.rng = botRng(seed); // runs on across games, so a restart doesn't repeat the same mistakes
+        this.setLevel(level);
+        this.attach(null);
+    }
+
+    setLevel(level) {
+        this.level = Math.max(0, Math.min(BOT_LEVELS.length - 1, level));
+        this.hands = BOT_LEVELS[this.level];
+        this.weights = null; // drawn again, with the new level's noise, at the next input
+    }
+
+    get name() { return this.hands.name; }
+
+    // A new game (or a new level in the same one: keepHeld): weights with its noise
+    attach(game, keepHeld = false) {
+        this.game = game;
+        if (!keepHeld || !this.held) { this.held = {}; for (const [k] of BOT_KEYS) this.held[k] = false; }
+        this.want = {};
+        for (const [k] of BOT_KEYS) this.want[k] = 0;
+        this.hard = false;
+        this.weights = null;
+        this.profile = null;
+        this.style = "hard";
+        if (game) {
+            this.style = botLockStyle(game);
+            this.profile = this.forceProfile || botProfile(game);
+            const base = BOT_WEIGHTS[this.profile], noise = this.hands.noise;
+            const gauss = () => Math.sqrt(-2 * Math.log(1 - this.rng())) * Math.cos(2 * Math.PI * this.rng());
+            this.weights = { ...base };
+            if (noise) for (const k of ["landing", "eroded", "rowTrans", "colTrans", "holes", "wells", "holeDepth", "holeRows"]) this.weights[k] *= Math.max(0.2, 1 + noise * gauss());
+        }
+        this.resetPiece();
+    }
+
+    resetPiece() {
+        this.lastType = 0;
+        this.lastActive = -1;
+        this.plan = null;
+        this.macro = null;
+        this.cool = 0;
+        this.wait = 0;
+        this.replans = 0;
+        this.afterHold = false;
+        this.useHard = true;
+        this.irsDone = false; // the turn for the next piece is chosen (once per entry delay)
+        this.irsKey = null;
+        this.expect = null; // the pose the last key should leave the piece in
+        this.path = null;   // and the route from there
+    }
+
+    // Keys to let go of now (the engine hands the game back to the player)
+    releaseAll() {
+        let bits = 0;
+        for (const [k, , release] of BOT_KEYS) if (this.held[k]) { bits |= release; this.held[k] = false; }
+        return bits;
+    }
+
+    // The input bitmap for the game's next frame
+    input(game) {
+        if (game !== this.game || !this.weights) this.attach(game, game === this.game);
+        for (const [k] of BOT_KEYS) this.want[k] = 0;
+        this.hard = false;
+        if (!game.isGameOver() && game.phase === "active" && game.curPiece_type) this.think(game);
+        else {
+            if (this.lastActive >= 0) this.resetPiece();
+            if (this.hands.irs) this.preSpawn(game);
+        }
+        return this.emit();
+    }
+
+    // want: 0 let go, 1 held, 2 tapped (pressed again if it is held)
+    emit() {
+        let bits = 0;
+        for (const [k, push, release] of BOT_KEYS) {
+            const w = this.want[k];
+            if (w === 2) {
+                if (this.held[k]) bits |= release;
+                bits |= push;
+                this.held[k] = true;
+            } else if (w === 1) {
+                if (!this.held[k]) { bits |= push; this.held[k] = true; }
+            } else if (this.held[k]) {
+                bits |= release;
+                this.held[k] = false;
+            }
+        }
+        if (this.hard) bits |= HARD_PUSH;
+        return bits;
+    }
+
+    think(game) {
+        const fresh = this.lastType !== game.curPiece_type || game.activeTime !== this.lastActive + 1 || this.lastActive < 0;
+        this.lastType = game.curPiece_type;
+        this.lastActive = game.activeTime;
+        if (fresh) {
+            const afterHold = this.afterHold;
+            this.resetPiece();
+            this.lastType = game.curPiece_type;
+            this.lastActive = game.activeTime;
+            this.wait = afterHold ? 0 : this.hands.reaction;
+            this.useHard = this.rng() < this.hands.hard;
+        }
+        if (this.wait > 0) { this.wait--; return; }
+        if (this.macro && this.runMacro(game)) return;
+        if (this.cool > 0) { this.cool--; return; }
+        if (!this.plan) {
+            this.plan = this.decide(game);
+            if (!this.plan) { this.macro = { kind: "finish" }; this.runMacro(game); return; }
+        }
+        if (this.plan.held) { // the hold didn't take: play this piece after all
+            this.plan = this.decide(game, null, false);
+            if (!this.plan) { this.macro = { kind: "finish" }; this.runMacro(game); return; }
+        }
+        if (this.plan.hold) {
+            this.want.hold = 2;
+            this.afterHold = true;
+            this.plan = { hold: false, goal: null, held: true }; // until the held piece shows
+            this.cool = 1;
+            return;
+        }
+        // the rest of the last route while the piece is where it was expected, else a new one
+        const e = this.expect;
+        const onTrack = e && game.curPiece_row === e.row && game.curPiece_col === e.col && game.curPiece_rotation === e.rot;
+        const route = onTrack ? this.path : this.route(game, this.plan.goal);
+        this.expect = this.path = null;
+        if (!route) { // not reachable any more (it fell further than modelled): choose again
+            this.plan = null;
+            if (++this.replans > 3) { this.macro = { kind: "finish" }; this.runMacro(game); }
+            return;
+        }
+        if (route.length === 0) { this.macro = { kind: "finish" }; this.runMacro(game); return; }
+        if (this.act(game, route)) { // a single key: where it should leave the piece, and what follows
+            this.expect = route[0];
+            this.path = route.slice(1);
+        }
+    }
+
+    // During the entry delay: holds the turn the next piece should enter with (IRS)
+    preSpawn(game) {
+        if (!game.irs || game.gameover || game.curPiece_type) return;
+        if (game.phase !== "are" && game.phase !== "lineclear" && game.phase !== "ready" && game.phase !== "rollstart") return;
+        if (!this.irsDone && game.nextCount > 0 && game.rnd_get_queue(0)) {
+            this.irsDone = true;
+            this.irsKey = null;
+            const type = game.rnd_get_queue(0), visible = [];
+            for (let i = 1; i < game.nextCount; i++) if (game.rnd_get_queue(i)) visible.push(game.rnd_get_queue(i));
+            if (!this.weights) return;
+            const [row0, col] = game.big ? game.bigSpawnPosition(type) : game.spawnPosition(type);
+            const starts = [];
+            for (const rot of game.rot180 ? [0, 1, 3, 2] : [0, 1, 3]) {
+                if (rot && (type === tetO || !game.movePossible(row0, col, rot, type))) continue;
+                let row = row0;
+                if (game.dropsOnSpawn && game.movePossible(row + 1, col, rot, type)) row++;
+                for (let n = Math.floor(game.gravity); n > 0 && game.movePossible(row + 1, col, rot, type); n--) row++;
+                starts.push({ row, col, rot });
+            }
+            if (starts.length > 1 && game.movePossible(row0, col, 0, type)) {
+                const best = this.decide(game, { type, starts, visible });
+                if (best && best.start) this.irsKey = best.start === 1 ? "rotr" : best.start === 3 ? "rotl" : "rot180";
+            }
+        }
+        if (this.irsKey) this.want[this.irsKey] = 1;
+    }
+
+    // Presses the first key of the route; returns whether that was one action (not a held key)
+    act(game, route) {
+        const hands = this.hands, first = route[0], want = this.want;
+        this.cool = Math.max(0, hands.interval - 1);
+        switch (first.act) {
+            case BOT_CW: want.rotr = 2; break;
+            case BOT_CCW: want.rotl = 2; break;
+            case BOT_R180: want.rot180 = 2; break;
+            case BOT_LEFT: case BOT_RIGHT: {
+                const dir = first.act === BOT_LEFT ? "left" : "right";
+                let n = 1;
+                while (n < route.length && route[n].act === first.act) n++;
+                const last = route[n - 1];
+                const step = (first.act === BOT_LEFT ? -1 : 1) * (game.big ? 2 : 1);
+                // ARR 0 shoots to the wall (or the stack): only worth it when that is where it stops
+                const stops = game.arr > 0 || !game.movePossible(last.row, last.col + step, last.rot);
+                if (hands.das && n >= BOT_DAS_MIN && stops) {
+                    this.macro = { kind: "das", dir, stop: last.col, start: game.curPiece_col, frames: 0,
+                        limit: game.das + n * Math.max(1, game.arr) + 12 };
+                    want[dir] = 1;
+                    this.cool = 0;
+                    return false;
+                }
+                want[dir] = 2;
+                break;
+            }
+            case BOT_DOWN:
+                this.macro = { kind: "soft", stop: game.curPiece_row + 1, frames: 0 };
+                want.soft = 1;
+                this.cool = 0;
+                return false;
+            case BOT_WAIT:
+                this.cool = Math.max(0, first.cost - 1);
+                break;
+        }
+        return true;
+    }
+
+    // A key held over several frames; returns whether it took this frame
+    runMacro(game) {
+        const m = this.macro, want = this.want;
+        switch (m.kind) {
+            case "das":
+                if (game.curPiece_col === m.stop || ++m.frames > m.limit) {
+                    this.macro = null;
+                    this.cool = Math.max(0, this.hands.interval - 1);
+                } else want[m.dir] = 1;
+                return true;
+            case "soft":
+                if (game.curPiece_row >= m.stop || ++m.frames > 120) {
+                    this.macro = null;
+                    this.cool = Math.max(0, this.hands.interval - 1);
+                } else want.soft = 1;
+                return true;
+            case "finish": // the piece is where it should be: drop it
+                if (this.useHard && this.style !== "soft") {
+                    if (this.style === "hard") {
+                        if (!(game.handling.dropGuard && game.activeTime <= GUIDELINE_DROP_GUARD)) this.hard = true;
+                        else want.soft = 1;
+                    } else if (game.canFall()) this.hard = true;
+                    else want.soft = 1;
+                } else want.soft = 1;
+                return true;
+        }
+        return false;
+    }
+
+    // ----------------------------------------------------------
+    // Finding the way
+
+    // current: the piece in play (the gravity it owes, its lock delay and resets so far count), else
+    // one about to enter
+    explorerOpts(game, type, row, col, rot, goal, current = false) {
+        const hands = this.hands;
+        const softLocks = this.style !== "hard";
+        const resets = Number.isFinite(game.moveLimit);
+        botBoardFrom(game, this.board);
+        const tucks = hands.tucks && botHasOverhang(this.board); // nothing to slide under otherwise
+        return {
+            game, probe: Object.assign(Object.create(game), { sounds: [], bumps: [], hardDropCells: [], clearedCells: [], actions: [] }),
+            type, row, col, rot, goal,
+            // gravity owed in rows (NES and GB count it in frames)
+            acc: !current ? 0 : game.nes || game.gb ? game.gravityAcc * game.gravity : Math.min(game.gravityAcc, 0.99),
+            interval: hands.interval,
+            // grounded actions before the piece locks: lock resets, or the lock delay in actions
+            gaMax: resets ? game.moveLimit : Math.floor((game.lockDelayMax || 30) / hands.interval),
+            ga: !current ? 0 : resets ? game.moveResets : Math.ceil(game.curPiece_lockDelay / hands.interval),
+            rot180: !!game.rot180,
+            wait: tucks && game.gravity > 0 && game.gravity < 1,
+            down: tucks && !softLocks && game.softGravity > 0, // a soft drop would lock where it lands
+            softCost: Math.max(1, Math.ceil(1 / Math.max(game.softGravity, 0.01))),
+        };
+    }
+
+    // The actions from where the piece is to the goal; [] when it is there, null when it can't be reached
+    route(game, goal) {
+        const ex = this.explorer;
+        const id = ex.run(this.explorerOpts(game, game.curPiece_type, game.curPiece_row, game.curPiece_col, game.curPiece_rotation, goal, true));
+        return id < 0 ? null : ex.path(id);
+    }
+
+    // Every placement of a piece that can be reached from a pose: pushed to out
+    gather(game, type, row, col, rot, isHold, out, current = false) {
+        const ex = this.explorer;
+        ex.run(this.explorerOpts(game, type, row, col, rot, null, current));
+        for (const lk of ex.cands) {
+            const idx = lk >> 2;
+            out.push({ start: rot, type, rot: lk & 3, col: idx % BOT_COLS - BOT_COL_OFF, row: Math.floor(idx / BOT_COLS) + FIELD_TOP, hold: isHold, score: 0, board: null });
+        }
+    }
+
+    // ----------------------------------------------------------
+    // Choosing
+
+    // The best way to play the current piece: { goal: { col, rot, land }, hold }, or null
+    // pre: the piece that is about to enter ({ type, starts: [{ row, col, rot }], visible }): which
+    // turn it should enter with, { start }
+    decide(game, pre = null, allowHold = true) {
+        const hands = this.hands, w = this.weights, shapes = botShapes(game);
+        let visible = [];
+        for (let i = 0; i < game.nextCount; i++) {
+            const t = game.rnd_get_queue(i);
+            if (t) visible.push(t);
+        }
+        const roots = [];
+        if (pre) {
+            visible = pre.visible;
+            for (const st of pre.starts) this.gather(game, pre.type, st.row, st.col, st.rot, false, roots);
+        } else this.gather(game, game.curPiece_type, game.curPiece_row, game.curPiece_col, game.curPiece_rotation, false, roots, true);
+        let holdSeq = visible, holding = false;
+        if (!pre && allowHold && game.hasHold && game.canHold && hands.hold < Infinity) {
+            const held = game.getHeldPiece();
+            const type = held || visible[0];
+            if (type) {
+                let [row, col] = game.big ? game.bigSpawnPosition(type) : game.spawnPosition(type);
+                if (game.dropsOnSpawn && game.movePossible(row + 1, col, 0, type)) row++;
+                if (game.movePossible(row, col, 0, type)) {
+                    this.gather(game, type, row, col, 0, true, roots);
+                    holdSeq = held ? visible : visible.slice(1);
+                    holding = true;
+                }
+            }
+        }
+        // one move ahead for all, then the deeper search for the best few
+        botBoardFrom(game, this.board);
+        const buf = new Int32Array(BOT_ROWS);
+        for (const pl of roots) {
+            const seq = pl.hold ? holdSeq : visible;
+            const cleared = botLock(this.board, buf, game.curCells[pl.type][pl.rot], pl.row, pl.col);
+            if (cleared < 0) { pl.score = -Infinity; continue; }
+            pl.board = Int32Array.from(buf);
+            pl.step = botStepScore(game, buf, w, cleared);
+            pl.score = pl.step + botBoardScore(buf, w) + (botDead(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
+        }
+        roots.sort((a, b) => b.score - a.score);
+        if (!roots.length || roots[0].score === -Infinity) return null;
+        // every option looks equally far ahead (a hold into an empty hold uses up a next piece), or
+        // their scores, sums over the moves, wouldn't compare
+        const depth = Math.min(hands.depth, visible.length, holding ? holdSeq.length : Infinity);
+        if (depth > 0) {
+            const keep = Math.min(roots.length, Math.max(4, hands.beam));
+            for (let i = 0; i < keep; i++) {
+                const pl = roots[i], seq = pl.hold ? holdSeq : visible;
+                if (pl.score > BOT_DANGER / 2) pl.score = this.deepen(game, pl, seq, depth, shapes);
+            }
+            roots.length = keep;
+        }
+        for (const pl of roots) if (pl.hold) pl.score -= hands.hold;
+        roots.sort((a, b) => b.score - a.score);
+        let pick = this.pick(roots);
+        if (this.hands.misdrop && this.rng() < this.hands.misdrop) pick = this.misdrop(roots, pick);
+        if (pre) return { start: pick.start };
+        if (pick.hold) return { hold: true, goal: null };
+        return { hold: false, goal: { col: pick.col, rot: pick.rot, land: pick.row } };
+    }
+
+    // Beam search over the next pieces from a placed root: the best total of the moves' scores and
+    // the last board's
+    // the last board's. Each ply keeps only its best `beam` boards (copied as they make the cut); the
+    // last ply only needs the best score.
+    deepen(game, root, seq, depth, shapes) {
+        const w = this.weights, beam = this.hands.beam, buf = this.deepBuf;
+        let states = [{ rows: root.board, acc: root.step, score: root.score }];
+        for (let ply = 0; ply < depth; ply++) {
+            const type = seq[ply], next = seq[ply + 1] || tetT, last = ply === depth - 1;
+            const kept = []; // best first
+            let best = -Infinity;
+            for (const st of states) {
+                botDrops(game, st.rows, type, shapes, (shape, col, row) => {
+                    const cleared = botLock(st.rows, buf, shape.cells, row, col);
+                    if (cleared < 0) return;
+                    const acc = st.acc + botStepScore(game, buf, w, cleared);
+                    const score = acc + botBoardScore(buf, w) + (botDead(game, buf, next) ? BOT_DANGER : 0);
+                    if (last) { if (score > best) best = score; return; }
+                    if (kept.length === beam && score <= kept[beam - 1].score) return;
+                    const child = kept.length === beam ? kept.pop() : { rows: new Int32Array(BOT_ROWS), acc: 0, score: 0 };
+                    child.rows.set(buf);
+                    child.acc = acc;
+                    child.score = score;
+                    let i = kept.length;
+                    while (i > 0 && kept[i - 1].score < score) i--;
+                    kept.splice(i, 0, child);
+                });
+            }
+            if (last) return best === -Infinity ? BOT_DANGER : best;
+            if (!kept.length) return BOT_DANGER;
+            states = kept;
+        }
+        return states[0].score;
+    }
+
+    // Among the best few, a softmax over their scores (the best when temp is 0)
+    pick(sorted) {
+        const temp = this.hands.temp * 10;
+        if (!temp || sorted.length === 1) return sorted[0];
+        const top = sorted.slice(0, 4).filter(p => p.score > sorted[0].score - 50 * temp);
+        let total = 0;
+        const weights = top.map(p => { const e = Math.exp((p.score - sorted[0].score) / temp); total += e; return e; });
+        let x = this.rng() * total;
+        for (let i = 0; i < top.length; i++) if ((x -= weights[i]) <= 0) return top[i];
+        return top[0];
+    }
+
+    // Aims a column (or a turn) off
+    misdrop(roots, pick) {
+        const near = roots.filter(p => p !== pick && p.hold === pick.hold && p.type === pick.type
+            && ((p.rot === pick.rot && Math.abs(p.col - pick.col) <= (this.game.big ? 2 : 1)) || (p.col === pick.col && p.row === pick.row)));
+        return near.length ? near[Math.floor(this.rng() * near.length)] : pick;
+    }
+}
