@@ -87,7 +87,6 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   The rules apply a frame's releases before its presses, so a release of an action pressed in
   the same frame waits for the next frame. Keys let go while the game wasn't listening (menu
   open, window unfocused) are released when it resumes (`keysDown`, `syncKeys`).
-- Hidden bot: Ctrl+Shift+B in a game steps Off → level 0 → 1 … → 10 → Off (`Engine.cycleBot()`); while on, its input replaces the player's (`Engine.frame()`), "BOT · LEVEL n" shows under the version, and handing back releases its keys (`botRelease`, `syncKeys`). A game it played any part of is not recorded and doesn't count for exams (`botPlayed`; the banner says so). Meant to become the opponent in a versus mode.
 - Hidden TGM1, TGM3 and TAP test keys (`TEST_KEYS`, nowhere in the UI), during a game: Ctrl+Shift+1 straight
   to the staff roll the player has earned, 2 to the invisible roll, 3 to an invisible roll that
   ends in Grand Master if survived (TAP Master: 2 and 3 both go to the M-roll), 4 to the last 5 s
@@ -275,7 +274,7 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   bursts follow it), the bot's board group (`OPP_GROUP`: garbage meter, well, its level and SENT) at `versus.opp`,
   scaled 0.85 (compact 0.5), flat and without side panels (`drawOpponent()`). Garbage meters beside the wells
   (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" over the player's well (`drawAttackPopups()`), sounds
-  `"garbage"`, `"attack"`, `"ko"`. The hidden Ctrl+Shift+B bot can play the player's side too.
+  `"garbage"`, `"attack"`, `"ko"`.
 
 ### Rendering (`engine.js`, `renderer.js`, `backdrop.js`, `tiles.js`)
 - Everything on screen is drawn with WebGL (1) into one canvas, `#screen`; there is no 2D

@@ -579,13 +579,6 @@ class Bot {
         this.path = null;   // and the route from there
     }
 
-    // Keys to let go of now (the engine hands the game back to the player)
-    releaseAll() {
-        let bits = 0;
-        for (const [k, , release] of BOT_KEYS) if (this.held[k]) { bits |= release; this.held[k] = false; }
-        return bits;
-    }
-
     // The input bitmap for the game's next frame
     input(game) {
         if (game !== this.game || !this.weights) this.attach(game, game === this.game);
