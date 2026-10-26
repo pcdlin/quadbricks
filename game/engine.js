@@ -670,13 +670,22 @@ class Engine {
     }
 
     // Multiplayer join screen: a rotate press on an input device (deviceName()) picks it for the next
-    // player; the second starts the game. A device already picked is ignored
+    // player. Once both have one, a rotate press on either player's device confirms and starts the
+    // game (a device not picked does nothing then; Enter confirms too, Esc takes the last pick back)
     joinDevice(device) {
-        if (this.GAMESTATE !== STATE_MENU || this.menuStep !== MENU_JOIN || this.joined.includes(device)) return;
+        if (this.GAMESTATE !== STATE_MENU || this.menuStep !== MENU_JOIN) return;
         this.sound.unlock();
+        if (this.joined.length === 2) {
+            if (this.joined.includes(device)) this.startDuo();
+            return;
+        }
+        if (this.joined.includes(device)) return;
         this.joined.push(device);
         this.sound.play("rotate");
-        if (this.joined.length < 2) return;
+    }
+
+    // The two players' game, on the devices picked on the join screen
+    startDuo() {
         this.duoDevices = this.joined;
         this.joined = [];
         this.initGame(guideline, "versus", 0, 0, { duo: true });
@@ -1220,10 +1229,13 @@ class Engine {
             // repeat: the key is held. Lists and values then stop at their ends instead of wrapping
             const { code, down, repeat } = this.events.shift();
             if (!down) continue;
-            // the join screen: a rotate key picks player 1's or 2's keys for the next player; Esc goes back
-            if (this.menuStep === MENU_JOIN && code !== "Escape") {
+            // the join screen: a rotate key picks player 1's or 2's keys for the next player (or, with both
+            // picked, confirms), Enter confirms; Esc takes the last pick back, or with none goes back
+            if (this.menuStep === MENU_JOIN && !(code === "Escape" && !this.joined.length)) {
                 if (repeat) continue;
-                for (const keys of [1, 2]) {
+                if (code === "Escape") this.joined.pop();
+                else if (code === "Enter" && this.joined.length === 2) this.startDuo();
+                else for (const keys of [1, 2]) {
                     if (JOIN_ACTIONS.includes(this.options.actionFor(code, keys))) { this.joinDevice("keys" + keys); break; }
                 }
                 if (this.GAMESTATE === STATE_GAME) return;
@@ -2471,17 +2483,24 @@ class Engine {
     }
 
     // Multiplayer's join screen: a card per player with the device they picked, or the prompt for
-    // the one whose turn it is; under them which keys and buttons pick a device. Returns the hint
-    // (Start, not B, goes back on a pad: B rotates)
+    // the one whose turn it is; under them which keys and buttons pick a device, or once both have
+    // one, how to start. Returns the hint (Start, not B, goes back on a pad: B rotates)
     drawJoin(top, heading) {
-        const cx = VIEW_W / 2, o = this.options;
+        const cx = VIEW_W / 2, o = this.options, ready = this.joined.length === 2;
         heading("MULTIPLAYER  ·  VERSUS PLAYER");
         const cards = [0, 1].map(p => ({
             name: "Player " + (p + 1), accent: p ? tetZ : tetT, noArrow: true,
             value: this.joined[p] ? deviceName(this.joined[p]) : p === this.joined.length ? "PRESS ROTATE" : "WAITING",
         }));
-        this.drawMenuList(cards, this.joined.length, top);
+        this.drawMenuList(cards, ready ? -1 : this.joined.length, top);
         const y = top + menuListHeight(cards, 64, 10) + 30;
+        const back = this.gamepad.active ? "START" : this.touch.enabled ? "BACK" : "ESC";
+        if (ready) {
+            this.text("READY?  PRESS ROTATE TO START", cx, y, { size: 16, weight: 900, color: this.pulseInk(10), align: "center", spacing: 4 });
+            this.text("EITHER PLAYER, ON THEIR OWN KEYS OR GAMEPAD" + (this.gamepad.active ? "" : "  ·  OR ENTER"), cx, y + 28,
+                { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 2 });
+            return (this.gamepad.active ? "" : "ENTER  START      ") + `${back}  CHANGE PLAYER 2`;
+        }
         const pair = (a, b) => `${a} / ${b}`;
         this.text(`PLAYER ${this.joined.length + 1}: PRESS ROTATE ON YOUR KEYS OR GAMEPAD`, cx, y,
             { size: 12, weight: 800, color: this.pulseInk(10), align: "center", spacing: 3 });
@@ -2494,7 +2513,7 @@ class Engine {
         const pads = this.gamepad.pads.length;
         this.text(pads ? `${pads} GAMEPAD${pads > 1 ? "S" : ""} CONNECTED` : "NO GAMEPAD FOUND: PRESS A BUTTON ON IT TO WAKE IT", cx, y + 52,
             { size: 11, weight: 700, color: INK_FAINT, align: "center", spacing: 2 });
-        return this.gamepad.active ? "START  BACK" : "ESC  BACK";
+        return `${back}  ${this.joined.length ? "CHANGE PLAYER 1" : "BACK"}`;
     }
 
     // One block each as a falling piece, settled stack and ghost in the chosen block style, at

@@ -276,9 +276,11 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" over the player's well (`drawAttackPopups()`), sounds
   `"garbage"`, `"attack"`, `"ko"`.
 - Two players (Multiplayer → Versus Player): the join screen (`MENU_JOIN`, `drawJoin()`) takes a rotate press (`JOIN_ACTIONS`)
-  on an input device for player 1, then another device for player 2 (`joinDevice()`, `joined`; Esc or a pad's Start goes
-  back): `"keys1"` (player 1's keys, and the touch controls), `"keys2"` (player 2's keys) or `"pad:N"` (`deviceName()`).
-  The second starts the game (`initGame()` with `options.duo` → `newDuo()`: `match.duo`, `devices` (`duoDevices`, kept
+  on an input device for player 1, then another device for player 2 (`joinDevice()`, `joined`): `"keys1"` (player 1's
+  keys, and the touch controls), `"keys2"` (player 2's keys) or `"pad:N"` (`deviceName()`). Then it asks to confirm (the
+  user's request): a rotate press on either player's device, or Enter, starts the game (`startDuo()`); other devices do
+  nothing. Esc or a pad's Start takes the last pick back, with none goes back to Multiplayer. The game: `initGame()` with
+  `options.duo` → `newDuo()`: `match.duo`, `devices` (`duoDevices`, kept
   for rematches), `view` player 2's board, both games with the player's handling and one seed). Input: every event is a
   key `{code}` or a pad action `{pad, action}`; `handleGameInput()` gives each player's to `inputs[p]` (`eventTarget()`;
   one player alone takes player 1's keys and every pad), releasing an action only when the player's device holds it no
