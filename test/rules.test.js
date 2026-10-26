@@ -1452,8 +1452,16 @@ const cellsOf = g => {
     const counts = [0, 0, 0, 0, 0, 0, 0], N = 700000;
     for (let i = 0; i < N; i++) counts[r.nextIndex()]++;
     const pct = counts.map(c => Math.round(1000 * c / N) / 10); // L J I O Z S T
-    check("GB randomizer: the OR bug deals L least (~10.5%) and O, S, T most (~16%)",
-        [pct[0] < 11.5, pct[3] > 15.5 && pct[5] > 15.5 && pct[6] > 15.5, Math.min(...pct) === pct[0]], [true, true, true]);
+    // tetris.wiki / harddrop.com: L 10.7%, J I Z 13.7%, O S T 16.1%
+    check("GB randomizer: the OR bug deals L ~10.7%, J, I, Z ~13.7%, O, S, T ~16.1%",
+        pct.map((p, i) => Math.abs(p - [10.7, 13.7, 13.7, 16.1, 13.7, 16.1, 16.1][i]) < 0.3), [true, true, true, true, true, true, true]);
+    const u = new GbRandomizer(1);
+    u.history = [2, 6]; // I in the preview, T entering play
+    u.rand = (() => { const rolls = [4, 1]; return () => rolls.shift(); })();
+    check("  ...compares with the piece entering play: a Z after T, I is refused ((4 | 2 | 6) = 6), a J taken", u.nextIndex(), 1);
+    const g = startedGb(), h = g.randomizer.history.map(i => g.randomizer.pieces[i]);
+    check("  ...a hidden piece behind the preview: the next roll's history is that piece and the preview, which enters play then",
+        h, [g.queue[1], g.queue[0]]);
     const s = new GbRandomizer(1);
     s.history = [1, 1]; // J, J: a third J needs three rolls in a row
     s.rand = (() => { const rolls = [1, 1, 3]; return () => rolls.shift(); })();

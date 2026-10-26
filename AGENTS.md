@@ -616,8 +616,9 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 - DAS 23 / ARR 9 (the disassembly's counter: $17 on the press, 9 after each auto-shift; tetris.wiki's
   24 counts the press frame too); ARE 2; line clear 91 (93 with ARE).
 - Randomizer (`GbRandomizer`): up to 3 rolls to avoid three of a kind, tested with the original's
-  bitwise OR of the piece values (L J I O Z S T = 0…6 here, ×4 in the ROM) against the previous piece,
-  so L comes up ~10.5% and O/S/T ~16%.
+  bitwise OR of the roll, the preview and the piece entering play (L J I O Z S T = 0…6 here, ×4 in the
+  ROM) against the piece entering play (the ROM keeps a hidden piece behind the preview, as the queue
+  does), so L comes up 10.7%, J/I/Z 13.7% and O/S/T 16.1%.
 - Score: 40/100/300/1200 × (level + 1), plus rows soft-dropped when the soft drop locks the piece;
   capped at 999,999. A-Type: starts at the chosen level 0–9, first level-up after
   (start + 1) × 10 lines, then every 10, max 20, endless. B-Type: stays at the chosen level,
@@ -696,7 +697,7 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   choices use setting cards, not the original's number grids (heart mode is the Heart card rather than
   Down + Start). There is no B-Type end bonus to add: the disassemblies show the GB's end screen only
   tallies the clears and the NES's B-Type ends without one. No line-clear duplication bug, block out at spawn ends the game. The randomizer's
-  OR test is a reconstruction (compared with the previous piece) that reproduces the published
+  OR test follows the disassembly (vinheim3/tetris-gb-disasm) and reproduces the published
   piece frequencies; it is seeded from the shared generator, not a DIV timer. Soft drop needing a
   re-press per piece follows NES behaviour; soft drop points require the drop to lock the piece.
 

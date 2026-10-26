@@ -140,10 +140,11 @@ class Tgm1Randomizer extends TapRandomizer {
 // ----------------------------------------------------------
 // GB randomizer: a piece is rolled up to three times while it would make three of a kind with the
 // two before it, the last roll taken as it comes. The game tests this by ORing the three pieces'
-// data values (L J I O Z S T = 0, 4, ..., 24) and comparing with the previous piece, so a roll is
-// also refused whenever its bits and the one before it fit inside the previous piece's: L comes up
-// least often (about 10.5%). Reconstructed from TASVideos submission 4536 and the disassembly; the
-// game seeds from its DIV timer, here from the shared generator.
+// data values (L J I O Z S T = 0, 4, ..., 24) and comparing with the oldest of them, the piece
+// entering play as the roll is made (the game keeps a hidden piece behind the preview, as the queue
+// does here), so a roll is also refused whenever its bits and the preview's fit inside that piece's:
+// L comes up least often. From the disassembly (vinheim3/tetris-gb-disasm, $2041-$2060) and TASVideos
+// submission 4536; the game seeds from its DIV timer, here from the shared generator.
 
 const GB_PIECES = [tetL, tetJ, tetI, tetO, tetZ, tetS, tetT];
 const GB_ROLLS = 3;
@@ -159,7 +160,7 @@ class GbRandomizer extends LcgRandomizer {
         let piece;
         for (let roll = 0; roll < GB_ROLLS; roll++) {
             piece = this.rand(7);
-            if (this.history.length < 2 || (piece | prev | before) !== prev) break;
+            if (this.history.length < 2 || (piece | prev | before) !== before) break;
         }
         this.history = [piece, prev];
         return piece;
