@@ -10,7 +10,7 @@ python -m http.server 8123 --directory game    # then open http://localhost:8123
 
 # Rule-set spec tests (plain Node, no dependencies)
 node test/rules.test.js                    # must end with "All checks passed"
-node test/bot.test.js                      # the bot plays every rule set; must end with "All checks passed"
+node test/bot.test.js                      # the bot plays every rule set and a versus match; must end with "All checks passed"
 
 # Minified build for a web server (output in dist/, git-ignored)
 node build.js [outDir]
@@ -33,13 +33,13 @@ when WebGL is unavailable).
 | Path | What it is |
 |---|---|
 | `game/game.js` | Shared definitions only: field size (`WIDTH` 10, `HEIGHT` 22, first visible row `VISIBLE_TOP` 2), piece ids (`tetI`=1 … `tetO`=7), input bitmap bits, SRS `shapes`; `shapeCells()` (a shape table's blocks as offsets) and `clamp()`. |
-| `game/randomizers.js` | The non-bag piece randomizers (TGM3, TAP, TGM1, GB, NES) on the arcade's generator. |
+| `game/randomizers.js` | The non-bag piece randomizers (TGM3, TAP, TGM1, GB, NES) on the arcade's generator, and `BagRandomizer`, a 7-bag from a seed (Guideline versus: both sides deal the same pieces). |
 | `game/rules.js` | `RuleGame`, the rule sets' base class (field, input, frame and phases, collision, SRS and ARS rotation, sonic drop, gravity, lock delay, line clears, event queues), mode ids, `registerRules()` and `createGame()`. |
-| `game/rules-guideline.js` | `GuidelineGame`: the Guideline and its modes. |
+| `game/rules-guideline.js` | `GuidelineGame`: the Guideline and its modes, versus garbage included (`versusAttack()`, `VS_*`). |
 | `game/rules-tgm.js` | `TgmGame` and its games: `Tgm1Game`, `TapGame` (Master, Death, TGM+), `TiGame` (TGM3 Master, World or Classic) with `TiEasyGame` and `TiShiraseGame`. |
 | `game/rules-ace.js` | `AceGame`: ACE's five modes. |
 | `game/rules-1989.js` | `Game1989` with `NesGame` and `GbGame`: A-Type and B-Type. |
-| `game/bot.js` | `Bot`, a computer player with five levels (`BOT_LEVELS`: Novice … Master): no DOM or engine dependencies, `Bot.input(game)` returns the frame's input bitmap and sees only what a human sees (field, piece, visible next pieces, hold). `BotExplorer` finds every pose the piece can reach by running the game's own `rotate()`/`shift()` on a probe (`Object.create(game)` with its event arrays shadowed, so no kick table is duplicated) under a gravity model (after each action the piece falls as gravity takes it in the frames the action costs: at 20G it only slides along the stack); the brain is Thiery and Scherrer's evaluator on bit-row boards with a beam search over the visible next pieces and the hold (`decide()`, `deepen()`); the hands turn the route into key presses (`think()`, `act()`, macros for DAS, soft drops and the final drop), closed loop: the rest of the route is kept while the piece is where the model put it, and searched again from where it actually is when not. The explorer tracks per node what limits a grounded piece (lock resets or lock delay, restarted by a fall; TGM3's floor kicks and the lock delay they zero). Expert and Master choose during ARE how the next piece enters and hold that rotation key (IRS, `preSpawn()`), which is what lets them survive 20G. The evaluation set comes from the mode (`botProfile()`: Tetris stacking where score or grade pays for it, else every clear); lock outs and blocked entries count as dead. How a piece is finished comes from the rule set (`botLockStyle()`: hard drop, sonic drop then soft drop, soft drop only). Mistakes and noise use the bot's own seeded PRNG. Not done yet: T-spins, IHS and DAS pre-charged in ARE. |
+| `game/bot.js` | `Bot`, a computer player with five levels (`BOT_LEVELS`: Novice … Master): no DOM or engine dependencies, `Bot.input(game)` returns the frame's input bitmap and sees only what a human sees (field, piece, visible next pieces, hold). `BotExplorer` finds every pose the piece can reach by running the game's own `rotate()`/`shift()` on a probe (`Object.create(game)` with its event arrays shadowed, so no kick table is duplicated) under a gravity model (after each action the piece falls as gravity takes it in the frames the action costs: at 20G it only slides along the stack); the brain is Thiery and Scherrer's evaluator on bit-row boards with a beam search over the visible next pieces and the hold (`decide()`, `deepen()`); the hands turn the route into key presses (`think()`, `act()`, macros for DAS, soft drops and the final drop), closed loop: the rest of the route is kept while the piece is where the model put it, and searched again from where it actually is when not. The explorer tracks per node what limits a grounded piece (lock resets or lock delay, restarted by a fall; TGM3's floor kicks and the lock delay they zero). Expert and Master choose during ARE how the next piece enters and hold that rotation key (IRS, `preSpawn()`), which is what lets them survive 20G. The evaluation set comes from the mode (`botProfile()`: Tetris stacking where score or grade pays for it, else every clear); lock outs and blocked entries count as dead. How a piece is finished comes from the rule set (`botLockStyle()`: hard drop, sonic drop then soft drop, soft drop only). Mistakes and noise use the bot's own seeded PRNG. In Guideline versus it reads the garbage waiting (the meter, `pendingGarbage()`), not where its holes will be: a placement that clears nothing lets it rise as solid rows that never clear (`botRise()`, `BOT_GARBAGE_BIT`), a clear cancels some (`botPendingAfter()`, without combos or back-to-backs). Not done yet: T-spins, IHS and DAS pre-charged in ARE. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings), the clear ripples' refraction pass and the clear flares' pass. |
@@ -110,16 +110,16 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `padCapturing`; the next control pressed on a pad is bound by `GamepadControls.poll()` (`Options.bindPad()`, the same rules
   as keys, `bindIn()`), Start or Esc cancels. Start (`PAD_START`) can't be bound. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
-- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Quick Play, Custom Game, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
+- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Quick Play, Custom Game, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, Versus, TGM1 Master,
   TAP Master, TGM3 Master, NES A-Type, each a `RULESETS` mode named by rule set and mode, started at once with its setup
   cards' first or `initial` choices (`quickArgs()` → `modeArgs()`), so its records are Custom Game's for those choices; the
   list keeps its place like the rule sets'). Custom Game → `MENU_RULES` (rule sets) →
-  `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master for the Guideline, Master/20G
+  `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master/Versus for the Guideline, Master/20G
   for TGM1, Normal/Master/Death/TGM+ for TAP, Master/Easy/Shirase for TGM3, Normal/Hi-Speed 1/Hi-Speed 2/
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or a hidden mode's option
-  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, gathered into `options`) (the label's entry in
+  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, and Versus's `"bot"`, gathered into `options`) (the label's entry in
   `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
   but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; TGM3 Master's Exams,
   On / Off; GB's Heart, Off / On; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
@@ -157,7 +157,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 `createGame(mode, variant)` with `mode` ∈ `guideline` (3), `arika` (4, TGM3 World),
 `tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gbTetris` (7, GB), `tgmOriginal` (8, TGM1),
 `nesTetris` (9, NES), `tgmAce` (10, ACE with SRS), `aceArs` (11) and `aceArs2` (12) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus the
-Guideline's `"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"` and `"master"`, NES's and GB's
+Guideline's `"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"`, `"master"` and `"versus"`, NES's and GB's
 `"btype"`, TGM1's `"20g"`, TAP's `"plus"` (TGM+), TGM3's `"easy"` and `"shirase"` (with either rule), and
 ACE's `"normal"`, `"hispeed1"`, `"hispeed2"`, `"another"`, `"another2"`, `"big"`; and the Guideline's
 `"sprint20"`, `"sprint100"`, `"ultra1"`, `"ultra3"`, `"ultra5"` for its other goals and times).
@@ -236,6 +236,8 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeHolds()` (a count of holds, IHS included; the engine flashes the held piece in the HOLD box with a soft glow of its light colour around it, `holdFlash`, `HOLD_FLASH_LIFE`, `pieceGlow()` (`HOLD_GLOW_*`, a blurred silhouette cached per piece, colour and size), and the piece coming into play from it glows the same way in the well until it locks (`enterGlow`, `drawPieceGlow()`), none with effects Off, fainter at Subtle), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
   (`{text, kind, value}`, kinds `clear`/`tspin`/`b2b`/`combo`/`pc`) with `actionAge`.
+  Guideline versus: `takeAttacks()` (lines sent per clear, after cancelling), `takeRisenGarbage()` (rows risen per
+  lock), `receiveGarbage({lines, hole})`, `pendingGarbage()` and `incoming` (the attacks waiting, for the meter).
 - `chain`: consecutive clearing pieces, −1 after a miss, then 0, 1, 2…; identical in every
   rule set and used only for presentation (TGM's `combo` is a score multiplier).
 
@@ -256,6 +258,24 @@ last frame of ARE, nor on the frame a piece enters. In the TGM series a piece's 
 frame takes only IRS and gravity (`moveOnSpawn` false, as NullpoMino's Classic rules and Cambridge):
 shifts and up pressed on it act on the next frame if still held (`deferredPush`), and soft drop waits
 too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
+
+### Versus against the bot (`engine.js`, VERSUS section)
+- Guideline → Versus (or Quick Play → Versus) starts a match (`initGame()` → `newMatch()`): the player's game and the
+  bot's (`Bot` at the Bot card's level, `BOT_SETUP`), both `"versus"` and dealt from one random seed. `this.match` holds
+  the bot, its `BoardView`, the "+lines" pop-ups and `result` ("win"/"lose"). `matchFrame()` runs after the player's
+  frame: the bot plays a frame, each side's attacks go to the other with a random hole column, garbage rising shakes
+  the player's field up (`riseShake()`); the first to top out loses, the other's game ends (VICTORY / WINNER), both stand
+  still, and Enter starts a rematch (Restart in the menu too). The match pauses with the menu like any game.
+- Each board on screen is a `BoardView` (game, confetti, flashes, the held piece's glow, clear message texture);
+  `this.board` is the one being updated (`takeGameEvents(view, own)`) or drawn, `ownBoard` the player's. Drawing code
+  reads `this.board.game`; menus and records keep `this.game`. Only the player's board plays sounds, moves the field and
+  sends clear bursts and backdrop hue (`own`).
+- Layout: `LAYOUT_VERSUS_FULL` / `LAYOUT_VERSUS_COMPACT` (`versusLayout()`) widen the view about its centre, so themes stay
+  centred: the player's board and panels are drawn translated by `groupX` (the backdrop's board glow and the clear
+  bursts follow it), the bot's board group (`OPP_GROUP`: garbage meter, well, its level and SENT) at `versus.opp`,
+  scaled 0.85 (compact 0.5), flat and without side panels (`drawOpponent()`). Garbage meters beside the wells
+  (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" over the player's well (`drawAttackPopups()`), sounds
+  `"garbage"`, `"attack"`, `"ko"`. The hidden Ctrl+Shift+B bot can play the player's side too.
 
 ### Rendering (`engine.js`, `renderer.js`, `backdrop.js`, `tiles.js`)
 - Everything on screen is drawn with WebGL (1) into one canvas, `#screen`; there is no 2D
@@ -327,7 +347,8 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   `lampMask()` (else its face), scaled by `lampStrength` (Holo 0.45); a block blends the nearest four, additively. Ghosts get none. The stack
   draws its blocks first and their lights (`drawLights()`: Holo's sheen, the lamp) in a second pass.
 - `PIECE_COLORS` (index 1..7 = cyan, purple, orange, blue, green, red, yellow) were sampled
-  from the legacy tile PNGs. Effects receive colour indices (types mapped through
+  from the legacy tile PNGs; 8 is the neutral grey-white, 9 the dark grey of versus garbage (`GARBAGE_COLOR`; the cells hold
+  `tetGARBAGE`, 8, and `DEFAULT_PALETTE` maps it). Effects receive colour indices (types mapped through
   `game.palette`), so TGM3 Classic's Sega colours work everywhere.
 - Confetti (Options → Visuals → Confetti, `options.confetti`, `CONFETTI_STYLES` in `options.js`): Off (no confetti; the row flash and clear burst stay), Glow (soft additive light motes), Paper (tumbling slips that flutter down), Sparks (default, streaks along their flight), Stars (twinkling four-point stars), Bubbles (rings floating up) and Pixels (squares snapped to a 3-unit grid, fading in steps). `CONFETTI_SPECS` (`engine.js`) gives each its count, size, motion, life, alpha and blending; `confettiSprites()` draws an atlas with a row per sprite style and a column per colour (`CONFETTI_COLORS`), turned sprites go through `confettiQuad()`. Light styles are added, Paper and Pixels drawn normally after them. TGM3 Easy's fireworks are always Glow.
 - Effects: confetti per cleared cell, cleared-row flash, hard-drop flash, held-piece flash, clear messages
@@ -396,6 +417,17 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   row, never in the same column as the row below; `isGarbage` marks their rows and falls with the
   field (`collapse()`). Level 1 throughout; COMPLETE when every garbage row is cleared. Stats: TIME,
   GARBAGE (cleared / total), LINES.
+- Versus (`"versus"`, against the bot; ported from the `multiplayer` branch, its server left out): sources tetris.wiki
+  *Garbage* and *Combo*, Tetris 99 and Puyo Puyo Tetris for the back-to-back bonus. Lines sent (`versusAttack()`, `VS_*`):
+  single 0, double 1, triple 2, Tetris 4; T-spin single 2, double 4, triple 6; mini single 0, mini double 1; back-to-back +1;
+  combo (0 = first clear) 0 0 1 1 2 2 3 3 4 4 4 5 5 5, 13+ as 13 (the wiki's "Guideline Standard"); perfect clear +10. An
+  attack first cancels the garbage waiting, oldest first; the rest goes to the other side. Garbage waits until a piece
+  locks without clearing, then all of it rises (`riseAfterLock()`, a hook of the base `lock()`; grey `tetGARBAGE` rows, one
+  hole column per attack); blocks pushed out of the buffer zone top out ("TOP OUT"). Both sides are dealt from one seed
+  (`options.seed`, `BagRandomizer`). Levels and speed follow the lines as in Marathon. No record. Stats: SENT, APM (attack
+  per minute, cancelled lines included), PPS, LINES. Assumptions (the wiki's general table gives +1 to +3 for back-to-back;
+  Tetris 99 caps waiting garbage at 12 and a clear at 20): +1, no caps, no delay before garbage counts, one random hole
+  column per attack ("random clean columns", Tetris Effect: Connected).
 
 ### TGM3 World (Master mode, World rule)
 - SRS with **Arika's I-piece kicks**; Ti randomizer (35-piece pool, 4-piece history,
@@ -742,7 +774,8 @@ export names explicitly at the top; add new globals there, and new rule files to
 - Menu: main screen with Quick Play, Custom Game and Options (Continue and Restart on top during a game); Quick Play lists
   common modes with no setup step (the user's request); Custom Game (named New Game until Quick Play came; the user's rename) has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
   the rule set and mode lists use tighter cards). Guideline's
-  modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master";
+  modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig", "Master"
+  and "Versus" (Bot: Novice … Master, Skilled at first; also in Quick Play, the user's request: play the Guideline against the bot);
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,
   Mono and Ghost cards), TGM3's are
   "Master", "Easy" and "Shirase" (each with a Rule card, World or Classic), TAP's "Normal", "Master", "Death" and

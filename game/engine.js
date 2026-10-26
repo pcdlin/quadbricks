@@ -51,7 +51,8 @@ const ULTRA_SETUP = { name: "Time", accent: tetZ, arg: "variant", labels: ["1:00
 const ACE_RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["SRS", "ARS", "ARS2"], values: [tgmAce, aceArs, aceArs2] };
 const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
 // createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams, GB's heart mode
-const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart"];
+// (and the Guideline versus match's bot level, the label's index)
+const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart", "bot"];
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
 const REV_SETUP = { name: "Reverse", accent: tetZ, arg: "rev", labels: ["Off", "On"], values: [false, true] }; // the well upside down
 const MONO_SETUP = { name: "Mono", accent: tetS, arg: "mono", labels: ["Off", "On"], values: [false, true] }; // one colour
@@ -60,6 +61,9 @@ const TGM1_SETUP = [BIG_SETUP, REV_SETUP, MONO_SETUP, TLS_SETUP]; // TGM1's code
 // TGM3 Master: the qualified grade and its exams (Exams, tgm3ExamFor); none with Big
 const EXAMS_SETUP = { name: "Exams", accent: tetJ, arg: "exams", labels: ["On", "Off"], values: [true, false] };
 const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off", "On"], values: [false, true] }; // GB: gravity 10 levels on
+// Guideline versus: the bot's level (bot.js), Skilled at first
+const BOT_VERSUS_LEVEL = 2;
+const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map(l => l.name), initial: BOT_VERSUS_LEVEL };
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
@@ -71,6 +75,7 @@ const RULESETS = [
           { name: "Ultra", mode: guideline, variant: "ultra", setup: [ULTRA_SETUP], accent: tetZ, desc: "Score as much as you can in 1 to 5 minutes" },
           { name: "Dig", mode: guideline, variant: "dig", setup: [DIG_SETUP], accent: tetS, desc: "Clear rows of garbage as fast as you can" },
           { name: "Master", mode: guideline, variant: "master", setup: [MASTER_SETUP], accent: tetJ, desc: "20G from the start, less time to lock as you go" },
+          { name: "Versus", mode: guideline, variant: "versus", setup: [BOT_SETUP], accent: tetI, desc: "Against the bot: clears send it garbage, the first to top out loses" },
       ] },
     { name: "TGM1", accent: tetZ, desc: "ARS, no hard or sonic drop, no hold",
       modes: [
@@ -116,6 +121,7 @@ const QUICK_PLAY = [
     { name: "Marathon", ruleset: "Guideline", mode: "Marathon", accent: tetO, desc: "Guideline · 150 lines from level 1" },
     { name: "Sprint", ruleset: "Guideline", mode: "Sprint", accent: tetL, desc: "Guideline · 40 lines as fast as you can" },
     { name: "Ultra", ruleset: "Guideline", mode: "Ultra", accent: tetZ, desc: "Guideline · score as much as you can in 2 minutes" },
+    { name: "Versus", ruleset: "Guideline", mode: "Versus", accent: tetI, desc: "Guideline · against the Skilled bot, garbage both ways" },
     { name: "TGM1 Master", ruleset: "TGM1", mode: "Master", accent: tetI, desc: "Up to level 999, grades 9 to S9, GM by checkpoints" },
     { name: "TAP Master", ruleset: "TGM2 TAP", mode: "Master", accent: tetT, desc: "Up to level 999, sonic drop, grades 9 to GM" },
     { name: "TGM3 Master", ruleset: "TGM3 TI", mode: "Master", accent: tetS, desc: "World rule with hold, COOLs, REGRETs and exams" },
@@ -228,6 +234,20 @@ const LAYOUT_COMPACT = (() => {
     return { compact: true, view: [x0, 24, VIEW_W - 2 * x0, BOARD_Y + BOARD_H + 16 - 24],
         leftX, rightX: BOARD_X + BOARD_W + 8 + COMPACT_GAP, sideW: COMPACT_SIDE_W };
 })();
+// Versus (against the bot): the bot's board, smaller, to the right of the player's. The view widens
+// about its centre (so themes stay centred): the player's board and panels move left by
+// -versus.groupX, the bot's board group is drawn translated to versus.opp and scaled by its s.
+const METER_W = 6, METER_GAP = 2; // garbage meter beside a well's frame (clear of the compact layout's column)
+// a board group drawn for the opponent, in board coordinates: meter, frame, and its name above
+const OPP_GROUP = [BOARD_X - 8 - METER_GAP - METER_W, BOARD_Y - 44, BOARD_W + 16 + METER_GAP + METER_W, BOARD_H + 8 + 44];
+function versusLayout(base, s, gap) {
+    const [x, y, w, h] = base.view, [gx, gy, gw, gh] = OPP_GROUP;
+    const shift = (gap + gw * s) / 2; // half the room the bot's board takes
+    const ox = x + w - shift + gap, oy = y + (h - gh * s) / 2; // its group's top left
+    return { ...base, view: [x - shift, y, w + 2 * shift, h], versus: { groupX: -shift, opp: { x: ox - gx * s, y: oy - gy * s, s } } };
+}
+const LAYOUT_VERSUS_FULL = versusLayout(LAYOUT_FULL, 0.85, 40);
+const LAYOUT_VERSUS_COMPACT = versusLayout(LAYOUT_COMPACT, 0.5, 16);
 
 // ----------------------------------------------------------
 // LOOK
@@ -253,6 +273,7 @@ const PIECE_COLORS = [
     { base: "#ee2929", light: "#f26666", dark: "#bf1615" }, // Z red
     { base: "#e4cf00", light: "#fff082", dark: "#aca000" }, // O yellow
     { base: "#b9bcc6", light: "#eceef4", dark: "#80838f" }, // neutral grey-white (Mono, Shirase from 1000)
+    { base: "#575b6c", light: "#83889b", dark: "#333644" }, // versus garbage grey (GARBAGE_COLOR)
 ];
 
 const PIECE_GREY = 8; // the colour index every block of a spent held piece takes (desaturated)
@@ -266,7 +287,7 @@ const COUNTDOWN_COLORS = [null, PIECE_COLORS[tetS].light, PIECE_COLORS[tetO].lig
 // Confetti for cleared lines: piece colour (the neutral grey too) plus a few party colours
 const CONFETTI_EXTRA = ["#ffffff", "#ff5fd2", "#fff27a"];
 const CONFETTI_COLORS = [...PIECE_COLORS.slice(1).map(c => c.light), ...CONFETTI_EXTRA];
-const FIREWORK_COLORS = CONFETTI_COLORS.filter(c => c !== PIECE_COLORS[8].light); // no grey bursts
+const FIREWORK_COLORS = CONFETTI_COLORS.filter(c => !PIECE_COLORS.slice(8).some(p => p.light === c)); // no grey bursts
 // By confetti style (options.confetti, none when off; fireworks are always glow): bits per cell, size (least,
 // random extra), burst speed factor and upward lift, gravity and air drag per frame, life in
 // frames, alpha, additive blending; spin (radians per frame, at most), sideways flutter, fastest
@@ -317,6 +338,7 @@ const SHAKE_KICK = 1.8; // downward speed a long hard drop gives the field (logi
 const SHAKE_CLEAR_KICK = 1.4; // speed a single-line clear gives the field, in a random direction
 const SHAKE_CLEAR_LINE = 0.4, SHAKE_CLEAR_CHAIN = 0.08; // extra per further line, per combo step
 const SHAKE_BUMP = 0.6; // sideways speed a piece pushed against the border gives the field
+const SHAKE_RISE = 1.2; // upward speed versus garbage rising gives the field
 const SHAKE_SPRING =0.22, SHAKE_DAMPING = 0.28; // how fast the field settles back
 const SHAKE_TIP = 0.25; // degrees the field tips back per unit it is knocked down
 const HOLO_FULL_TILT = 3.5; // degrees of field tilt at which the Holo sheen is at full strength
@@ -351,6 +373,8 @@ const MESSAGE_GOLD = "#ffd76a";
 const GOLD_RGB = parseColor(MESSAGE_GOLD);
 const goldAlpha = (a) => [GOLD_RGB[0], GOLD_RGB[1], GOLD_RGB[2], a]; // pulsing gold, as inkAlpha
 const COMBO_COLORS = [INK, INK, "#fff1a8", MESSAGE_GOLD, "#ffb35c", "#ff8a4c", "#ff5f4a"]; // by chain length
+const GARBAGE_METER = "#ff4f5e"; // versus: the garbage waiting beside a well
+const ATTACK_LIFE = 50; // frames a "+lines" sent pop-up shows
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
 const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
@@ -370,6 +394,21 @@ function fillText2D(g, s, x, y, { size = 16, weight = 700, color = INK, align = 
     g.fillStyle = color;
     g.fillText(s, x + spacingShift(align, spacing), y);
     g.letterSpacing = "0px";
+}
+
+// A playing field on screen: its game and the effects drawn with it (confetti, flashes, the held
+// piece's glow, the clear message). The player's own is the only one, but in a versus match, which
+// adds the bot's, drawn smaller beside it.
+class BoardView {
+    constructor(game) {
+        this.game = game;
+        this.particles = [];
+        this.flashes = [];
+        this.dropFlashes = [];
+        this.holdFlash = 0; // frames left of the held piece's flash
+        this.enterGlow = 0; // and of the glow round the piece entering from hold (gone when it locks)
+        this.messageCache = null; // clear message texture (messageTexture())
+    }
 }
 
 class Engine {
@@ -477,8 +516,11 @@ class Engine {
         const winW = Math.max(1, window.innerWidth), winH = Math.max(1, window.innerHeight);
         const fitIn = ([, , w, h], availW, availH) => Math.min(availW / w, availH / h);
         // touch devices always take the compact layout; elsewhere a narrow window does
-        this.layout = this.touch.enabled || fitIn(LAYOUT_COMPACT.view, winW, winH) >= COMPACT_GAIN * fitIn(LAYOUT_FULL.view, winW, winH)
-            ? LAYOUT_COMPACT : LAYOUT_FULL;
+        // (a versus match: the same, widened for the bot's board)
+        const [full, compact] = this.match ? [LAYOUT_VERSUS_FULL, LAYOUT_VERSUS_COMPACT] : [LAYOUT_FULL, LAYOUT_COMPACT];
+        this.layout = this.touch.enabled || fitIn(compact.view, winW, winH) >= COMPACT_GAIN * fitIn(full.view, winW, winH)
+            ? compact : full;
+        this.groupX = this.layout.versus ? this.layout.versus.groupX : 0; // where the player's board group is drawn
         const [vx, vy, vw, vh] = this.layout.view;
         const inset = this.touch.place(winW, winH, this.layout.view);
         const availW = winW - inset.left - inset.right, availH = winH - inset.bottom;
@@ -501,8 +543,10 @@ class Engine {
         for (const glow of this.glowCache.values()) this.r.releaseTexture(glow.tex);
         this.glowCache.clear();
         this.clearTextCache();
-        if (this.messageCache) this.r.releaseTexture(this.messageCache.tex);
-        this.messageCache = null;
+        for (const view of this.boards()) {
+            if (view.messageCache) this.r.releaseTexture(view.messageCache.tex);
+            view.messageCache = null;
+        }
         this.backdrop.setBackground(this.renderBackground());
     }
 
@@ -626,28 +670,12 @@ class Engine {
                 this.player_input |= this.botRelease;
                 this.botRelease = 0;
 
-                // Advance the game by one frame (input may have switched to the menu)
+                // Advance the game by one frame (input may have switched to the menu); a versus
+                // match that is decided stands still until a rematch
                 if (this.GAMESTATE === STATE_GAME) {
-                    this.game.advanceFrame(this.player_input);
-                    // effects work with palette colours: map piece types through the rule set's palette
-                    const toColor = (cell) => ({ ...cell, type: this.game.palette[cell.type] });
-                    const cleared = this.game.takeClearedCells().map(toColor);
-                    this.explodeCells(cleared, this.game.chain);
-                    // no jolt for each row the field loses before the staff roll
-                    if (cleared.length && this.options.shakeScale && !this.game.inRollStart()) this.clearShake(cleared, this.game.chain);
-                    const dropped = this.game.takeHardDropCells().map(toColor);
-                    if (dropped.length && this.options.effects) this.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 });
-                    for (const s of this.game.takeSounds()) {
-                        this.sound.play(s);
-                        // from the event, not the dropped cells: those a clear removed aren't listed
-                        if (s === "harddrop" && this.options.shakeScale) this.kickShake(this.game.hardDropDistance);
-                        if (s === "lock" || s === "harddrop") this.enterGlow = 0; // the piece from hold is gone
-                    }
-                    // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
-                    if (this.game.takeHolds() && this.options.effects) this.holdFlash = this.enterGlow = HOLD_FLASH_LIFE;
-                    for (const dir of this.game.takeBumps()) if (this.options.shakeScale) this.bumpShake(dir);
-                    const fireworks = this.game.takeFireworks();
-                    if (this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
+                    if (!(this.match && this.match.result)) this.game.advanceFrame(this.player_input);
+                    this.takeGameEvents(this.ownBoard, true);
+                    if (this.match) this.matchFrame();
                     if (this.game.isGameOver() && !this.recordDone) this.submitRecord();
                 }
                 break;
@@ -656,6 +684,87 @@ class Engine {
                 this.handleMenuInput();
                 break;
         }
+    }
+
+    // A game's events since the last frame become effects on its board; own: the player's board,
+    // whose events also play sounds, move the field and send the clear bursts
+    takeGameEvents(view, own) {
+        const game = view.game;
+        this.board = view;
+        // effects work with palette colours: map piece types through the rule set's palette
+        const toColor = (cell) => ({ ...cell, type: game.palette[cell.type] });
+        const cleared = game.takeClearedCells().map(toColor);
+        this.explodeCells(cleared, game.chain, own);
+        // no jolt for each row the field loses before the staff roll
+        if (own && cleared.length && this.options.shakeScale && !game.inRollStart()) this.clearShake(cleared, game.chain);
+        const dropped = game.takeHardDropCells().map(toColor);
+        if (dropped.length && this.options.effects) view.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 });
+        for (const s of game.takeSounds()) {
+            if (own) this.sound.play(s);
+            // from the event, not the dropped cells: those a clear removed aren't listed
+            if (own && s === "harddrop" && this.options.shakeScale) this.kickShake(game.hardDropDistance);
+            if (s === "lock" || s === "harddrop") view.enterGlow = 0; // the piece from hold is gone
+        }
+        // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
+        if (game.takeHolds() && this.options.effects) view.holdFlash = view.enterGlow = HOLD_FLASH_LIFE;
+        for (const dir of game.takeBumps()) if (own && this.options.shakeScale) this.bumpShake(dir);
+        const fireworks = game.takeFireworks();
+        if (own && this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
+        this.board = this.ownBoard;
+    }
+
+    // Every board on screen, the player's own first
+    boards() {
+        return [this.ownBoard, this.match && this.match.view].filter(Boolean);
+    }
+
+    // -----------------------------------
+    // VERSUS: a Guideline match against the bot
+
+    // A match against the bot at BOT_LEVELS[level]: its game is dealt from the player's seed, so both
+    // sides get the same pieces
+    newMatch(seed, level) {
+        const game = createGame(guideline, "versus", 0, 0, {}, { seed });
+        return {
+            bot: new Bot(level, seed), level, view: new BoardView(game),
+            popups: [],   // lines the player sent: "+4" rising over the well
+            result: null, // "win" or "lose" once a side tops out
+        };
+    }
+
+    // One frame of the match, after the player's: the bot plays its game, each side's attacks go
+    // to the other (all the lines of one attack with their hole in one random column), and the
+    // first side to top out loses; the other's game ends there too
+    matchFrame() {
+        const m = this.match, game = this.game, botGame = m.view.game;
+        const hole = () => Math.floor(Math.random() * WIDTH);
+        if (!m.result) {
+            botGame.advanceFrame(m.bot.input(botGame));
+            for (const lines of game.takeAttacks()) {
+                botGame.receiveGarbage({ lines, hole: hole() });
+                m.popups.push({ lines, life: ATTACK_LIFE });
+                this.sound.play("attack");
+            }
+            for (const lines of botGame.takeAttacks()) game.receiveGarbage({ lines, hole: hole() });
+            if (game.isGameOver()) {
+                m.result = "lose";
+                if (!botGame.isGameOver()) botGame.endGame("WINNER", null);
+            } else if (botGame.isGameOver()) {
+                m.result = "win";
+                game.endGame("VICTORY", null);
+                this.sound.play("ko");
+            }
+        }
+        for (const rows of game.takeRisenGarbage()) if (this.options.shakeScale) this.riseShake(rows);
+        botGame.takeRisenGarbage();
+        this.takeGameEvents(m.view, false);
+        for (const p of m.popups) p.life--;
+        m.popups = m.popups.filter(p => p.life > 0);
+    }
+
+    // Garbage rising pushes the field up a little
+    riseShake(rows) {
+        this.shake.vy -= SHAKE_RISE * this.options.shakeScale * Math.min(1, 0.4 + rows / 6);
     }
 
     // The hidden bot: off, then each level in turn, then off again. Handing the game back releases
@@ -726,7 +835,7 @@ class Engine {
         const color = (s) => ({ ...s, rgb: hslToRgb(s.h, s.s, s.l) });
         const ps = this.pixelScale;
         const m = this.motion;
-        const gx = this.offX + m.dx * ps, gy = this.offY + m.dy * ps; // follows the shake
+        const gx = this.offX + (this.groupX + m.dx) * ps, gy = this.offY + m.dy * ps; // follows the shake
         // and the fly-in: scaled about the board's centre
         const fs = this.flyScale(m), hw = (BOARD_W / 2 + 8) * fs, hh = (this.boardH / 2 + 8) * fs;
         const bcx = BOARD_X + BOARD_W / 2, bcy = this.boardY + this.boardH / 2;
@@ -786,7 +895,13 @@ class Engine {
             const state = this.exams.get(this.examRule);
             Object.assign(gameOptions, { qualified: state.qualified, exam: tgm3ExamFor(state) });
         }
+        // Guideline versus: a match against the bot (options.bot: its level), both sides dealt from one seed
+        const versus = mode === guideline && variant === "versus";
+        if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
+        const hadMatch = !!this.match;
+        this.match = versus ? this.newMatch(gameOptions.seed, options.bot ?? BOT_VERSUS_LEVEL) : null;
+        if (hadMatch !== versus) this.resize(); // the view widens for the bot's board, or back
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
@@ -795,13 +910,11 @@ class Engine {
         this.hue = this.hueTarget = HUE_DEFAULT; // every game starts on the default blue
     }
 
-    // Confetti, flashes, rings and the field's shake: none left over from another game
+    // Confetti, flashes, rings and the field's shake: none left over from another game (a fresh
+    // board view for the player's game)
     clearEffects() {
-        this.particles = [];
-        this.flashes = [];
-        this.dropFlashes = [];
-        this.holdFlash = 0; // frames left of the held piece's flash
-        this.enterGlow = 0; // and of the glow round the piece entering from hold (gone when it locks)
+        if (this.ownBoard && this.ownBoard.messageCache) this.r.releaseTexture(this.ownBoard.messageCache.tex);
+        this.ownBoard = this.board = new BoardView(this.game);
         this.rings = [];
         this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 }; // px, py: before the last step
     }
@@ -965,6 +1078,11 @@ class Engine {
                     this.menuStep = MENU_MAIN; // so Esc in the menu resumes straight away
                     this.mainpos = 0;           // on Continue (or Restart), the first item
                     this.menuShown = null;      // no slide when the menu opens
+                    return;
+                }
+                if (code === "Enter" && this.match && this.match.result) { // a decided versus match: rematch
+                    this.initGame(...this.lastGameArgs);
+                    this.syncKeys = true;
                     return;
                 }
                 if (PUSH_BITS[action]) this.player_input |= PUSH_BITS[action];
@@ -1215,7 +1333,8 @@ class Engine {
     // LINE CLEAR CONFETTI
     // Uses Math.random, independent of the piece randomizers
 
-    explodeCells(cells, chain = 0) {
+    // On the current board; own: the player's, whose clears also send the clear burst and turn the backdrop's hue
+    explodeCells(cells, chain = 0, own = true) {
         if (!this.options.effects) return;
         const rows = new Set();
         for (const cell of cells) {
@@ -1223,8 +1342,8 @@ class Engine {
             rows.add(cell.row);
             this.explodeCell(cell);
         }
-        if (this.options.flash) for (const row of rows) this.flashes.push({ row, life: FLASH_LIFE });
-        if (rows.size) {
+        if (this.options.flash) for (const row of rows) this.board.flashes.push({ row, life: FLASH_LIFE });
+        if (rows.size && own) {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
             const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
@@ -1253,7 +1372,7 @@ class Engine {
                 : spec.size[0] + Math.random() * spec.size[1];
             const color = Math.random() < 0.85 ? PIECE_COLORS[cell.type].light
                 : CONFETTI_EXTRA[Math.floor(Math.random() * CONFETTI_EXTRA.length)];
-            this.particles.push(this.confettiBit(style,
+            this.board.particles.push(this.confettiBit(style,
                 cx + (Math.random() - 0.5) * CELL * 0.8, cy + (Math.random() - 0.5) * CELL * 0.8,
                 Math.cos(angle) * speed, Math.sin(angle) * speed - spec.lift, // bias upwards for a burst
                 size, color, spec.life * (1 - 0.4 * Math.random())));
@@ -1273,7 +1392,13 @@ class Engine {
 
     // Lives and speeds are in game frames; dt is the time passed in them
     updateParticles(dt) {
-        for (const p of this.particles) {
+        for (const view of this.boards()) this.updateBoardEffects(view, dt);
+        this.rings = this.rings.filter(e => (e.life -= dt) > 0);
+    }
+
+    // A board's confetti, flashes and glows
+    updateBoardEffects(view, dt) {
+        for (const p of view.particles) {
             const spec = CONFETTI_SPECS[p.style];
             const drag = Math.pow(spec.drag, dt); // air drag
             p.vy += spec.gravity * dt;
@@ -1290,13 +1415,12 @@ class Engine {
             p.twinkle += 0.3 * dt;
             p.life -= dt;
         }
-        this.particles = this.particles.filter(p => p.life > 0 && p.y < VIEW_H + 20);
+        view.particles = view.particles.filter(p => p.life > 0 && p.y < VIEW_H + 20);
         const age = (effects) => effects.filter(e => (e.life -= dt) > 0);
-        this.rings = age(this.rings);
-        this.flashes = age(this.flashes);
-        this.dropFlashes = age(this.dropFlashes);
-        this.holdFlash = Math.max(0, this.holdFlash - dt);
-        this.enterGlow = Math.max(0, this.enterGlow - dt);
+        view.flashes = age(view.flashes);
+        view.dropFlashes = age(view.dropFlashes);
+        view.holdFlash = Math.max(0, view.holdFlash - dt);
+        view.enterGlow = Math.max(0, view.enterGlow - dt);
     }
 
     // Effects strength for the soft, large ones (backdrop wash, trails): never quite off, and
@@ -1352,7 +1476,7 @@ class Engine {
     // plus a soft tint of its own colour, both fading out quickly
     drawDropFlashes() {
         const r = this.r;
-        for (const f of this.dropFlashes) {
+        for (const f of this.board.dropFlashes) {
             const t = Math.max(0, f.life / DROP_FLASH_LIFE);
             for (const cell of f.cells) {
                 if (cell.row < this.wellTop || cell.cleared) continue; // hidden rows; cleared: nothing left to light up
@@ -1407,7 +1531,7 @@ class Engine {
     }
 
     // Strength (0..1) of a hold's flash or glow with `frames` of it left, fading out from the hold
-    holdFlashAlpha(frames = this.holdFlash) {
+    holdFlashAlpha(frames = this.board.holdFlash) {
         return Math.min(1, frames / HOLD_FLASH_LIFE * this.options.effectScale);
     }
 
@@ -1442,7 +1566,7 @@ class Engine {
     // started to where it is, fading out all at once after it has landed. One per run of
     // blocks falling together; drawn under the field, so only the gap above them shows.
     drawLineDropTrails(firstRow) {
-        const game = this.game;
+        const game = this.board.game;
         const top = Math.max(firstRow, this.wellTop), depth = this.trailFit()[1];
         for (let i = firstRow; i < HEIGHT; i++) {
             const dist = game.getDropDistance(i);
@@ -1473,7 +1597,7 @@ class Engine {
         for (let n = 0; n < count; n++) {
             const angle = turn + n / count * Math.PI * 2;
             const speed = FIREWORK_SPEED * (0.85 + Math.random() * 0.3);
-            this.particles.push(this.confettiBit("glow", x, y, Math.cos(angle) * speed, Math.sin(angle) * speed,
+            this.board.particles.push(this.confettiBit("glow", x, y, Math.cos(angle) * speed, Math.sin(angle) * speed,
                 3 + Math.random() * 3, color, FIREWORK_LIFE - Math.floor(Math.random() * 15)));
         }
     }
@@ -1487,7 +1611,7 @@ class Engine {
         for (let pass = 0; pass < 2; pass++) {
             const add = pass === 0;
             r.blendMode = add ? "add" : "normal";
-            for (const p of this.particles) {
+            for (const p of this.board.particles) {
                 const spec = CONFETTI_SPECS[p.style];
                 if (!spec.add !== !add) continue;
                 const k = Math.min(1, p.life / 24);
@@ -1666,7 +1790,7 @@ class Engine {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const ease = 1 - Math.pow(1 - k, 3);
             return {
-                x: BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue + 20,
+                x: this.groupX + BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue + 20,
                 r: 30 + ease * (260 + 120 * ring.power),
                 width: 3 + 5 * (1 - k) * ring.power,
                 // brighter with more lines (1-4) and with a longer combo (chain 0 = no combo)
@@ -1685,7 +1809,7 @@ class Engine {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const ease = 1 - Math.pow(1 - k, 3);
             return {
-                x: BOARD_X + BOARD_W / 2, y: (ring.top + ring.bottom) / 2, hue: ring.hue + 20,
+                x: this.groupX + BOARD_X + BOARD_W / 2, y: (ring.top + ring.bottom) / 2, hue: ring.hue + 20,
                 r: 200 + 700 * ease,
                 half: (ring.bottom - ring.top) / 2,
                 width: 4 * (1 - k) + 2,
@@ -1708,7 +1832,7 @@ class Engine {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const fade = Math.pow(1 - k, 2.5); // strong at first, gone well before the end
             return {
-                x: BOARD_X + BOARD_W / 2, y: ring.y,
+                x: this.groupX + BOARD_X + BOARD_W / 2, y: ring.y,
                 r: 20 + (1 - Math.pow(1 - k, 1.6)) * RIPPLE_REACH,
                 width: (14 + 4 * ring.power) * (1 + 1.5 * k), // spreads as it goes
                 amp: fade * (4 + 2.5 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * RIPPLE_AMP,
@@ -1717,7 +1841,7 @@ class Engine {
     }
 
     drawFlashes() {
-        for (const f of this.flashes) {
+        for (const f of this.board.flashes) {
             const t = f.life / FLASH_LIFE;
             const y = this.cellY(f.row);
             this.r.rect(BOARD_X, y + CELL / 2 - (CELL / 2) * t, BOARD_W, CELL * t,
@@ -2317,7 +2441,10 @@ class Engine {
     }
 
     drawGame() {
-        const game = this.game;
+        const r = this.r, game = this.game;
+        this.board = this.ownBoard;
+        r.save();
+        r.translate(this.groupX, 0); // left of the bot's board in a versus match
 
         const m = this.motion;
         if (m.rx || m.ry || m.dx || m.dy || m.dz) this.drawBoardInMotion(m);
@@ -2325,15 +2452,72 @@ class Engine {
         this.drawParticles();  // confetti flies off the field: never tilted
         if (this.layout.compact) this.drawCompactPanels();
         else this.drawSidePanels();
+        if (this.match) {
+            this.drawGarbageMeter(game);
+            this.drawAttackPopups();
+        }
 
         // Overlays
-        if (game.isGameOver()) {
+        if (this.match && this.match.result) {
+            const won = this.match.result === "win";
+            const sub = this.gamepad.active ? "START FOR MENU" : this.touch.enabled ? "TAP MENU" : "ENTER  REMATCH  ·  ESC  MENU";
+            this.boardBanner(won ? "VICTORY" : "DEFEAT", sub, 1, PIECE_COLORS[won ? tetO : tetZ].base);
+        } else if (game.isGameOver()) {
             const title = game.endTitle || "GAME OVER";
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
                 : title === "COMPLETE" ? PIECE_COLORS[tetI].base : PIECE_COLORS[tetZ].base;
             const sub = game.endSub || "ESC — BACK TO MENU";
             this.boardBanner(title, this.gamepad.active ? padWords(sub) : this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew, game.endNotes());
         }
+        r.restore();
+        if (this.match) this.drawOpponent();
+    }
+
+    // Garbage waiting for a board, beside its well: a bar per attack, rising from the bottom
+    drawGarbageMeter(game) {
+        const r = this.r, x = BOARD_X - 8 - METER_GAP - METER_W;
+        r.shape(x, this.boardY, METER_W, this.boardH, { radius: 3, fill: "rgba(244,236,220,0.06)" });
+        let y = this.boardY + this.boardH;
+        for (const g of game.incoming) {
+            const h = Math.min(g.lines * CELL, y - this.boardY);
+            if (h <= 2) break;
+            r.shape(x, y - h + 1, METER_W, h - 2, { radius: 3, fill: GARBAGE_METER });
+            y -= h;
+        }
+    }
+
+    // Lines the player sent: "+4" rising from the upper part of the well and fading
+    drawAttackPopups() {
+        const r = this.r;
+        for (const p of this.match.popups) {
+            const k = 1 - p.life / ATTACK_LIFE;
+            r.save();
+            r.globalAlpha = Math.min(1, p.life / 15);
+            this.text("+" + p.lines, BOARD_X + BOARD_W / 2, this.boardY + this.boardH * 0.3 - 50 * k,
+                { size: 34 + 4 * Math.min(p.lines, 6), weight: 900, color: MESSAGE_GOLD, align: "center", spacing: 2 });
+            r.restore();
+        }
+    }
+
+    // The bot's board, smaller, right of the player's: its well and effects, garbage meter, its
+    // level and the lines it sent; flat (no tilt or shake), without side panels
+    drawOpponent() {
+        const r = this.r, m = this.match, game = m.view.game, { x, y, s } = this.layout.versus.opp;
+        r.save();
+        r.translate(x, y);
+        r.scale(s);
+        this.board = m.view;
+        this.drawBoard();
+        this.drawParticles();
+        this.drawGarbageMeter(game);
+        this.text("BOT  ·  " + BOT_LEVELS[m.level].name.toUpperCase(), BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
+        this.text("SENT " + game.linesSent, BOARD_X + BOARD_W, this.boardY - 25, { size: 13, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
+        if (m.result) {
+            const won = m.result === "lose"; // the bot won
+            this.boardBanner(won ? "WINNER" : "KNOCKED OUT", null, 1, PIECE_COLORS[won ? tetO : tetZ].base);
+        }
+        r.restore();
+        this.board = this.ownBoard;
     }
 
     // Strength of the board glow: the shadow's alpha times the frame's fill alpha
@@ -2343,7 +2527,7 @@ class Engine {
 
     drawBoard() {
         const r = this.r;
-        const game = this.game;
+        const game = this.board.game;
 
         // Frame (the backdrop pass has drawn its glow and the rings)
         const frame = [BOARD_X - 8, this.boardY - 8, BOARD_W + 16, this.boardH + 16];
@@ -2388,7 +2572,7 @@ class Engine {
         // Draw Field
         if (this.options.effects && this.options.trail) {
             this.drawLineDropTrails(firstRow);
-            for (const f of this.dropFlashes) this.drawDropTrail(f);
+            for (const f of this.board.dropFlashes) this.drawDropTrail(f);
         }
         for (let i = firstRow; i < HEIGHT; i++) {
             const y = this.cellY(i + game.getDropOffset(i, this.tickPhase)); // rows fall into place during a line clear
@@ -2418,11 +2602,11 @@ class Engine {
         // Draw current Piece: the highlight fades from "active" to "locked" as the
         // lock delay runs out, and comes back whenever a move resets the delay
         const lockLeft = 1 - Math.min(1, game.curPiece_lockDelay / game.lockDelayMax);
-        if (this.enterGlow > 0) { // it came from hold: glows as the held one flashes
+        if (this.board.enterGlow > 0) { // it came from hold: glows as the held one flashes
             const shown = cells.map(([i, j]) => [this.rev ? -i : i, j]); // as on screen (Rev: upside down)
             const x = this.cellX(col + Math.min(...cells.map(([, j]) => j)));
             const y = Math.min(...cells.map(([i]) => this.cellY(game.getCurPiece_row() + i)));
-            this.drawPieceGlow(shown, color, CELL, x, y, this.holdFlashAlpha(this.enterGlow));
+            this.drawPieceGlow(shown, color, CELL, x, y, this.holdFlashAlpha(this.board.enterGlow));
         }
         for (const [i, j] of cells) {
             const row = game.getCurPiece_row() + i;
@@ -2450,7 +2634,7 @@ class Engine {
     // walls and floor. Rows falling during a line clear are outlined on their own, and blocks
     // fading in the staff roll take their border with them
     drawStackBorder(firstRow) {
-        const r = this.r, game = this.game, w = STACK_BORDER_W, c = STACK_BORDER_COLOR;
+        const r = this.r, game = this.board.game, w = STACK_BORDER_W, c = STACK_BORDER_COLOR;
         // empty beside a block of a row drawn at offset off: inside the well with nothing visible
         // there (or a block of a row falling apart from it); above the drawn rows counts as empty
         const open = (i, j, off) => j >= 0 && j < WIDTH && i < HEIGHT &&
@@ -2507,7 +2691,7 @@ class Engine {
     // well in the compact layout: pop in, then fade out. Back-to-back sits above the clear name;
     // combo and perfect clear below it.
     drawClearMessage(top) {
-        const game = this.game;
+        const game = this.board.game;
         const age = game.actionAge + this.tickPhase; // frames, and how far into the next one
         if (!game.actions.length || age >= MESSAGE_LIFE) return;
         const r = this.r;
@@ -2525,7 +2709,7 @@ class Engine {
     // The message lines with their shadows, rendered into a texture once per set of
     // actions. Sharp up to the biggest pop scale.
     messageTexture(actions) {
-        const cached = this.messageCache;
+        const cached = this.board.messageCache;
         if (cached && cached.actions === actions && cached.count === actions.length) return cached;
         const pad = 40; // room for the shadows
         const res = this.pixelScale * MESSAGE_POP_MAX;
@@ -2565,21 +2749,21 @@ class Engine {
             y += s.size * 0.575;
         }
         if (cached) this.r.releaseTexture(cached.tex);
-        this.messageCache = { actions, count: actions.length, tex: this.r.texture(canvas), pad, res, anchor };
-        return this.messageCache;
+        this.board.messageCache = { actions, count: actions.length, tex: this.r.texture(canvas), pad, res, anchor };
+        return this.board.messageCache;
     }
 
     // The held piece in the HOLD box. Once a piece has been held (the hold is spent until the
     // next piece enters, game.canHold), it is desaturated to the neutral grey and faded
     drawHeldPiece(cx, cy, size) {
-        const game = this.game, spent = !game.canHold;
+        const game = this.board.game, spent = !game.canHold;
         if (spent) { this.r.save(); this.r.globalAlpha *= MENU_DIMMED_ALPHA; }
         this.drawPieceCentered(game.getHeldPiece(), cx, cy, size, "locked", game, false, this.holdFlashAlpha(), spent);
         if (spent) this.r.restore();
     }
 
     drawSidePanels() {
-        const game = this.game;
+        const game = this.board.game;
 
         // HOLD (TAP has none)
         if (game.hasHold) {
@@ -2646,7 +2830,7 @@ class Engine {
     // The compact layout's columns: HOLD over the stats on the left, NEXT and the rest of the
     // preview on the right; clear messages show over the well
     drawCompactPanels() {
-        const game = this.game;
+        const game = this.board.game;
         const { leftX, rightX, sideW } = this.layout;
         const box = 64, size = 14; // HOLD and first NEXT panels, and their pieces
         const top = this.boardY + 4;

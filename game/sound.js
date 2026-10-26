@@ -70,6 +70,18 @@ class Sound {
             case "go": // first frame that takes input
                 this.tone(t, 1320, 1320, 0.16, 0.06, "sine");
                 break;
+            case "garbage": // versus garbage rising: a low grinding rumble
+                this.tone(t, 70, 110, 0.22, 0.16, "sawtooth");
+                this.noise(t, 0.2, "lowpass", 500, 0.07);
+                break;
+            case "attack": // versus: lines sent to the other side, a quick rising whoosh
+                this.noise(t, 0.16, "bandpass", 2400, 0.035);
+                this.tone(t, 500, 1100, 0.12, 0.03, "triangle");
+                break;
+            case "ko": // versus: the other side topped out
+                this.tone(t, 990, 990, 0.12, 0.06, "sine");
+                this.tone(t + 0.1, 1320, 1320, 0.25, 0.06, "sine");
+                break;
             default: {
                 const clear = /^clear(\d)(?:c(\d+))?$/.exec(name); // "clear2" or "clear2c3"
                 if (clear) this.lineClear(t, Number(clear[1]), Number(clear[2] || 0));

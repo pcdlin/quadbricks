@@ -1,6 +1,6 @@
 // Block styles. Each draws one block into a sprite canvas that is already scaled and
 // offset by pad(style): draw(g, col, size, style, index), where col is the colour entry
-// ({base, light, dark}), index the palette index (1..8; 8 is the neutral grey-white) and style "active" (falling
+// ({base, light, dark}), index the palette index (1..9; 8 is the neutral grey-white, 9 versus garbage, GARBAGE_COLOR) and style "active" (falling
 // piece), "locked" (settled stack) or "ghost" (landing preview). Styles that don't colour
 // blocks by col give trail(index), the CSS colour of their drop trail and hard-drop flash
 // (else col.light). The engine lays a lamp light over every block but the ghost, moving with the
@@ -33,7 +33,9 @@ function loadTileImages() {
 // The 1989 handheld's screen shades, darkest to lightest
 const GB_SHADES = ["#0f380f", "#306230", "#8bac0f", "#c8dc9a"]; // lightest lifted for contrast
 const MONO_INK = "244,236,220"; // Mono's warm gallery white
-const holoLum = (index) => index > 7 ? 70 : 58 + index * 3; // the neutral colour (8) sits mid-range
+const MONO_GARBAGE_INK = "150,146,138"; // and its versus garbage, a darker grey
+// the neutral colour (8) sits mid-range, versus garbage well below the pieces
+const holoLum = (index) => index === GARBAGE_COLOR ? 44 : index > 7 ? 70 : 58 + index * 3;
 
 // Stained glass: the pane inside the lead cames, and the lead seam across it (its direction
 // alternates by colour)
@@ -496,9 +498,9 @@ const TILESETS = {
         name: "Mono",
         face: [1.5, 0.1],
         pad: (style) => style === "active" ? 10 : 0,
-        trail: () => `rgb(${MONO_INK})`,
-        draw(g, col, size, style) {
-            const ink = MONO_INK;
+        trail: (index) => `rgb(${index === GARBAGE_COLOR ? MONO_GARBAGE_INK : MONO_INK})`,
+        draw(g, col, size, style, index) {
+            const ink = index === GARBAGE_COLOR ? MONO_GARBAGE_INK : MONO_INK;
             const [inset, round] = this.face, w = size - inset * 2, r = size * round;
             const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
             if (style === "ghost") {
@@ -561,6 +563,7 @@ const TILESETS = {
                 case 4: px(1, 1, 6, 6, lightest); px(3, 3, 2, 2, darkest); break;             // light with a dot
                 case 5: px(1, 1, 6, 6, dark); px(2, 2, 4, 4, light); break;                   // framed
                 case 6: px(1, 1, 6, 6, light); for (let y = 1; y < 7; y++) for (let x = 1 + y % 2; x < 7; x += 2) px(x, y, 1, 1, dark); break; // checks
+                case GARBAGE_COLOR: px(1, 1, 6, 6, dark); px(2, 2, 4, 4, darkest); break;    // versus garbage: dark, sunken
                 default: px(1, 1, 6, 6, lightest); px(2, 2, 4, 4, light); px(2, 2, 4, 1, lightest); break; // pillow
             }
             px(1, 1, 1, 1, lightest); // a glint in the corner
