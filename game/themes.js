@@ -67,7 +67,7 @@ function spaceMoon(g) {
     face.addColorStop(1, "#6d778c");
     g.fillStyle = face;
     g.fillRect(x - r, y - r, r * 2, r * 2);
-    const rnd = seededRandom(7);
+    const rnd = themeRandom(7);
     for (let i = 0; i < 4; i++) { // maria: broad, soft, darker plains
         const mx = x + (rnd() - 0.5) * r * 1.2, my = y + (rnd() - 0.5) * r * 1.2, mr = r * (0.25 + rnd() * 0.25);
         const sea = g.createRadialGradient(mx, my, 0, mx, my, mr);
@@ -117,8 +117,9 @@ function spaceMoon(g) {
     g.stroke();
 }
 
-// Repeatable pseudo-random numbers in 0..1 (the same picture after every resize)
-function seededRandom(seed) {
+// Repeatable pseudo-random numbers in 0..1 (the same picture after every resize); not tiles.js's
+// seededRandom(), which the block styles use: the scripts share globals, so the names must differ
+function themeRandom(seed) {
     return () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 }
 
@@ -235,7 +236,7 @@ const THEMES = {
                 g.fillRect(x0, y0, x1 - x0, y1 - y0);
             }
             // fixed stars, a few with glints
-            const rnd = seededRandom(11);
+            const rnd = themeRandom(11);
             const count = Math.round((x1 - x0) * (y1 - y0) / 1300);
             for (let i = 0; i < count; i++) {
                 const x = x0 + rnd() * (x1 - x0), y = y0 + rnd() * (y1 - y0), m = rnd();
