@@ -1180,7 +1180,10 @@ class Engine {
     // player's device, or an action on a pad
     eventTarget(ev) {
         if (!(this.match && this.match.duo)) {
-            return ev.pad !== undefined ? [0, ev.action] : [0, this.options.actionFor(ev.code)];
+            if (ev.pad === undefined) return [0, this.options.actionFor(ev.code)];
+            // one player's pads act as one: a press another pad already holds does nothing
+            const elsewhere = ev.down && this.gamepad.pads.some(pad => pad !== ev.pad && this.gamepad.heldActions(pad).has(ev.action));
+            return elsewhere ? [-1, null] : [0, ev.action];
         }
         const devices = this.match.devices;
         if (ev.pad !== undefined) return [devices.indexOf("pad:" + ev.pad), ev.action];
@@ -1324,9 +1327,10 @@ class Engine {
         if (HANDLING_ITEMS.some(item => item.id === id)) this.applyHandling();
     }
 
-    // Handling changed during a (paused) Guideline game applies at once
+    // Handling changed during a (paused) Guideline game applies at once (both players' games)
     applyHandling() {
         if (this.game) this.game.setHandling(this.options.handling);
+        if (this.match && this.match.duo) this.match.view.game.setHandling(this.options.handling);
     }
 
     // A setting's current value as shown on its card
