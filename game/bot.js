@@ -10,13 +10,15 @@
 //    only slides along the stack surface, and at low gravity it hovers.
 //  - Brain: Thiery and Scherrer's evaluator (landing height, eroded cells, transitions, holes, wells,
 //    ...) over bit-row boards, with a beam search over the visible next pieces and the hold; in
-//    Guideline versus it also reckons with the garbage waiting to rise.
+//    Guideline versus it also reckons with the garbage waiting to rise. Where Tetrises pay it keeps
+//    a well open; in the Guideline the upper levels play as players do there: T-spins (the explorer
+//    finds the turns into a slot, the evaluator credits slots it builds), back-to-backs, combos.
 //  - Hands: turns the chosen route into one input bitmap per frame, closed loop (the route is found
 //    again from where the piece actually is after every action), with a level's reaction time, key
 //    interval, DAS use, mistakes and noise; the upper levels also choose during the entry delay how
 //    the next piece should enter and hold that rotation key through it (IRS).
 //
-// Left out for now: T-spins, IHS, DAS pre-charged during ARE, finesse.
+// Left out for now: T-spin triples and minis on purpose, IHS, DAS pre-charged during ARE, finesse.
 
 const BOT_ROWS = HEIGHT - FIELD_TOP;
 const BOT_FULL = (1 << WIDTH) - 1;
@@ -27,26 +29,41 @@ const BOT_FULL = (1 << WIDTH) - 1;
 // (what using the hold costs in evaluation points; Infinity: never), noise (σ of each evaluation
 // weight, per game), temp (softmax temperature over the best placements), misdrop (chance of
 // aiming one column or rotation off), irs (turns a piece as it enters by holding the key through
-// ARE), tucks (waits and soft-drops to slide under overhangs). Levels 0-10, the index.
+// ARE), tucks (waits and soft-drops to slide under overhangs), spins (plays the Guideline for
+// T-spins, back-to-backs and combos: the "attack" weights). Levels 0-10, the index.
 const BOT_LEVELS = [
-    { irs: false, reaction: 30, interval: 8, das: false, hard: 0.3, depth: 0, beam: 1, hold: Infinity, noise: 0.35, temp: 1, misdrop: 0.06, tucks: false },
-    { irs: false, reaction: 25, interval: 7, das: false, hard: 0.45, depth: 0, beam: 1, hold: Infinity, noise: 0.3, temp: 0.8, misdrop: 0.05, tucks: false },
-    { irs: false, reaction: 20, interval: 6, das: false, hard: 0.55, depth: 0, beam: 1, hold: 24, noise: 0.25, temp: 0.65, misdrop: 0.04, tucks: false },
-    { irs: false, reaction: 15, interval: 5, das: false, hard: 0.7, depth: 0, beam: 1, hold: 12, noise: 0.2, temp: 0.5, misdrop: 0.03, tucks: false },
-    { irs: false, reaction: 12, interval: 4, das: true, hard: 0.85, depth: 0, beam: 1, hold: 6, noise: 0.16, temp: 0.35, misdrop: 0.02, tucks: true },
-    { irs: false, reaction: 10, interval: 4, das: true, hard: 1, depth: 1, beam: 2, hold: 3, noise: 0.13, temp: 0.27, misdrop: 0.015, tucks: true },
-    { irs: false, reaction: 8, interval: 3, das: true, hard: 1, depth: 1, beam: 4, hold: 0, noise: 0.1, temp: 0.2, misdrop: 0.01, tucks: true },
-    { irs: true, reaction: 5, interval: 2, das: true, hard: 1, depth: 1, beam: 6, hold: 0, noise: 0.06, temp: 0.1, misdrop: 0.005, tucks: true },
-    { irs: true, reaction: 3, interval: 2, das: true, hard: 1, depth: 2, beam: 8, hold: 0, noise: 0.03, temp: 0.03, misdrop: 0.002, tucks: true },
-    { irs: true, reaction: 1, interval: 1, das: true, hard: 1, depth: 2, beam: 12, hold: 0, noise: 0.015, temp: 0.01, misdrop: 0.001, tucks: true },
-    { irs: true, reaction: 0, interval: 1, das: true, hard: 1, depth: 3, beam: 16, hold: 0, noise: 0, temp: 0, misdrop: 0, tucks: true },
+    { irs: false, reaction: 30, interval: 8, das: false, hard: 0.3, depth: 0, beam: 1, hold: Infinity, noise: 0.35, temp: 1, misdrop: 0.06, tucks: false, spins: false },
+    { irs: false, reaction: 25, interval: 7, das: false, hard: 0.45, depth: 0, beam: 1, hold: Infinity, noise: 0.3, temp: 0.8, misdrop: 0.05, tucks: false, spins: false },
+    { irs: false, reaction: 20, interval: 6, das: false, hard: 0.55, depth: 0, beam: 1, hold: 24, noise: 0.25, temp: 0.65, misdrop: 0.04, tucks: false, spins: false },
+    { irs: false, reaction: 15, interval: 5, das: false, hard: 0.7, depth: 0, beam: 1, hold: 12, noise: 0.2, temp: 0.5, misdrop: 0.03, tucks: false, spins: false },
+    { irs: false, reaction: 12, interval: 4, das: true, hard: 0.85, depth: 0, beam: 1, hold: 6, noise: 0.16, temp: 0.35, misdrop: 0.02, tucks: true, spins: false },
+    { irs: false, reaction: 10, interval: 4, das: true, hard: 1, depth: 1, beam: 2, hold: 3, noise: 0.13, temp: 0.27, misdrop: 0.015, tucks: true, spins: true },
+    { irs: false, reaction: 8, interval: 3, das: true, hard: 1, depth: 1, beam: 4, hold: 0, noise: 0.1, temp: 0.2, misdrop: 0.01, tucks: true, spins: true },
+    { irs: true, reaction: 5, interval: 2, das: true, hard: 1, depth: 1, beam: 6, hold: 0, noise: 0.06, temp: 0.1, misdrop: 0.005, tucks: true, spins: true },
+    { irs: true, reaction: 3, interval: 2, das: true, hard: 1, depth: 2, beam: 8, hold: 0, noise: 0.03, temp: 0.03, misdrop: 0.002, tucks: true, spins: true },
+    { irs: true, reaction: 1, interval: 1, das: true, hard: 1, depth: 2, beam: 12, hold: 0, noise: 0.015, temp: 0.01, misdrop: 0.001, tucks: true, spins: true },
+    { irs: true, reaction: 0, interval: 1, das: true, hard: 1, depth: 3, beam: 16, hold: 0, noise: 0, temp: 0, misdrop: 0, tucks: true, spins: true },
 ];
 
 // Evaluation weights (Thiery and Scherrer's BCTS set); clear: bonus per lines cleared at a low stack.
-// "tetris" keeps the right column open and pays for Tetrises, "survival" takes every clear.
+// "survival" takes every clear. "tetris" keeps the right column open (edgeWell) and pays for
+// Tetrises, and for rows ready for one (`ready`, by rows full but for the well, up to 4).
+// "attack" and "versus" (the Guideline's scoring modes and versus, levels with `spins`) value a clear
+// as the mode does (botClearValue: its score, or the lines it sends) times `attack`, add `spin` for
+// a T-spin by its lines and `b2bBreak` for a clear that ends a back-to-back chain, don't charge
+// `clear` for difficult clears and combos (`waive`), credit a T-spin double slot by the lines a T
+// would clear in it (`tslot`, botTslot()) and look for T-spins (`spin`). Measured with Marathon's
+// score and with versus matches against "tetris": "attack" stacks higher for more Tetrises and
+// T-spin doubles; that loses in versus, where garbage has to be dug out with singles.
+const BOT_BCTS = { landing: -12.63, eroded: 6.6, rowTrans: -9.22, colTrans: -19.77, holes: -13.08, wells: -10.49, holeDepth: -1.61, holeRows: -24.04 };
 const BOT_WEIGHTS = {
-    survival: { landing: -12.63, eroded: 6.6, rowTrans: -9.22, colTrans: -19.77, holes: -13.08, wells: -10.49, holeDepth: -1.61, holeRows: -24.04, clear: [0, 0, 0, 0, 0], edgeWell: false },
-    tetris: { landing: -12.63, eroded: 6.6, rowTrans: -9.22, colTrans: -19.77, holes: -13.08, wells: -10.49, holeDepth: -1.61, holeRows: -24.04, clear: [0, -25, -20, -12, 45], edgeWell: true },
+    survival: { ...BOT_BCTS, clear: [0, 0, 0, 0, 0], edgeWell: false },
+    tetris: { ...BOT_BCTS, clear: [0, -25, -20, -12, 45], edgeWell: true, ready: [0, 12, 30, 55, 90] },
+    attack: { ...BOT_BCTS, landing: -4, eroded: 2, clear: [0, -50, -30, -15, 0], edgeWell: true, ready: [0, 20, 45, 80, 130],
+        attack: 12, spin: [0, 20, 80, 100], b2bBreak: -60, tslot: [0, 40, 110], waive: true },
+    // versus: garbage has to be dug out with singles, and a tall stack loses
+    versus: { ...BOT_BCTS, clear: [0, -25, -20, -12, 0], edgeWell: true, ready: [0, 12, 30, 55, 90],
+        attack: 12, spin: [0, 20, 80, 100], b2bBreak: 0, tslot: [0, 25, 70], waive: true },
 };
 const BOT_TETRIS_MAX_STACK = 12; // rows: above this every clear is welcome
 const BOT_DANGER = -1e6;         // the next piece could not enter
@@ -92,10 +109,15 @@ function botLockStyle(game) {
 
 // Evaluation set for the game's mode (measured with tools/bot-bench.js): stacking for Tetrises pays
 // where the score or grade counts lines (Guideline marathons and Ultra, TGM1, TGM3 Master, NES, GB);
-// the modes about time or survival (Sprint, Dig, ACE, TAP, Easy, Shirase) take every clear
-function botProfile(game) {
+// the modes about time or survival (Sprint, Dig, ACE, TAP, Easy, Shirase) take every clear. Levels
+// with `spins` play the Guideline's scoring modes and versus for attack, as players do
+function botProfile(game, hands) {
     if (game.nes || game.gb || game.gamemode === tgmOriginal) return "tetris";
-    if (game.gamemode === guideline) return /^(sprint|dig)/.test(game.variant) ? "survival" : "tetris";
+    if (game.gamemode === guideline) {
+        if (/^(sprint|dig)/.test(game.variant)) return "survival";
+        if (!hands.spins || game.variant === "master" || game.big) return "tetris";
+        return game.versus ? "versus" : "attack";
+    }
     if ((game.gamemode === arika || game.gamemode === tgmClassic) && game.variant === "standard") return "tetris";
     return "survival";
 }
@@ -195,12 +217,11 @@ function botRise(rows, n) {
     return fits;
 }
 
-// Garbage still waiting after a lock that cleared `cleared` rows: a clear's lines cancel it (counted
-// without combos or back-to-backs), a lock without one lets it all rise
-function botPendingAfter(game, pending, cleared) {
+// Garbage still waiting after a lock that cleared `cleared` rows: the lines the clear sends cancel
+// it (botClear.attack, from the botStepScore() just made), a lock without one lets it all rise
+function botPendingAfter(pending, cleared) {
     if (!pending || !cleared) return 0;
-    const lines = game.big ? cleared >> 1 : cleared;
-    return Math.max(0, pending - VS_LINES[Math.min(lines, 4)]);
+    return Math.max(0, pending - botClear.attack);
 }
 
 // The lock just made ends the game: a lock out, or the next piece can't enter
@@ -221,17 +242,64 @@ function botBlocked(game, rows, type) {
 
 const botHeight = new Int32Array(WIDTH), botCount = new Int32Array(WIDTH);
 
-// How good a board is (not counting the move that led to it)
+// How good a board is (not counting the move that led to it); with `tslot` weights, a T-spin double
+// slot counts as filled by the T it waits for, plus the slot's credit
+const botSlotBoard = new Int32Array(BOT_ROWS);
 function botBoardScore(rows, w) {
+    const s = botShapeScore(rows, w);
+    if (!w.tslot) return s;
+    const lines = botTslot(rows, botSlotBoard);
+    return lines < 0 ? s : Math.max(s, botShapeScore(botSlotBoard, w) + w.tslot[lines]);
+}
+
+// A T-spin double slot, as players build them: a T pointing down fits with its stem in a gap
+// between two blocks (the bottom corners), one arm under an overhang (the third corner) and nothing
+// above the other arm or the stem, so a T dropped beside the overhang turns into it. The lowest of
+// those clearing the most lines: the board with the T in it and full rows gone goes to out; returns
+// the lines it clears, or -1 when there is no slot
+function botTslot(rows, out) {
+    let top = 0;
+    while (top < BOT_ROWS && rows[top] === 0) top++;
+    let best = -1, bestY = 0, bestC = 0;
+    for (let y = Math.max(top + 1, 2); y < BOT_ROWS; y++) {
+        const below = rows[y] & BOT_FULL, mid = rows[y - 1] & BOT_FULL, over = rows[y - 2] & BOT_FULL;
+        for (let c = 1; c < WIDTH - 1; c++) {
+            const L = 1 << (c - 1), C = 1 << c, R = 1 << (c + 1);
+            if ((below & (L | C | R)) !== (L | R) || (mid & (L | C | R)) || (over & C)) continue;
+            const ol = over & L, or = over & R;
+            if (!ol === !or) continue; // the third corner: one overhang
+            const open = C | (ol ? R : L); // the stem's column and the open arm's: clear above
+            let clear = true;
+            for (let r = y - 2; r >= top && clear; r--) if (rows[r] & open) clear = false;
+            if (!clear) continue;
+            const lines = ((below | C) === BOT_FULL ? 1 : 0) + ((mid | L | C | R) === BOT_FULL ? 1 : 0);
+            if (lines >= best) { best = lines; bestY = y; bestC = c; }
+        }
+    }
+    if (best < 0) return -1;
+    out.set(rows);
+    out[bestY] |= 1 << bestC;
+    out[bestY - 1] |= 7 << (bestC - 1);
+    let w = BOT_ROWS - 1;
+    for (let r = BOT_ROWS - 1; r >= 0; r--) if (out[r] !== BOT_FULL) out[w--] = out[r];
+    while (w >= 0) out[w--] = 0;
+    return best;
+}
+
+// The board's shape: BCTS's features. edgeWell: while the stack is low, the right column left open
+// for a Tetris is no row transition (else every row stacked beside it costs, and the bot fills it
+// with singles)
+function botShapeScore(rows, w) {
     let top = 0;
     while (top < BOT_ROWS && rows[top] === 0) top++;
     if (top === BOT_ROWS) return 0;
     botHeight.fill(0);
     botCount.fill(0);
+    const well = w.edgeWell && !w.fast && BOT_ROWS - top <= BOT_TETRIS_MAX_STACK ? 1 << (WIDTH - 1) : 0;
     let rowTrans = 0, colTrans = 0, holes = 0, holeDepth = 0, holeRows = 0, covered = 0, prev = 0;
     for (let r = top; r < BOT_ROWS; r++) {
         const bits = rows[r] & BOT_FULL; // without the garbage marker
-        const ext = 0x801 | (bits << 1); // the walls count as filled
+        const ext = 0x801 | ((bits | (well & ~covered)) << 1); // the walls count as filled
         rowTrans += botPop((ext ^ (ext >> 1)) & 0x7FF);
         colTrans += botPop(bits ^ prev);
         prev = bits;
@@ -253,19 +321,58 @@ function botBoardScore(rows, w) {
         const d = Math.min(left, right) - botHeight[c];
         if (d > 0) wells += d * (d + 1) / 2;
     }
+    // Tetris-ready: rows full but for the open well, from its bottom up (the I that clears them is
+    // seldom in view yet)
+    let ready = 0;
+    if (well) {
+        let r = top;
+        while (r < BOT_ROWS && !(rows[r] & well)) r++;
+        for (r--; r >= top && (rows[r] & BOT_FULL) === (BOT_FULL ^ well); r--) ready++;
+    }
     return w.rowTrans * rowTrans + w.colTrans * colTrans + w.holes * holes + w.wells * wells
-        + w.holeDepth * holeDepth + w.holeRows * holeRows;
+        + w.holeDepth * holeDepth + w.holeRows * holeRows + (w.ready ? w.ready[Math.min(ready, 4)] : 0);
 }
 
-// What the move itself earned: landing height, eroded cells, a bonus for the lines it cleared
-// (big pieces: two rows make a line)
-function botStepScore(game, rows, w, cleared) {
+// What a clear is worth in the Guideline: the lines it sends in versus, else its score at level 1
+// in units of 200 (a Tetris 4, a T-spin double 6). b2b: with the back-to-back bonus; combo: 0 for the
+// first clear; pc: it empties the field
+const BOT_SCORE_BASE = [0, 100, 300, 500, 800], BOT_SPIN_BASE = [400, 800, 1200, 1600], BOT_MINI_BASE = [100, 200, 400];
+const BOT_PC_BASE = [0, 800, 1200, 1800, 2000];
+function botClearValue(game, n, tspin, b2b, combo, pc) {
+    if (game.versus) return versusAttack({ n, tspin, b2b, combo, pc });
+    const base = (tspin === "full" ? BOT_SPIN_BASE : tspin === "mini" ? BOT_MINI_BASE : BOT_SCORE_BASE)[n] || 0;
+    const bonus = pc ? (n === 4 && b2b ? 3200 : BOT_PC_BASE[n]) : 0;
+    return (base * (b2b ? 1.5 : 1) + 50 * combo + bonus) / 200;
+}
+
+// What the move itself earned: landing height, eroded cells, a bonus for the lines it cleared (big
+// pieces: two rows make a line). b2b and combo: the Guideline's chains before it (the game's b2b and
+// combo); tspin: "full", "mini" or null. botClear gets the chains after it and, in versus, the lines
+// it sends.
+const botClear = { b2b: false, combo: -1, attack: 0 };
+function botStepScore(game, rows, w, cleared, b2b = false, combo = -1, tspin = null) {
     let s = w.landing * botLocked.landing + w.eroded * botLocked.eroded;
     const lines = game.big ? cleared >> 1 : cleared;
+    botClear.b2b = b2b;
+    botClear.combo = -1;
+    botClear.attack = 0;
     if (lines > 0) {
         let top = 0;
         while (top < BOT_ROWS && rows[top] === 0) top++;
-        if (BOT_ROWS - top <= BOT_TETRIS_MAX_STACK) s += w.clear[Math.min(lines, 4)];
+        const difficult = lines === 4 || tspin !== null;
+        botClear.b2b = difficult;
+        botClear.combo = combo + 1;
+        if (game.versus || w.attack) {
+            const value = botClearValue(game, Math.min(lines, 4), tspin, b2b && difficult, combo + 1, top === BOT_ROWS);
+            if (game.versus) botClear.attack = value;
+            if (w.attack) {
+                s += w.attack * value;
+                if (tspin === "full") s += w.spin[Math.min(lines, 3)];
+                if (b2b && !difficult) s += w.b2bBreak;
+            }
+        }
+        // a difficult clear or one that keeps a combo going is worth it at any height
+        if (BOT_ROWS - top <= BOT_TETRIS_MAX_STACK && !(w.waive && (difficult || combo >= 0))) s += w.clear[Math.min(lines, 4)];
     }
     return s;
 }
@@ -297,11 +404,15 @@ class BotExplorer {
         this.acc = new Float32Array(n); this.ga = new Int16Array(n); this.time = new Int16Array(n);
         // ARS floor kicks so far (I, T) and flags (1: floor kicked, 2: lock delay zeroed), per node
         this.ik = new Int8Array(n); this.tk = new Int8Array(n); this.fk = new Int8Array(n);
+        // the last move was a rotation (T-spins): 0 no, else the kick it took + 2 (1: a 180° turn)
+        this.sp = new Int8Array(n);
         this.parent = new Int32Array(n); this.act = new Int8Array(n); this.key = new Int32Array(n); this.next = new Int32Array(n);
-        this.best = new Int16Array(poses);
+        this.best = new Int16Array(poses * 2); // by pose and whether the last move was a rotation
         this.cand = new Int32Array(poses); // landing pose key -> the first node that lands there
+        this.spinCand = new Int32Array(poses); // resting pose key -> the first node that turned into it
         this.head = new Int32Array(BOT_TMAX + 1);
         this.cands = [];
+        this.spinCands = [];
         this.n = 0;
     }
 
@@ -311,22 +422,26 @@ class BotExplorer {
         return ((row - FIELD_TOP) * BOT_COLS + c) * 4 + rot;
     }
 
-    add(row, col, rot, acc, ga, time, parent, act, ik, tk, fk) {
-        const key = this.poseKey(row, col, rot);
-        if (key < 0 || time > BOT_TMAX || this.n >= BOT_MAXN || time >= this.best[key]) return;
+    add(row, col, rot, acc, ga, time, parent, act, ik, tk, fk, sp) {
+        const pose = this.poseKey(row, col, rot);
+        if (pose < 0) return;
+        const key = pose * 2 + (sp ? 1 : 0);
+        if (time > BOT_TMAX || this.n >= BOT_MAXN || time >= this.best[key]) return;
         const id = this.n++;
         this.best[key] = time;
         this.row[id] = row; this.col[id] = col; this.rot[id] = rot; this.acc[id] = acc; this.ga[id] = ga;
-        this.ik[id] = ik; this.tk[id] = tk; this.fk[id] = fk;
+        this.ik[id] = ik; this.tk[id] = tk; this.fk[id] = fk; this.sp[id] = sp;
         this.time[id] = time; this.parent[id] = parent; this.act[id] = act; this.key[id] = key;
         this.next[id] = this.head[time];
         this.head[time] = id;
     }
 
     // o: game, probe, type, row, col, rot, acc (gravity owed), ga and gaMax (grounded actions made
-    // and allowed before the piece locks), interval, softCost, rot180, down, wait, goal. Without a
-    // goal, fills `cands` (landing pose keys, first-found node in `cand`); with one, returns the
-    // node that stands where its drop lands on goal.land, or -1.
+    // and allowed before the piece locks), interval, softCost, rot180, down, wait, spins (track the
+    // last rotation: a T in the Guideline), sp (the start's), goal. Without a goal, fills `cands`
+    // (landing pose keys, first-found node in `cand`) and with spins `spinCands` (resting poses the
+    // piece turned into, in `spinCand`); with one, returns the node that stands where its drop lands
+    // on goal.land (goal.spin: that rests there after a rotation), or -1.
     run(o) {
         const g = o.game, p = o.probe, type = o.type, goal = o.goal;
         p.curPiece_type = type;
@@ -334,20 +449,22 @@ class BotExplorer {
         this.head.fill(-1);
         this.cand.fill(-1);
         this.cands.length = 0;
+        if (o.spins) { this.spinCand.fill(-1); this.spinCands.length = 0; }
         this.n = 0;
         const gravity = g.gravity;
         this.add(o.row, o.col, o.rot, o.acc, o.ga, 0, -1, -1, g.iFloorKicks | 0, g.tFloorKicks | 0,
-            (g.floorKicked ? 1 : 0) | (g.lockDelayZeroed ? 2 : 0));
+            (g.floorKicked ? 1 : 0) | (g.lockDelayZeroed ? 2 : 0), o.spins ? o.sp : 0);
         for (let t = 0; t <= BOT_TMAX; t++) {
             for (let id = this.head[t]; id !== -1; id = this.next[id]) {
                 if (this.time[id] !== this.best[this.key[id]]) continue; // reached sooner another way
-                const r = this.row[id], c = this.col[id], rt = this.rot[id];
+                const r = this.row[id], c = this.col[id], rt = this.rot[id], sp = this.sp[id];
                 let land = r;
                 while (g.movePossible(land + 1, c, rt, type)) land++;
+                const grounded = land === r;
                 const lk = this.poseKey(land, c, rt);
                 if (lk >= 0 && this.cand[lk] === -1) { this.cand[lk] = id; this.cands.push(lk); }
-                if (goal && c === goal.col && rt === goal.rot && land === goal.land) return id;
-                const grounded = land === r;
+                if (sp && grounded && this.spinCand[lk] === -1) { this.spinCand[lk] = id; this.spinCands.push(lk); }
+                if (goal && c === goal.col && rt === goal.rot && land === goal.land && (!goal.spin || (sp && grounded))) return id;
                 // grounded: each action uses up a lock reset (or lock delay); TGM3: after a floor
                 // kick and another turn the lock delay is zero, so it locks where it rests
                 if (grounded && (this.ga[id] >= o.gaMax || this.fk[id] & 2)) continue;
@@ -383,9 +500,11 @@ class BotExplorer {
                         while (acc >= 1 && g.movePossible(nr + 1, nc, nrot, type)) { nr++; acc--; }
                         if (acc >= 1) acc = 0;
                     }
+                    // a rotation is the last move until the piece moves or falls
+                    const nsp = o.spins && a <= BOT_R180 && nr === p.curPiece_row ? p.lastKick + 2 : 0;
                     // a fall restarts the lock delay and the resets (step reset; move reset at a new lowest row)
                     this.add(nr, nc, nrot, acc, nr > r ? 0 : ga, t + cost, id, a, p.iFloorKicks | 0, p.tFloorKicks | 0,
-                        (p.floorKicked ? 1 : 0) | (p.lockDelayZeroed ? 2 : 0));
+                        (p.floorKicked ? 1 : 0) | (p.lockDelayZeroed ? 2 : 0), nsp);
                 }
             }
         }
@@ -435,7 +554,7 @@ class Bot {
         this.style = "hard";
         if (game) {
             this.style = botLockStyle(game);
-            this.profile = this.forceProfile || botProfile(game);
+            this.profile = this.forceProfile || botProfile(game, this.hands);
             const base = BOT_WEIGHTS[this.profile], noise = this.hands.noise;
             const gauss = () => Math.sqrt(-2 * Math.log(1 - this.rng())) * Math.cos(2 * Math.PI * this.rng());
             this.weights = { ...base };
@@ -652,7 +771,9 @@ class Bot {
         const resets = Number.isFinite(game.moveLimit);
         botBoardFrom(game, this.board);
         const tucks = hands.tucks && botHasOverhang(this.board); // nothing to slide under otherwise
+        const spins = type === tetT && !!this.weights.spin;
         return {
+            spins, sp: spins && current && game.lastRotation ? game.lastKick + 2 : 0,
             game, probe: Object.assign(Object.create(game), { sounds: [], bumps: [], hardDropCells: [], clearedCells: [], actions: [] }),
             type, row, col, rot, goal,
             // gravity owed in rows (NES and GB count it in frames)
@@ -675,13 +796,24 @@ class Bot {
         return id < 0 ? null : ex.path(id);
     }
 
-    // Every placement of a piece that can be reached from a pose: pushed to out
+    // Every placement of a piece that can be reached from a pose: pushed to out. With spins, also the
+    // T-spins: a T resting where it turned (spin: the game's "full" or "mini")
     gather(game, type, row, col, rot, isHold, out, current = false) {
-        const ex = this.explorer;
-        ex.run(this.explorerOpts(game, type, row, col, rot, null, current));
-        for (const lk of ex.cands) {
+        const ex = this.explorer, o = this.explorerOpts(game, type, row, col, rot, null, current);
+        ex.run(o);
+        const place = (lk, spin) => {
             const idx = lk >> 2;
-            out.push({ start: rot, type, rot: lk & 3, col: idx % BOT_COLS - BOT_COL_OFF, row: Math.floor(idx / BOT_COLS) + FIELD_TOP, hold: isHold, score: 0, board: null });
+            out.push({ start: rot, type, rot: lk & 3, col: idx % BOT_COLS - BOT_COL_OFF, row: Math.floor(idx / BOT_COLS) + FIELD_TOP, hold: isHold, spin, score: 0, board: null });
+        };
+        for (const lk of ex.cands) place(lk, null);
+        if (!o.spins) return;
+        const probe = Object.create(game);
+        for (const lk of ex.spinCands) {
+            const id = ex.spinCand[lk];
+            probe.curPiece_row = ex.row[id]; probe.curPiece_col = ex.col[id]; probe.curPiece_rotation = ex.rot[id];
+            probe.lastKick = ex.sp[id] - 2;
+            const spin = probe.detectTSpin();
+            if (spin) place(lk, spin);
         }
     }
 
@@ -693,6 +825,7 @@ class Bot {
     // turn it should enter with, { start }
     decide(game, pre = null, allowHold = true) {
         const hands = this.hands, w = this.weights, shapes = botShapes(game);
+        w.fast = game.gravity >= 1; // at a row a frame or more an open well and rows waiting for an I are a risk
         let visible = [];
         for (let i = 0; i < game.nextCount; i++) {
             const t = game.rnd_get_queue(i);
@@ -721,14 +854,17 @@ class Bot {
         botBoardFrom(game, this.board);
         const buf = new Int32Array(BOT_ROWS);
         const pending = game.versus ? game.pendingGarbage() : 0;
+        const b2b = !!game.b2b, combo = game.gamemode === guideline ? game.combo : -1; // the Guideline's chains
         for (const pl of roots) {
             const seq = pl.hold ? holdSeq : visible;
             const cleared = botLock(this.board, buf, game.curCells[pl.type][pl.rot], pl.row, pl.col);
             if (cleared < 0) { pl.score = -Infinity; continue; }
-            pl.step = botStepScore(game, buf, w, cleared);
+            pl.step = botStepScore(game, buf, w, cleared, b2b, combo, pl.spin);
+            pl.b2b = botClear.b2b;
+            pl.combo = botClear.combo;
+            pl.pending = botPendingAfter(pending, cleared);
             const dead = botDead(game, buf, seq[0] || tetT) || (pending && !cleared && !botRise(buf, pending));
             pl.board = Int32Array.from(buf);
-            pl.pending = botPendingAfter(game, pending, cleared);
             pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
         }
         roots.sort((a, b) => b.score - a.score);
@@ -750,16 +886,16 @@ class Bot {
         if (this.hands.misdrop && this.rng() < this.hands.misdrop) pick = this.misdrop(roots, pick);
         if (pre) return { start: pick.start };
         if (pick.hold) return { hold: true, goal: null };
-        return { hold: false, goal: { col: pick.col, rot: pick.rot, land: pick.row } };
+        return { hold: false, goal: { col: pick.col, rot: pick.rot, land: pick.row, spin: !!pick.spin } };
     }
 
     // Beam search over the next pieces from a placed root: the best total of the moves' scores and
-    // the last board's
     // the last board's. Each ply keeps only its best `beam` boards (copied as they make the cut); the
-    // last ply only needs the best score.
+    // last ply only needs the best score. The pieces after the current one are dropped straight
+    // (botDrops: no T-spins; the slots they leave count in the board's score).
     deepen(game, root, seq, depth, shapes) {
         const w = this.weights, beam = this.hands.beam, buf = this.deepBuf;
-        let states = [{ rows: root.board, acc: root.step, score: root.score, pending: root.pending }];
+        let states = [{ rows: root.board, acc: root.step, score: root.score, pending: root.pending, b2b: root.b2b, combo: root.combo }];
         for (let ply = 0; ply < depth; ply++) {
             const type = seq[ply], next = seq[ply + 1] || tetT, last = ply === depth - 1;
             const kept = []; // best first
@@ -768,16 +904,20 @@ class Bot {
                 botDrops(game, st.rows, type, shapes, (shape, col, row) => {
                     const cleared = botLock(st.rows, buf, shape.cells, row, col);
                     if (cleared < 0) return;
-                    const acc = st.acc + botStepScore(game, buf, w, cleared);
+                    const acc = st.acc + botStepScore(game, buf, w, cleared, st.b2b, st.combo);
+                    const pending = botPendingAfter(st.pending, cleared);
+                    const b2b = botClear.b2b, combo = botClear.combo;
                     const dead = botDead(game, buf, next) || (st.pending && !cleared && !botRise(buf, st.pending));
                     const score = acc + botBoardScore(buf, w) + (dead || botBlocked(game, buf, next) ? BOT_DANGER : 0);
                     if (last) { if (score > best) best = score; return; }
                     if (kept.length === beam && score <= kept[beam - 1].score) return;
-                    const child = kept.length === beam ? kept.pop() : { rows: new Int32Array(BOT_ROWS), acc: 0, score: 0, pending: 0 };
+                    const child = kept.length === beam ? kept.pop() : { rows: new Int32Array(BOT_ROWS), acc: 0, score: 0, pending: 0, b2b: false, combo: -1 };
                     child.rows.set(buf);
                     child.acc = acc;
                     child.score = score;
-                    child.pending = botPendingAfter(game, st.pending, cleared);
+                    child.pending = pending;
+                    child.b2b = b2b;
+                    child.combo = combo;
                     let i = kept.length;
                     while (i > 0 && kept[i - 1].score < score) i--;
                     kept.splice(i, 0, child);

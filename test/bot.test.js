@@ -139,6 +139,27 @@ function poseKey(g) {
     check("a piece on the floor is not a lock out", !botDead(g, out, tetT));
 }
 {
+    // a T-spin double slot (stem in column 4, an overhang over the left arm) and a T in play: the
+    // upper levels turn it in for the T-spin double rather than drop it anywhere
+    for (const level of [6, 10]) {
+        seeded(3);
+        const g = started(guideline, "marathon");
+        for (let c = 0; c < WIDTH; c++) {
+            if (c !== 4) g.setCell(21, c, 1);
+            if (c < 3 || c > 5) g.setCell(20, c, 1);
+            if (c <= 3) g.setCell(19, c, 1);
+        }
+        g.curPiece_type = tetT;
+        g.curPiece_rotation = 0;
+        g.curPiece_row = 1;
+        g.curPiece_col = 3;
+        const done = [];
+        const r = play(g, new Bot(level, 1), 1);
+        while (g.actions.length) done.push(g.actions.shift().text);
+        check(`level ${level} turns a T into a T-spin double slot`, r.locked === 1 && g.lines === 2 && done.includes("T-SPIN DOUBLE"), JSON.stringify({ lines: g.lines, done }));
+    }
+}
+{
     // a restart doesn't replay the same noise and mistakes
     const bot = new Bot(0, 9);
     bot.attach(createGame(guideline, "standard"));
