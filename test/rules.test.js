@@ -476,7 +476,7 @@ function shiftFrames(g, frames, input = () => 0) {
 }
 check("Handling options don't change TGM3, TAP or GB timing",
     [createGame(arika, "standard", 0, 0, { das: 3, arr: 0 }), createGame(tgmTap, "standard", 0, 0, { das: 3 }), createGame(gbTetris, "standard", 0, 0, { das: 3, ghost: false })].map(g => [g.das, g.arr]),
-    [[16, 1], [16, 1], [24, 9]]);
+    [[16, 1], [16, 1], [23, 9]]);
 
 {
     const g = createGame(guideline, "test");
@@ -1549,7 +1549,8 @@ const cellsOf = g => {
         g.advanceFrame(f === 0 ? LEFT_PUSH : 0);
         if (g.curPiece_col !== before) shifts.push(f);
     }
-    check("GB auto-shift frames after holding left (DAS 24, ARR 9)", shifts, [0, 24, 33, 42]);
+    // the ROM sets its counter to $17 on the press and to 9 after each auto-shift
+    check("GB auto-shift frames after holding left (DAS 23, ARR 9)", shifts, [0, 23, 32, 41]);
 }
 {
     const g = startedGb();

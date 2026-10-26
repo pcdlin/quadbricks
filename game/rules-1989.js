@@ -61,7 +61,7 @@ const GB_GRAVITY = [53, 49, 45, 41, 37, 33, 28, 22, 17, 11, 10, 9, 8, 7, 6, 6, 5
 const GB_MAX_LEVEL = 20, GB_LINES_PER_LEVEL = 10;
 const GB_START_LEVELS = 10; // the player starts at level 0-9
 const GB_SOFT_FRAMES = 3; // soft drop: a row every 3 frames
-const GB_DAS = 24, GB_ARR = 9;
+const GB_DAS = 23, GB_ARR = 9; // the disassembly's counter: $17 on the press, 9 after each auto-shift
 const GB_ARE = 2, GB_LINE_CLEAR = 91; // ARE 2; ARE and line clear together 93
 const GB_LINE_SCORES = [0, 40, 100, 300, 1200]; // x (level + 1); NES too
 const GB_MAX_SCORE = 999999; // NES too

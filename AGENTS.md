@@ -613,7 +613,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (`gbFrames`, `applyGravityGb()`). Soft drop: a row every 3 frames, the first with the press; it
   needs a fresh press for each piece. No lock delay: a piece that can't move down when gravity or
   soft drop is due locks at once (the lock fade shows the gravity timer while it rests).
-- DAS 24 / ARR 9; ARE 2; line clear 91 (93 with ARE).
+- DAS 23 / ARR 9 (the disassembly's counter: $17 on the press, 9 after each auto-shift; tetris.wiki's
+  24 counts the press frame too); ARE 2; line clear 91 (93 with ARE).
 - Randomizer (`GbRandomizer`): up to 3 rolls to avoid three of a kind, tested with the original's
   bitwise OR of the piece values (L J I O Z S T = 0…6 here, ×4 in the ROM) against the previous piece,
   so L comes up ~10.5% and O/S/T ~16%.
