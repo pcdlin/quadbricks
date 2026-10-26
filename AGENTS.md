@@ -10,6 +10,7 @@ python -m http.server 8123 --directory game    # then open http://localhost:8123
 
 # Rule-set spec tests (plain Node, no dependencies)
 node test/rules.test.js                    # must end with "All checks passed"
+node test/bot.test.js                      # the bot plays every rule set; must end with "All checks passed"
 
 # Minified build for a web server (output in dist/, git-ignored)
 node build.js [outDir]
@@ -23,7 +24,7 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 There is no build step, bundler or package.json. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
 `game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js →
-sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
+bot.js → sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
 
@@ -38,6 +39,7 @@ when WebGL is unavailable).
 | `game/rules-tgm.js` | `TgmGame` and its games: `Tgm1Game`, `TapGame` (Master, Death, TGM+), `TiGame` (TGM3 Master, World or Classic) with `TiEasyGame` and `TiShiraseGame`. |
 | `game/rules-ace.js` | `AceGame`: ACE's five modes. |
 | `game/rules-1989.js` | `Game1989` with `NesGame` and `GbGame`: A-Type and B-Type. |
+| `game/bot.js` | `Bot`, a computer player with five levels (`BOT_LEVELS`: Novice … Master): no DOM or engine dependencies, `Bot.input(game)` returns the frame's input bitmap and sees only what a human sees (field, piece, visible next pieces, hold). `BotExplorer` finds every pose the piece can reach by running the game's own `rotate()`/`shift()` on a probe (`Object.create(game)` with its event arrays shadowed, so no kick table is duplicated) under a gravity model (after each action the piece falls as gravity takes it in the frames the action costs: at 20G it only slides along the stack); the brain is Thiery and Scherrer's evaluator on bit-row boards with a beam search over the visible next pieces and the hold (`decide()`, `deepen()`); the hands turn the route into key presses (`think()`, `act()`, macros for DAS, soft drops and the final drop), closed loop: the rest of the route is kept while the piece is where the model put it, and searched again from where it actually is when not. The explorer tracks per node what limits a grounded piece (lock resets or lock delay, restarted by a fall; TGM3's floor kicks and the lock delay they zero). Expert and Master choose during ARE how the next piece enters and hold that rotation key (IRS, `preSpawn()`), which is what lets them survive 20G. The evaluation set comes from the mode (`botProfile()`: Tetris stacking where score or grade pays for it, else every clear); lock outs and blocked entries count as dead. How a piece is finished comes from the rule set (`botLockStyle()`: hard drop, sonic drop then soft drop, soft drop only). Mistakes and noise use the bot's own seeded PRNG. Not done yet: T-spins, IHS and DAS pre-charged in ARE. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings), the clear ripples' refraction pass and the clear flares' pass. |
@@ -49,6 +51,8 @@ when WebGL is unavailable).
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for the rule sets (~425 checks). |
+| `test/bot.test.js` | The bot: the probe leaves the game alone, plans are carried out as planned, every level plays every rule set without sticking. |
+| `tools/bot-bench.js` | Not in the test run: `node tools/bot-bench.js [level] [games] [mode filter] [profile]` plays modes headless (seeded) and prints each one's own result (`record()`), for tuning the bot. |
 
 ## History in one paragraph
 
@@ -83,6 +87,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   The rules apply a frame's releases before its presses, so a release of an action pressed in
   the same frame waits for the next frame. Keys let go while the game wasn't listening (menu
   open, window unfocused) are released when it resumes (`keysDown`, `syncKeys`).
+- Hidden bot: Ctrl+Shift+B in a game steps Off → Novice → Casual → Skilled → Expert → Master → Off (`Engine.cycleBot()`); while on, its input replaces the player's (`Engine.frame()`), "BOT · LEVEL" shows under the version, and handing back releases its keys (`botRelease`, `syncKeys`). A game it played any part of is not recorded and doesn't count for exams (`botPlayed`; the banner says so). Meant to become the opponent in a versus mode.
 - Hidden TGM1, TGM3 and TAP test keys (`TEST_KEYS`, nowhere in the UI), during a game: Ctrl+Shift+1 straight
   to the staff roll the player has earned, 2 to the invisible roll, 3 to an invisible roll that
   ends in Grand Master if survived (TAP Master: 2 and 3 both go to the M-roll), 4 to the last 5 s

@@ -406,6 +406,9 @@ class Engine {
         this.recordNote = null; // the game over banner's record line
         this.recordNew = false;
         this.game = null;
+        this.bot = null;           // the computer player, while it plays (Ctrl+Shift+B; hidden)
+        this.botPlayed = false;    // the bot played part of this game: no record
+        this.botRelease = 0;       // release bits for the keys the bot held when it handed the game back
         this.player_input = 0x0000;
         this.events = [];
         this.keysDown = new Set(); // key codes held right now
@@ -544,6 +547,12 @@ class Engine {
             if (down && !e.repeat && this.GAMESTATE === STATE_GAME && this.game) this.game.testSetup(TEST_KEYS[e.code]);
             return;
         }
+        // Hidden bot: Ctrl+Shift+B steps Off, Novice ... Master, Off (see game/bot.js)
+        if (e.ctrlKey && e.shiftKey && e.code === "KeyB") {
+            e.preventDefault();
+            if (down && !e.repeat) this.cycleBot();
+            return;
+        }
         if (this.options.keys.sound.includes(e.code)) {
             e.preventDefault();
             if (down && !e.repeat) this.sound.toggleMute();
@@ -610,6 +619,12 @@ class Engine {
                 this.player_input = 0x0000;
 
                 this.handleGameInput();
+                if (this.bot && this.GAMESTATE === STATE_GAME) { // the bot's keys replace the player's
+                    this.botPlayed = true;
+                    this.player_input = this.bot.input(this.game);
+                }
+                this.player_input |= this.botRelease;
+                this.botRelease = 0;
 
                 // Advance the game by one frame (input may have switched to the menu)
                 if (this.GAMESTATE === STATE_GAME) {
@@ -641,6 +656,18 @@ class Engine {
                 this.handleMenuInput();
                 break;
         }
+    }
+
+    // The hidden bot: off, then each level in turn, then off again. Handing the game back releases
+    // the bot's keys and the player's held keys are read afresh.
+    cycleBot() {
+        const next = this.bot ? this.bot.level + 1 : 0;
+        if (next >= BOT_LEVELS.length) {
+            this.botRelease |= this.bot.releaseAll();
+            this.bot = null;
+            this.syncKeys = true;
+        } else if (this.bot) this.bot.setLevel(next);
+        else this.bot = new Bot(next, Date.now());
     }
 
     // Moves the animations on by dt game frames (fractional above 60 Hz), once per refresh
@@ -687,6 +714,7 @@ class Engine {
         const [vx, vy, vw] = this.layout.view;
         this.text("v" + VERSION, vx + 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, spacing: 1 });
         this.text(this.lastFPS + " FPS", vx + vw - 16, vy + 14, { size: 10, weight: 500, color: INK_FAINT, align: "right", spacing: 1 });
+        if (this.bot && this.GAMESTATE === STATE_GAME) this.text("BOT · " + this.bot.name.toUpperCase(), vx + 16, vy + 30, { size: 10, weight: 600, color: INK_DIM, spacing: 1 });
         if (this.sound.muted) this.text("SOUND OFF · " + keyLabel(this.options.keys.sound[0]), vx + vw - 16, vy + 30, { size: 10, weight: 600, color: INK_DIM, align: "right", spacing: 1 });
         r.end();
     }
@@ -750,6 +778,7 @@ class Engine {
         this.recordDone = false;
         this.recordNote = null;
         this.recordNew = false;
+        this.botPlayed = false;
         // TGM3 Master with exams: the player's qualified grade, and maybe an exam this game
         this.examRule = options.exams && variant === "standard" && !options.big ? this.examRuleFor(mode) : null;
         const gameOptions = { ...options };
@@ -1140,6 +1169,10 @@ class Engine {
     submitRecord() {
         this.recordDone = true;
         const game = this.game;
+        if (this.botPlayed) { // neither records nor exams count
+            this.recordNote = "BOT GAME — NOT RECORDED";
+            return;
+        }
         if (this.examRule && !game.tested) {
             this.exams.set(this.examRule, tgm3ExamAfter(this.exams.get(this.examRule), game.exam, game.earnedGradeIndex()));
         }
