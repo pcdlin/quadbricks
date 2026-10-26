@@ -204,10 +204,11 @@ const SHIRASE_GRADE_LABELS = ["1", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8
 // ----------------------------------------------------------
 // TGM3 Easy: to level 200 with fixed delays; scored in fireworks (hanabi)
 
-// Gravity in 1/256 G: [from level, value]
+// Gravity in 1/256 G: [from level, value] (harddrop.com; tetris.wiki's table goes down at 144 and
+// differs from 132 on)
 const EASY_GRAVITY = [
     [0, 4], [8, 5], [19, 6], [35, 8], [40, 10], [50, 12], [60, 16], [70, 32], [80, 48], [90, 64],
-    [101, 16], [112, 48], [121, 80], [132, 128], [144, 112], [156, 144], [167, 176], [177, 192], [200, 5120],
+    [101, 16], [112, 48], [121, 80], [132, 112], [144, 144], [156, 175], [167, 192], [177, 208], [200, 5120],
 ];
 const EASY_DELAYS = [48, 25, 14, 30, 40]; // ARE, line ARE, DAS, lock delay, line clear delay
 const EASY_MAX_LEVEL = 200;

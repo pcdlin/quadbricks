@@ -673,7 +673,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
 - TGM+: delays and roll length per tetris.wiki and NullpoMino; the garbage cells take random
   colours (no grey block here).
 - TGM3 Easy: the suggested placements before level 100 aren't drawn (the ghost stands in); the
-  wiki's gravity table is taken as it lists it; fireworks are counted, not drawn, and the streams
+  gravity table is harddrop.com's (tetris.wiki's differs from level 132 on and goes down at 144: 132: 128,
+  144: 112, 156: 144, 167: 176, 177: 192; no emulator has the mode to settle it); fireworks are counted, not drawn, and the streams
   fire on the frames a clock from the game's start divides; the completion bonus comes at the end of
   the roll. Shirase: the roll length and big roll pieces follow NullpoMino; the grey-white monochrome is
   used with both rules; level 1300 is reached by clears only.

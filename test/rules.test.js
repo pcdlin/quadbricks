@@ -2047,7 +2047,10 @@ function startedMode(mode, variant) {
     check("Easy: gravity (1/256 G) by level, delays the same throughout (ARE 48, line ARE 25, DAS 14, lock 30, line clear 40)",
         [at(0), at(8), at(90), at(101), at(177), at(200)],
         [[4, 48, 25, 14, 30, 40], [5, 48, 25, 14, 30, 40], [64, 48, 25, 14, 30, 40], [16, 48, 25, 14, 30, 40],
-         [192, 48, 25, 14, 30, 40], [5120, 48, 25, 14, 30, 40]]);
+         [208, 48, 25, 14, 30, 40], [5120, 48, 25, 14, 30, 40]]);
+    // harddrop.com: rising from 121 on (tetris.wiki lists 132: 128, 144: 112, 156: 144, 167: 176, 177: 192)
+    check("  ...from level 121: 80, 112, 144, 175, 192, 208",
+        [120, 121, 132, 143, 144, 156, 167, 177, 199].map(l => at(l)[0]), [48, 80, 112, 112, 144, 175, 192, 208, 208]);
     const e = startedMode(tgmClassic, "easy");
     check("  ...stats: rule and mode, fireworks, level, time; levels to 200",
         [e.getStats(), e.maxLevel], [[["TGM3 TI", "CLASSIC EASY"], ["HANABI", "0"], ["LEVEL", "0 / 100"], ["TIME", e.formatTime()]], 200]);
