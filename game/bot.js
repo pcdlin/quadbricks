@@ -9,7 +9,8 @@
 //    action the piece falls as far as gravity takes it in the frames the action costs, so at 20G it
 //    only slides along the stack surface, and at low gravity it hovers.
 //  - Brain: Thiery and Scherrer's evaluator (landing height, eroded cells, transitions, holes, wells,
-//    ...) over bit-row boards, with a beam search over the visible next pieces and the hold.
+//    ...) over bit-row boards, with a beam search over the visible next pieces and the hold; in
+//    Guideline versus it also reckons with the garbage waiting to rise.
 //  - Hands: turns the chosen route into one input bitmap per frame, closed loop (the route is found
 //    again from where the piece actually is after every action), with a level's reaction time, key
 //    interval, DAS use, mistakes and noise; the upper levels also choose during the entry delay how
@@ -174,6 +175,28 @@ function botLock(src, dst, cells, row, col) {
     return cleared;
 }
 
+// Versus garbage the bot is told is waiting (the meter beside the well) rises when it locks a
+// piece without clearing. Where its holes will be isn't shown, so the bot counts the rows as solid
+// ones that never clear: a bit beside the well (BOT_GARBAGE_BIT) keeps them from ever being full.
+const BOT_GARBAGE_BIT = 1 << WIDTH;
+
+// Rows of garbage rise under the board; returns false when blocks are pushed out of the top
+function botRise(rows, n) {
+    let fits = true;
+    for (let i = 0; i < n; i++) if (rows[i]) fits = false;
+    rows.copyWithin(0, n);
+    rows.fill(BOT_FULL | BOT_GARBAGE_BIT, BOT_ROWS - n);
+    return fits;
+}
+
+// Garbage still waiting after a lock that cleared `cleared` rows: a clear's lines cancel it (counted
+// without combos or back-to-backs), a lock without one lets it all rise
+function botPendingAfter(game, pending, cleared) {
+    if (!pending || !cleared) return 0;
+    const lines = game.big ? cleared >> 1 : cleared;
+    return Math.max(0, pending - VS_LINES[Math.min(lines, 4)]);
+}
+
 // The lock just made ends the game: a lock out, or the next piece can't enter
 function botDead(game, rows, next) {
     return (game.lockOut && botLocked.above) || botBlocked(game, rows, next);
@@ -201,7 +224,7 @@ function botBoardScore(rows, w) {
     botCount.fill(0);
     let rowTrans = 0, colTrans = 0, holes = 0, holeDepth = 0, holeRows = 0, covered = 0, prev = 0;
     for (let r = top; r < BOT_ROWS; r++) {
-        const bits = rows[r];
+        const bits = rows[r] & BOT_FULL; // without the garbage marker
         const ext = 0x801 | (bits << 1); // the walls count as filled
         rowTrans += botPop((ext ^ (ext >> 1)) & 0x7FF);
         colTrans += botPop(bits ^ prev);
@@ -691,13 +714,16 @@ class Bot {
         // one move ahead for all, then the deeper search for the best few
         botBoardFrom(game, this.board);
         const buf = new Int32Array(BOT_ROWS);
+        const pending = game.versus ? game.pendingGarbage() : 0;
         for (const pl of roots) {
             const seq = pl.hold ? holdSeq : visible;
             const cleared = botLock(this.board, buf, game.curCells[pl.type][pl.rot], pl.row, pl.col);
             if (cleared < 0) { pl.score = -Infinity; continue; }
-            pl.board = Int32Array.from(buf);
             pl.step = botStepScore(game, buf, w, cleared);
-            pl.score = pl.step + botBoardScore(buf, w) + (botDead(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
+            const dead = botDead(game, buf, seq[0] || tetT) || (pending && !cleared && !botRise(buf, pending));
+            pl.board = Int32Array.from(buf);
+            pl.pending = botPendingAfter(game, pending, cleared);
+            pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
         }
         roots.sort((a, b) => b.score - a.score);
         if (!roots.length || roots[0].score === -Infinity) return null;
@@ -727,7 +753,7 @@ class Bot {
     // last ply only needs the best score.
     deepen(game, root, seq, depth, shapes) {
         const w = this.weights, beam = this.hands.beam, buf = this.deepBuf;
-        let states = [{ rows: root.board, acc: root.step, score: root.score }];
+        let states = [{ rows: root.board, acc: root.step, score: root.score, pending: root.pending }];
         for (let ply = 0; ply < depth; ply++) {
             const type = seq[ply], next = seq[ply + 1] || tetT, last = ply === depth - 1;
             const kept = []; // best first
@@ -737,13 +763,15 @@ class Bot {
                     const cleared = botLock(st.rows, buf, shape.cells, row, col);
                     if (cleared < 0) return;
                     const acc = st.acc + botStepScore(game, buf, w, cleared);
-                    const score = acc + botBoardScore(buf, w) + (botDead(game, buf, next) ? BOT_DANGER : 0);
+                    const dead = botDead(game, buf, next) || (st.pending && !cleared && !botRise(buf, st.pending));
+                    const score = acc + botBoardScore(buf, w) + (dead || botBlocked(game, buf, next) ? BOT_DANGER : 0);
                     if (last) { if (score > best) best = score; return; }
                     if (kept.length === beam && score <= kept[beam - 1].score) return;
-                    const child = kept.length === beam ? kept.pop() : { rows: new Int32Array(BOT_ROWS), acc: 0, score: 0 };
+                    const child = kept.length === beam ? kept.pop() : { rows: new Int32Array(BOT_ROWS), acc: 0, score: 0, pending: 0 };
                     child.rows.set(buf);
                     child.acc = acc;
                     child.score = score;
+                    child.pending = botPendingAfter(game, st.pending, cleared);
                     let i = kept.length;
                     while (i > 0 && kept[i - 1].score < score) i--;
                     kept.splice(i, 0, child);

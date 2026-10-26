@@ -6,7 +6,7 @@ const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 const BOT_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "bot.js"];
 vm.runInThisContext(BOT_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {createGame, Bot, BOT_LEVELS, BOT_ROWS, BotExplorer, botShapes, botDrops, botLock, botDead, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, HEIGHT, WIDTH, FIELD_TOP, tetI, tetT, tetO, tetS, tetZ, tetL, tetJ});");
+    "\n;Object.assign(globalThis, {createGame, Bot, BOT_LEVELS, BOT_ROWS, WIDTH, BotExplorer, botShapes, botDrops, botLock, botDead, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, HEIGHT, WIDTH, FIELD_TOP, tetI, tetT, tetO, tetS, tetZ, tetL, tetJ});");
 
 let failures = 0;
 function check(name, ok, detail = "") {
@@ -183,6 +183,28 @@ for (const [name, mode, variant] of MODES) {
     const g = started(guideline, "standard");
     const r = play(g, new Bot(4, 5), 100);
     check("Guideline: Expert's pieces land where planned", r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
+}
+
+// ---------------------------------------------------------------- versus
+{
+    // two bots in a Guideline versus match, attacks going both ways as the engine routes them:
+    // the stronger one wins, and neither gets stuck under the garbage
+    seeded(21);
+    const games = [createGame(guideline, "versus", 0, 0, {}, { seed: 99 }), createGame(guideline, "versus", 0, 0, {}, { seed: 99 })];
+    const bots = [new Bot(4, 1), new Bot(0, 2)];
+    let frames = 0, stuck = false, risen = 0;
+    while (!games.some(g => g.isGameOver()) && frames < 60 * 60 * 10) {
+        games.forEach((g, i) => g.advanceFrame(bots[i].input(g)));
+        games.forEach((g, i) => {
+            for (const lines of g.takeAttacks()) games[1 - i].receiveGarbage({ lines, hole: Math.floor(Math.random() * WIDTH) });
+            risen += g.takeRisenGarbage().reduce((a, b) => a + b, 0);
+            if (g.curPiece_type && g.activeTime > 600) stuck = true;
+        });
+        if (stuck) break;
+        frames++;
+    }
+    check(`versus: Master beats Novice (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} lines sent, ${risen} garbage rows risen in all)`,
+        !stuck && games[1].isGameOver() && !games[0].isGameOver() && games[0].linesSent > 0, JSON.stringify({ frames, stuck, over: games.map(g => g.isGameOver()) }));
 }
 
 // ---------------------------------------------------------------- levels
