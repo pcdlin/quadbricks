@@ -1,4 +1,4 @@
-// Player options, kept in localStorage: key and gamepad bindings, block style, effects and motion, and
+// Player options, kept in localStorage: key and gamepad bindings, theme, block style, effects and motion, and
 // the Guideline handling.
 // Storage can be unavailable (private windows, blocked site data); the game then
 // runs on the defaults and simply doesn't remember changes.
@@ -131,6 +131,7 @@ const HANDLING_IDS = ["das", "arr", "sdf", "dcd", "ghost", "dropGuard", "preview
 
 // Settings stepped through a list of values (Options → Visuals and Guideline), and on/off settings
 const OPTION_CHOICES = {
+    theme: THEME_IDS,
     tileset: TILESET_IDS,
     confetti: CONFETTI_STYLE_IDS,
     effects: EFFECT_LEVELS.map((_, i) => i), // 0 off, then an index into EFFECT_LEVELS
@@ -155,6 +156,7 @@ class Options {
     constructor() {
         this.keys = defaultKeys();
         this.pad = defaultPad();
+        this.theme = THEME_IDS[0]; // the look around the blocks (themes.js)
         this.tileset = TILESET_IDS[0];
         this.confetti = "sparks"; // line clear confetti, an id from CONFETTI_STYLES
         this.effects = DEFAULT_EFFECTS;

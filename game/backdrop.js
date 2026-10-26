@@ -1,16 +1,19 @@
 // Backdrop pass of the WebGL renderer (renderer.js), drawn first each frame: the backdrop
-// picture, its colour wash and drifting lights, the board glow and the line-clear
+// picture, its colour wash, field lines and drifting lights, the board glow and the line-clear
 // shockwaves. These are large, soft effects computed per pixel in shaders. The engine
 // builds a scene description each frame (see Engine.backdropScene).
 // Coordinates are device pixels, y down, unless noted.
 
 const BACKDROP_MAX_RINGS = 6;
+const BACKDROP_MAX_BUMPS = 4; // field lines' bumps
 
 const FULLSCREEN_VS = `
 attribute vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
-// Static backdrop picture plus the three colour blobs (radial gradients, added)
+// Static backdrop picture plus the three colour blobs (radial gradients, added). As nebulae
+// (uNebula > 0), the blobs fade out smoothly and their light is shaped by a slowly flowing,
+// domain-warped fractal noise: bright wisps and filaments with dark lanes between them.
 const WASH_FS = `
 precision highp float;
 uniform vec2 uSize;
@@ -18,15 +21,88 @@ uniform sampler2D uBackground;
 uniform vec3 uBgView;          // scale, offset x, offset y of the backdrop's logical view
 uniform vec3 uBlob[3];         // centre x, y, radius (logical)
 uniform vec4 uBlobColor[3];    // rgb, alpha at the centre
+uniform float uNebula;         // 0: plain blobs; else how much the noise shapes them
+uniform float uTime;           // seconds, for the nebulae's flow
+uniform vec3 uShade[2];        // circles in front of the blobs, hiding their light: x, y, radius (logical; 0: none)
+
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) {
+    float s = 0.0, a = 0.5;
+    for (int k = 0; k < 5; k++) {
+        s += a * noise(p);
+        p = p * 2.03 + vec2(17.1, 9.2);
+        a *= 0.5;
+    }
+    return s;
+}
+
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
     vec3 c = texture2D(uBackground, p / uSize).rgb;
     vec2 q = (p - uBgView.yz) / uBgView.x;
+    float shape = 1.0;
+    if (uNebula > 0.0) {
+        vec2 n = q * 0.0055 + vec2(uTime * 0.012, uTime * 0.007);
+        vec2 warp = vec2(fbm(n + vec2(0.0, uTime * 0.01)), fbm(n + vec2(5.2, 1.3)));
+        float d = fbm(n + 1.7 * warp);
+        float wisps = smoothstep(0.32, 0.78, d);
+        shape = mix(1.0, 0.15 + 1.5 * wisps + 1.6 * pow(wisps, 4.0), uNebula);
+    }
+    for (int i = 0; i < 2; i++) {
+        if (uShade[i].z > 0.0) shape *= clamp((length(q - uShade[i].xy) - uShade[i].z) * uBgView.x + 0.5, 0.0, 1.0);
+    }
     for (int i = 0; i < 3; i++) {
-        float a = uBlobColor[i].a * max(0.0, 1.0 - length(q - uBlob[i].xy) / uBlob[i].z);
-        c += uBlobColor[i].rgb * a;
+        float f = max(0.0, 1.0 - length(q - uBlob[i].xy) / uBlob[i].z);
+        if (uNebula > 0.0) f = f * f * (3.0 - 2.0 * f);
+        c += uBlobColor[i].rgb * uBlobColor[i].a * f * shape;
     }
     gl_FragColor = vec4(c, 1.0);
+}`;
+
+// Field lines (the Field lines theme), added over the picture: the level sets y - d = n × spacing of a
+// height field d made of Gaussian bumps, so the lines run across and bend round each bump, taking its
+// colour where it lifts them most. Antialiased by their distance in pixels (the line's offset over
+// the field's gradient), about one logical unit wide and never thinner than a pixel (fainter instead).
+const LINES_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uBgView;                          // scale, offset x, offset y of the backdrop's logical view
+uniform vec4 uBump[${BACKDROP_MAX_BUMPS}];        // centre x, y, radius, height (logical; height 0: unused)
+uniform vec3 uBumpColor[${BACKDROP_MAX_BUMPS}];
+uniform vec4 uInk;                             // rgb, alpha of plain lines
+uniform float uSpacing;
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uBgView.yz) / uBgView.x;
+    float d = 0.0, k = 0.0;
+    vec2 grad = vec2(0.0);
+    vec3 tint = vec3(0.0);
+    for (int i = 0; i < ${BACKDROP_MAX_BUMPS}; i++) {
+        vec2 o = q - uBump[i].xy;
+        float rr = max(uBump[i].z * uBump[i].z, 1.0);
+        float e = uBump[i].w * exp(-2.0 * dot(o, o) / rr);
+        d += e;
+        grad -= e * 4.0 * o / rr;
+        float w = clamp(abs(e) / 30.0, 0.0, 1.0);
+        tint += uBumpColor[i] * w;
+        k += w;
+    }
+    float f = (q.y - d) / uSpacing;
+    float slope = length(vec2(grad.x, 1.0 - grad.y)) / uSpacing; // lines per logical unit across them
+    float dist = abs(fract(f + 0.5) - 0.5) / slope * uBgView.x;  // to the nearest line, in pixels
+    float line = clamp(0.5 * max(uBgView.x, 1.0) + 0.5 - dist, 0.0, 1.0) * min(uBgView.x, 1.0);
+    float c = clamp(k, 0.0, 1.0);
+    vec3 col = uInk.rgb * uInk.a * (1.0 - c) + tint / max(k, 0.0001) * 0.8 * c;
+    gl_FragColor = vec4(col * line, 0.0);
 }`;
 
 // Drifting lights: one quad each, added
@@ -170,10 +246,13 @@ class GLBackdrop {
         // uniform arrays, filled each frame
         this.blob = new Float32Array(9);
         this.blobColor = new Float32Array(12);
+        this.shade = new Float32Array(6);
         this.ring = new Float32Array(BACKDROP_MAX_RINGS * 4);
         this.ringColor = new Float32Array(BACKDROP_MAX_RINGS * 4);
         this.ringGlow = new Float32Array(BACKDROP_MAX_RINGS * 3);
         this.waveAmp = new Float32Array(BACKDROP_MAX_RINGS);
+        this.bump = new Float32Array(BACKDROP_MAX_BUMPS * 4);
+        this.bumpColor = new Float32Array(BACKDROP_MAX_BUMPS * 3);
         renderer.restoreHandlers.push(() => this.setup());
         this.setup();
     }
@@ -181,6 +260,7 @@ class GLBackdrop {
     setup() {
         const gl = this.gl;
         this.wash = this.r.program(FULLSCREEN_VS, WASH_FS, [["aPos", 2]]);
+        this.lines = this.r.program(FULLSCREEN_VS, LINES_FS, [["aPos", 2]]);
         this.orbProgram = this.r.program(ORB_VS, ORB_FS, [["aPos", 2], ["aOrb", 3], ["aColor", 4]]);
         this.board = this.r.program(FULLSCREEN_VS, BOARD_FS, [["aPos", 2]]);
         this.refraction = this.r.program(FULLSCREEN_VS, REFRACT_FS, [["aPos", 2]]);
@@ -211,6 +291,9 @@ class GLBackdrop {
 
     // scene: { bgView: [scale, offX, offY], view: [scale, offX, offY],
     //   blobs: [{x, y, r, rgb, a}] (backdrop logical), orbs: [{x, y, r, rgb, a}] (same),
+    //   nebula: 0 or how much noise shapes the blobs into nebulae, time (seconds, their flow),
+    //   shade: [[x, y, r]] (backdrop logical, at most 2) circles in front of the blobs,
+    //   lines: null or {spacing, ink: [r, g, b, a], bumps: [{x, y, r, amp, rgb}]} (same),
     //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
     //   glow: null or {rect: [x0, y0, x1, y1], sigma, rgb, a} }
     render(scene) {
@@ -237,9 +320,37 @@ class GLBackdrop {
         }
         gl.uniform3fv(p.u("uBlob"), blob);
         gl.uniform4fv(p.u("uBlobColor"), blobColor);
+        gl.uniform1f(p.u("uNebula"), scene.nebula || 0);
+        gl.uniform1f(p.u("uTime"), scene.time || 0);
+        const shade = this.shade;
+        shade.fill(0); // radius 0: none
+        for (let i = 0; i < Math.min(scene.shade.length, 2); i++) shade.set(scene.shade[i], i * 3);
+        gl.uniform3fv(p.u("uShade"), shade);
         this.drawFullscreen(p);
 
         gl.enable(gl.BLEND);
+
+        // Field lines
+        if (scene.lines) {
+            const { spacing, ink, bumps } = scene.lines;
+            p = this.lines;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uBgView"), scene.bgView);
+            const bump = this.bump, bumpColor = this.bumpColor;
+            bump.fill(0); // height 0: unused
+            for (let i = 0; i < Math.min(bumps.length, BACKDROP_MAX_BUMPS); i++) {
+                const b = bumps[i];
+                bump[i * 4] = b.x; bump[i * 4 + 1] = b.y; bump[i * 4 + 2] = b.r; bump[i * 4 + 3] = b.amp;
+                bumpColor[i * 3] = b.rgb[0]; bumpColor[i * 3 + 1] = b.rgb[1]; bumpColor[i * 3 + 2] = b.rgb[2];
+            }
+            gl.uniform4fv(p.u("uBump"), bump);
+            gl.uniform3fv(p.u("uBumpColor"), bumpColor);
+            gl.uniform4f(p.u("uInk"), ink[0], ink[1], ink[2], ink[3]);
+            gl.uniform1f(p.u("uSpacing"), spacing);
+            this.drawFullscreen(p);
+        }
 
         // Drifting lights
         if (scene.orbs.length) {

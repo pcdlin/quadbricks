@@ -131,6 +131,7 @@ const OPTIONS_ITEMS = [
 // (preview: the card is a little taller and shows the block style preview at its right; fx: the
 // setting does nothing with effects off, and its card is greyed out then)
 const VISUAL_ITEMS = [
+    { id: "theme", name: "Theme", accent: tetJ },
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
@@ -502,6 +503,9 @@ class Engine {
         this.backdrop.setBackground(this.renderBackground());
     }
 
+    // The theme chosen in Options → Visuals (themes.js)
+    get theme() { return THEMES[this.options.theme]; }
+
     // The Options scale applies to the game only: entering or leaving it redoes the view size
     get GAMESTATE() { return this._state; }
     set GAMESTATE(s) {
@@ -687,7 +691,7 @@ class Engine {
         r.end();
     }
 
-    // What the backdrop pass draws: colour wash, drifting lights, rings and board glow
+    // What the backdrop pass draws: colour wash, drifting lights, field lines, rings and board glow
     backdropScene() {
         const inGame = this.GAMESTATE === STATE_GAME;
         const ambient = this.options.effects && this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
@@ -698,11 +702,12 @@ class Engine {
         // and the fly-in: scaled about the board's centre
         const fs = this.flyScale(m), hw = (BOARD_W / 2 + 8) * fs, hh = (this.boardH / 2 + 8) * fs;
         const bcx = BOARD_X + BOARD_W / 2, bcy = this.boardY + this.boardH / 2;
-        const glow = inGame ? {
+        const glowRgb = this.theme.glowRgb ? this.theme.glowRgb(this) : hslToRgb(this.hue, 90, 62);
+        const glow = inGame && glowRgb ? {
             rect: [gx + (bcx - hw) * ps, gy + (bcy - hh) * ps, gx + (bcx + hw) * ps, gy + (bcy + hh) * ps],
             // blur given like canvas shadowBlur: twice the Gaussian's sigma
             sigma: (BOARD_GLOW_BLUR[0] + (BOARD_GLOW_BLUR[1] - BOARD_GLOW_BLUR[0]) * Math.min(1, this.pulse)) / 2 * fs,
-            rgb: hslToRgb(this.hue, 90, 62),
+            rgb: glowRgb,
             a: this.boardGlowAlpha() * m.alpha * m.alpha,
         } : null;
         const rings = this.ringMode() === "rings" ? this.ringShapes().map(r => ({
@@ -713,6 +718,10 @@ class Engine {
             view: [ps, this.offX, this.offY],
             blobs: ambient.blobs.map(color),
             orbs: ambient.orbs.map(color),
+            nebula: ambient.nebula || 0,
+            shade: ambient.shade || [],
+            time: this.clock / 60,
+            lines: this.theme.lines ? this.theme.lines(this) : null,
             rings,
             ringSigma: 6, // like a shadowBlur of 12
             glow,
@@ -1021,6 +1030,7 @@ class Engine {
         if (id === "resetHandling") this.options.resetHandling();
         else this.options.step(id, dir, wrap);
         if (id === "scale") this.resize(); // the view's size; the backdrop stays as it is
+        if (id === "theme") this.backdrop.setBackground(this.renderBackground());
         if (HANDLING_ITEMS.some(item => item.id === id)) this.applyHandling();
     }
 
@@ -1041,6 +1051,7 @@ class Engine {
             case "tilt": return TILT_LEVELS[o.tilt].name;
             case "shake": return SHAKE_LEVELS[o.shake].name;
             case "scale": return Math.round(o.scale * 100) + "%";
+            case "theme": return THEMES[o.theme].name;
             case "tileset": return TILESETS[o.tileset].name;
             case "confetti": return CONFETTI_STYLES[CONFETTI_STYLE_IDS.indexOf(o.confetti)].name;
             case "das": return frameValue(o.das);
@@ -1191,7 +1202,7 @@ class Engine {
                 life: span, span, power: rows.size,
                 chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
             });
-            this.hueTarget += HUE_STEP * rows.size / 2;
+            this.hueTarget += HUE_STEP * rows.size / 2 * (this.theme.hueStep ?? 1);
             this.pulse = Math.min(1, this.pulse + (0.15 + 0.1 * rows.size) * this.options.effectScale);
         }
     }
@@ -1593,11 +1604,13 @@ class Engine {
             o.sway += 0.01 * dt;
             if (o.y < -o.r * 3) { o.y = VIEW_H + o.r * 3; o.x = Math.random() * VIEW_W; }
         }
+        if (this.theme.update) this.theme.update(this, dt);
     }
 
     // Aurora wash (big colour blobs) and rising lights, in backdrop coordinates. Each has a
     // centre, radius, hue, saturation, lightness and alpha at the centre (fading to 0 at r).
     ambientShapes() {
+        if (this.theme.ambient) return this.theme.ambient(this);
         const t = this.clock / 60;
         const h = this.hue;
         const swell = (0.16 + 0.22 * this.pulse) * this.softEffectScale();
@@ -1686,7 +1699,9 @@ class Engine {
     // in an opaque colour; the colour's alpha is applied when drawing. Returns its width.
     text(s, x, y, { size = 16, weight = 700, color = INK, align = "left", spacing = 0, baseline = "middle" } = {}) {
         const r = this.r;
-        const [cr, cg, cb, ca] = parseColor(color);
+        let [cr, cg, cb, ca] = parseColor(color);
+        const ink = this.theme.ink; // the theme's text colour in place of INK's
+        if (ink && cr === INK_RGB[0] && cg === INK_RGB[1] && cb === INK_RGB[2]) [cr, cg, cb] = ink;
         const rgb = `rgb(${Math.round(cr * 255)},${Math.round(cg * 255)},${Math.round(cb * 255)})`;
         const res = r.s;
         const key = [s, size, weight, spacing, baseline, rgb, res.toFixed(3)].join("|");
@@ -1742,12 +1757,14 @@ class Engine {
 
     // Small caps heading with a hairline rule, used above each side panel
     label(s, x, y, w, size = 12, spacing = 4) {
+        if (this.theme.label) return this.theme.label(this, s, x, y, w, size, spacing);
         this.text(s, x, y, { size, weight: 700, color: INK_DIM, spacing });
         const tw = this.measureText(s, size, 700, spacing);
         if (w - tw - 8 > 4) this.r.rect(x + tw + 8, y, w - tw - 8, 1, INK_FAINT);
     }
 
     panel(x, y, w, h) {
+        if (this.theme.panel) return this.theme.panel(this, x, y, w, h);
         this.r.shape(x, y, w, h, { radius: 10, fill: PANEL, stroke: "rgba(244,236,220,0.10)", lineWidth: 1 });
     }
 
@@ -1959,7 +1976,7 @@ class Engine {
         }
     }
 
-    // Night gallery backdrop: deep gradient, soft spotlight, receding floor grid
+    // The theme's static backdrop picture, the size of the screen
     renderBackground() {
         const c = document.createElement("canvas");
         c.width = this.canvas.width;
@@ -1970,58 +1987,13 @@ class Engine {
         // Visible area in logical units (extends past the view when letterboxed)
         const x0 = -this.bgOffX / s, y0 = -this.bgOffY / s;
         const x1 = (c.width - this.bgOffX) / s, y1 = (c.height - this.bgOffY) / s;
-
-        const sky = g.createLinearGradient(0, y0, 0, y1);
-        sky.addColorStop(0, "#0d1230");
-        sky.addColorStop(0.6, "#080a1d");
-        sky.addColorStop(1, "#04050e");
-        g.fillStyle = sky;
-        g.fillRect(x0, y0, x1 - x0, y1 - y0);
-
-        const spot = g.createRadialGradient(VIEW_W / 2, VIEW_H * 0.42, 20, VIEW_W / 2, VIEW_H * 0.42, VIEW_W * 0.6);
-        spot.addColorStop(0, "rgba(90,80,200,0.22)");
-        spot.addColorStop(0.5, "rgba(40,50,140,0.08)");
-        spot.addColorStop(1, "rgba(0,0,0,0)");
-        g.fillStyle = spot;
-        g.fillRect(x0, y0, x1 - x0, y1 - y0);
-
-        // perspective floor
-        const horizon = VIEW_H * 0.7;
-        const depth = y1 - horizon;
-        // The lines fade in below the horizon (a gradient stroke: painting a fade over them
-        // would also cover the sky and spotlight and leave a hard edge)
-        const lines = g.createLinearGradient(0, horizon - 40, 0, horizon + 30);
-        lines.addColorStop(0, "rgba(150,160,255,0)");
-        lines.addColorStop(1, "rgba(150,160,255,0.07)");
-        g.strokeStyle = lines;
-        g.lineWidth = 1;
-        const spread = Math.ceil((x1 - x0) / 240) + 12;
-        for (let i = -spread; i <= spread; i++) {
-            g.beginPath();
-            g.moveTo(VIEW_W / 2 + i * 14, horizon);
-            g.lineTo(VIEW_W / 2 + i * 120 * (depth / (VIEW_H - horizon)), y1);
-            g.stroke();
-        }
-        for (let k = 1; k <= 10; k++) {
-            const y = horizon + depth * Math.pow(k / 10, 2);
-            g.beginPath();
-            g.moveTo(x0, y);
-            g.lineTo(x1, y);
-            g.stroke();
-        }
-
-        // vignette
-        const r = Math.max(x1 - x0, y1 - y0);
-        const vig = g.createRadialGradient(VIEW_W / 2, VIEW_H / 2, r * 0.3, VIEW_W / 2, VIEW_H / 2, r * 0.8);
-        vig.addColorStop(0, "rgba(0,0,0,0)");
-        vig.addColorStop(1, "rgba(0,0,0,0.55)");
-        g.fillStyle = vig;
-        g.fillRect(x0, y0, x1 - x0, y1 - y0);
+        this.theme.background(g, x0, y0, x1, y1);
         return c;
     }
 
     // Seven-colour stripe, a nod to the piece set
     colorStripe(x, y, w, h) {
+        if (this.theme.stripe) return this.theme.stripe(this, x, y, w, h);
         const seg = w / 7;
         for (let t = 1; t <= 7; t++) this.r.rect(x + (t - 1) * seg, y, seg + 0.5, h, PIECE_COLORS[t].base);
     }
@@ -2044,9 +2016,12 @@ class Engine {
         const cx = VIEW_W / 2;
 
         // Wordmark, shrunk to the compact view's width
-        const markSize = Math.min(76, Math.floor(76 * (this.layout.view[2] - 48) / this.measureText("QUADBRICKS", 76, 900, 14)));
-        this.text("QUADBRICKS", cx, 150, { size: markSize, weight: 900, color: INK, align: "center", spacing: Math.round(markSize * 14 / 76) });
-        this.colorStripe(cx - 150, 200, 300, 4);
+        if (this.theme.wordmark) this.theme.wordmark(this, cx);
+        else {
+            const markSize = Math.min(76, Math.floor(76 * (this.layout.view[2] - 48) / this.measureText("QUADBRICKS", 76, 900, 14)));
+            this.text("QUADBRICKS", cx, 150, { size: markSize, weight: 900, color: INK, align: "center", spacing: Math.round(markSize * 14 / 76) });
+            this.colorStripe(cx - 150, 200, 300, 4);
+        }
 
         // Slide between screens: forward (deeper) moves left, back moves right
         const now = performance.now();
@@ -2197,6 +2172,7 @@ class Engine {
 
     // A menu card; the selected one is lighter, with an accent bar on its left edge
     card(x, y, w, h, radius, selected, accent, barW) {
+        if (this.theme.card) return this.theme.card(this, x, y, w, h, radius, selected, accent, barW);
         const r = this.r;
         r.shape(x, y, w, h, {
             radius, lineWidth: 1,
@@ -2337,24 +2313,26 @@ class Engine {
         const game = this.game;
 
         // Frame (the backdrop pass has drawn its glow and the rings)
-        const fx = this.options.effects;
         const frame = [BOARD_X - 8, this.boardY - 8, BOARD_W + 16, this.boardH + 16];
-        r.shape(...frame, { radius: 12, fill: [6 / 255, 8 / 255, 22 / 255, fx ? 0.55 : 0.92] });
-        // glass sheen: lighter toward the top, tinted by the backdrop colour; a gold frame for a
-        // TGM3 promotional exam, as in the arcade
-        const exam = game.exam && game.exam.kind === "promotion";
-        r.shape(...frame, {
-            radius: 12,
-            fill: [hsla(this.hue, 80, 70, 0.10), hsla(this.hue, 80, 50, 0.02)],
-            fillY: [this.boardY, this.boardY + this.boardH],
-            stroke: exam ? goldAlpha(0.6 + 0.35 * this.pulse) : fx ? hsla(this.hue, 90, 82, 0.45 + 0.4 * this.pulse) : "rgba(244,236,220,0.22)",
-            lineWidth: 1.5,
-        });
+        const exam = game.exam && game.exam.kind === "promotion"; // a gold frame, as in the arcade
+        if (this.theme.frame) this.theme.frame(this, frame, exam);
+        else {
+            const fx = this.options.effects;
+            r.shape(...frame, { radius: 12, fill: [6 / 255, 8 / 255, 22 / 255, fx ? 0.55 : 0.92] });
+            // glass sheen: lighter toward the top, tinted by the backdrop colour
+            r.shape(...frame, {
+                radius: 12,
+                fill: [hsla(this.hue, 80, 70, 0.10), hsla(this.hue, 80, 50, 0.02)],
+                fillY: [this.boardY, this.boardY + this.boardH],
+                stroke: exam ? goldAlpha(0.6 + 0.35 * this.pulse) : fx ? hsla(this.hue, 90, 82, 0.45 + 0.4 * this.pulse) : "rgba(244,236,220,0.22)",
+                lineWidth: 1.5,
+            });
 
-        // Well grid
-        const grid = "rgba(160,170,255,0.06)";
-        for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL, this.boardY, 1, this.boardH, grid);
-        for (let row = 1; row < HEIGHT - this.wellTop; row++) r.rect(BOARD_X, this.boardY + row * CELL, BOARD_W, 1, grid);
+            // Well grid
+            const grid = "rgba(160,170,255,0.06)";
+            for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL, this.boardY, 1, this.boardH, grid);
+            for (let row = 1; row < HEIGHT - this.wellTop; row++) r.rect(BOARD_X, this.boardY + row * CELL, BOARD_W, 1, grid);
+        }
 
         const cells = game.curCells[game.getCurPiece_type()][game.getCurPiece_rotation()]; // big in Shirase's roll
         const pal = game.palette; // piece type -> colour

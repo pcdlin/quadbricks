@@ -23,7 +23,7 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 There is no build step, bundler or package.json. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
 `game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js →
-sound.js → tiles.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
+sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
 
@@ -42,6 +42,7 @@ when WebGL is unavailable).
 | `game/renderer.js` | `GLRenderer`: WebGL renderer with a small canvas-like API (textured quads, rounded rects); colour helpers. |
 | `game/backdrop.js` | `GLBackdrop`: the renderer's backdrop pass (backdrop, wash, lights, glow, rings), the clear ripples' refraction pass and the clear flares' pass. |
 | `game/tiles.js` | Block styles (`TILESETS`, in menu order; the first is the default, `TILESET_IDS[0]`): Flat (default), Holo (grey metal; styles with `sheen: true` get `Engine.drawSheen()`, an additive colour gloss per block whose strength and hue follow the field's tilt (`updateSheen()`, `HOLO_*`): grey face-on, shimmering when tilted, so grey for good at tilt Off), Radiant (glassy glow), Glossy, Neon, Stained glass (`stained`; backlit glass in lead cames, lit only by the lamp, `lamp: "always"`), Faceted, Pixel, Mono, 1989 (`retro1989`; monochrome green, each piece its own pattern), Original. Loads the Original PNGs. |
+| `game/themes.js` | Themes (`THEMES`, `THEME_IDS`; the first is the default): the look around the blocks. Default (id `gallery`: the night gallery; the code calls it Gallery), Deep Space (a starfield with drifting nebulae (the backdrop's colour blobs shaped by a flowing domain-warped noise in `WASH_FS`, `nebula` in the ambient shapes; their hue follows clears like Gallery's wash, at 0.4 of its step, `hueStep`), a ringed planet and a cratered moon in a gibbous phase (`spaceMoon()`), both lit from `SPACE_LIGHT` and hiding the nebulae (`shade` in the ambient shapes) and drifting stars behind them; stars drift left, nearer ones faster, rushing on a clear's pulse, with a shooting star now and then and, every one to two minutes, a bright warm star with a halo and diffraction spikes drifting across in about 30 s (`SPACE_SUN_*`), all passing behind the planet and moon (`spaceInView()`); cyan HUD hairlines and corner brackets on the well, panels and cards; three concentric orbital rings in one plane under the wordmark with the seven colours going round them, `SPACE_ORBITS`, rendered once per resolution, `orbitTexture()`) and Field lines (fine lines across a near-black view bending round four slowly drifting bumps, `LINES_BUMPS`, coloured where they bend most (piece colours turned with the backdrop's hue, `LINES_HUE_STEP` times Gallery's step per clear) and swelling on a clear's pulse, drawn by the backdrop's `LINES_FS`, still with the animated backdrop or effects off, and faintly through the well (`LINES_WELL_ALPHA`; solid with effects off); flat black panels and cards with a light rule along the top, a thin wordmark over seven dashes). A theme has `name` and `background()` (the static picture); its optional hooks (`ink`, `ambient()` / `update()`, `lines()`, `glowRgb()`, `frame()`, `panel()`, `label()`, `card()`, `stripe()`, `wordmark()`) replace the engine's Gallery drawing (`Engine.theme`). Text in `INK`'s colour (any alpha) takes the theme's `ink` (`Engine.text()`). |
 | `game/options.js` | `Options`: key and gamepad bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
 | `game/gamepad.js` | `GamepadControls`: gamepads (Gamepad API, standard layout, every pad merged), polled each game frame (`poll()`, from `Engine.frame()`). Like the touch controls they feed `Engine.onKey()` with each action's first key. In games the buttons and left stick directions act as bound in `options.pad` (Options → Gamepad; Start always opens the menu); menus take fixed ones (`PAD_MENU`: D-pad or stick arrows, A = Enter, B and Start = Esc; the sound button works there too), held directions repeat. A control held over a switch between menu and game, or over a binding, is ignored until let go. While a pad was used last (`active`, cleared by any keydown) hints name its buttons (`padWords()`). |
@@ -140,7 +141,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   the abbreviation spelled out and one line on what it does, drawn under the compact card list for
   the selected item. `options.handling` goes to `RuleGame` in `initGame()`; changes made while a
   game is paused apply at once (`applyHandling()` → `RuleGame.setHandling()`).
-- The Visuals screen lists Block style, Scale, Effects, Confetti, Clear burst, Row flash, Backdrop, 3D tilt, Drop shake, Drop trail and Stack border (`VISUAL_ITEMS`). The Block
+- The Visuals screen lists Theme (`options.theme`; a change redraws the backdrop picture), Block style, Scale, Effects, Confetti, Clear burst, Row flash, Backdrop, 3D tilt, Drop shake, Drop trail and Stack border (`VISUAL_ITEMS`). The Block
   style card (`preview: true`) is a little taller (`menuRowHeight()`) and shows the style's preview at
   its right, beside the name (`drawTilesetPreview()`: one active, one locked and one ghost block in
   different colours, `PREVIEW_BLOCKS`, at their size in the well). The list is
@@ -338,10 +339,10 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   and fades with it (`flyScale()`); none with effects Off.
 - Font: Archivo from Google Fonts with a system fallback (only network dependency).
 - The backdrop pass (`backdrop.js`) draws the large soft effects per pixel in shaders:
-  the static backdrop picture (rendered by `renderBackground()` and uploaded on resize),
-  colour wash, drifting lights, board glow (exact Gaussian of the frame, like `shadowBlur`)
+  the static backdrop picture (the theme's `background()`, rendered by `renderBackground()` and uploaded on
+  resize and on a theme change), colour wash, the Field lines theme's lines, drifting lights, board glow (exact Gaussian of the frame, like `shadowBlur`)
   and clear rings. `Engine.backdropScene()` describes them each frame from
-  `ambientShapes()` / `ringShapes()` / `boardGlowAlpha()`. The glow and rings run under a
+  `ambientShapes()` (or the theme's `ambient()`) / the theme's `lines()` / `ringShapes()` / `boardGlowAlpha()`. The glow and rings run under a
   scissor box 4 sigma around them (`boardPassBounds()`). Confetti is added on top of
   everything ("add" blending).
 - Hot drawing paths (`quad()`, `shape()`, the backdrop's uniforms) write into preallocated
@@ -708,7 +709,10 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Presentation choices the user made
 
-- Look: dark night-gallery theme, warm off-white ink (`INK`), Archivo type.
+- Look: dark night-gallery theme, warm off-white ink (`INK`), Archivo type. Two more themes on the user's
+  request, one space, one abstract (Options → Visuals → Theme, Gallery, shown as "Default" (the user's rename), stays the default): Deep Space and
+  Field lines (the user chose it over a Bauhaus-like "Prism" and a soft "Flow"). Both stay dark so the
+  added light of the effects still reads; piece colours and block styles are the same in every theme.
 - Piece colours stay the sampled originals (Classic uses Sega colours by design).
 - Line clears: no artificial delay outside TGM3; confetti (moderately prominent) plus a row flash.
 - Lock-delay fade on the falling piece; hard-drop flash in the piece's own colour, not white.
@@ -748,7 +752,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), pad (the same actions, lists of pad controls), tileset, confetti, effects, backdrop, rings, flash, tilt, shake (an index into `SHAKE_LEVELS`; a saved true/false from before becomes Normal/Off), trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), pad (the same actions, lists of pad controls), theme, tileset, confetti, effects, backdrop, rings, flash, tilt, shake (an index into `SHAKE_LEVELS`; a saved true/false from before becomes Normal/Off), trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
   qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).
