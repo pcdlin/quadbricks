@@ -1,13 +1,16 @@
 // Gamepads (the Gamepad API's "standard" layout: Xbox, PlayStation, Switch Pro and most others).
-// Polled once a game frame (poll()); every connected pad counts, merged. Like the touch controls they
-// feed the same key events as the keyboard (Engine.onKey), using each action's first key, so DAS/ARR,
-// IRS and the menus work unchanged. In games the buttons and left stick directions act as bound in
-// Options.pad (Options → Gamepad; defaults DEFAULT_PAD: D-pad or stick to move, D-pad up hard drop,
-// A rotate right, B and X left, Y 180°, LB/RB hold, Back sound), and Start opens the menu. Menus take
-// fixed buttons (PAD_MENU): D-pad or stick, A OK, B and Start back. A control held when the game
-// switches between menu and game does nothing until let go, so the A that starts a game doesn't also
-// turn its first piece. On the Gamepad screen the engine's padCapturing names the action waiting for a
-// control: the next one pressed is bound to it (Start cancels).
+// Polled once a game frame (poll()), each connected pad on its own (by its index in getGamepads()).
+// In games the buttons and left stick directions act as bound in Options.pad (Options → Gamepad;
+// defaults DEFAULT_PAD: D-pad or stick to move, D-pad up hard drop, A rotate right, B and X left,
+// Y 180°, LB/RB hold, Back sound): each pad's actions go to the engine tagged with the pad
+// (Engine.padAction), so in a two-player game every pad drives its own player and in a one-player
+// game any pad drives it. Start opens the menu (Escape). Menus take fixed buttons on any pad
+// (PAD_MENU: D-pad or stick, A OK, B and Start back), fed as the keyboard's key events
+// (Engine.onKey). On the multiplayer join screen a pad's rotate buttons pick it for the next player
+// (Engine.joinDevice), Start goes back. A control held when the mode changes (game, menu, join) does
+// nothing until let go, so the A that starts a game doesn't also turn its first piece. On the
+// Gamepad screen the engine's padCapturing names the action waiting for a control: the next one
+// pressed on any pad is bound to it (Start cancels).
 
 const PAD_REPEAT_DELAY = 400; // ms before a held menu direction repeats
 const PAD_REPEAT_RATE = 80;
@@ -23,96 +26,127 @@ class GamepadControls {
     constructor(engine) {
         this.engine = engine;
         this.available = typeof navigator !== "undefined" && typeof navigator.getGamepads === "function";
-        this.mode = null;          // "game" or "menu"
-        this.held = new Map();     // control (button index or PAD_STICK direction) -> key code sent for it
-        this.ignored = new Set();  // controls held over a mode switch or a binding, ignored until let go
-        this.stick = new Set();    // directions the stick holds (with hysteresis)
+        this.mode = null;          // "game", "menu" or "join"
+        // "pad:control" (a pad's index, a button index or PAD_STICK direction) -> what it sends:
+        // { code } a key event, { action } a game action of that pad, { join } a join press
+        this.held = new Map();
+        this.ignored = new Set();  // "pad:control" held over a mode switch or a binding, ignored until let go
+        this.sticks = new Map();   // pad index -> directions its stick holds (with hysteresis)
         this.repeatAt = 0;         // when the held menu direction repeats next
         this.active = false;       // the last input came from a pad (the hints then name its buttons)
         this.connected = false;    // a pad has been seen (browsers show one only after a button press)
+        this.pads = [];            // indices of the connected pads
     }
 
-    // Controls pressed on any connected pad
+    // Controls pressed, as "pad:control" strings, on every connected pad
     read() {
         const pressed = new Set();
         let pads;
         try { pads = navigator.getGamepads(); } catch (e) { return pressed; }
-        const stick = new Set();
-        this.connected = false;
+        const sticks = new Map();
+        this.pads = [];
         for (const pad of pads) {
             if (!pad || !pad.connected) continue;
-            this.connected = true;
-            pad.buttons.forEach((b, i) => { if (b.pressed || b.value > 0.5) pressed.add(i); });
+            const n = pad.index;
+            this.pads.push(n);
+            pad.buttons.forEach((b, i) => { if (b.pressed || b.value > 0.5) pressed.add(n + ":" + i); });
             const x = pad.axes[0] || 0, y = pad.axes[1] || 0;
             // one direction at a time, the stronger axis; a held one lets go only below PAD_STICK_OFF
             const along = Math.abs(x) >= Math.abs(y) ? (x < 0 ? "left" : "right") : (y < 0 ? "up" : "down");
             const amount = Math.max(Math.abs(x), Math.abs(y));
-            if (amount >= PAD_STICK_ON || (amount >= PAD_STICK_OFF && this.stick.has(along))) stick.add(along);
+            const was = this.sticks.get(n);
+            if (amount >= PAD_STICK_ON || (amount >= PAD_STICK_OFF && was && was.has(along))) {
+                sticks.set(n, new Set([along]));
+                pressed.add(n + ":" + PAD_STICK[along]);
+            }
         }
-        this.stick = stick;
-        for (const d of stick) pressed.add(PAD_STICK[d]);
+        this.sticks = sticks;
+        this.connected = this.pads.length > 0;
         return pressed;
     }
 
     poll(ticks) {
         if (!this.available) return;
         const engine = this.engine;
-        const mode = engine.GAMESTATE === STATE_GAME ? "game" : "menu";
+        const mode = engine.GAMESTATE === STATE_GAME ? "game" : engine.menuStep === MENU_JOIN ? "join" : "menu";
         const pressed = this.read();
         if (mode !== this.mode) {
-            for (const id of [...this.held.keys()]) this.release(id);
+            for (const key of [...this.held.keys()]) this.release(key);
             this.ignored = new Set(pressed);
             this.mode = mode;
         }
-        for (const id of [...this.ignored]) if (!pressed.has(id)) this.ignored.delete(id);
-        for (const id of [...this.held.keys()]) if (!pressed.has(id)) this.release(id);
-        for (const id of pressed) {
-            if (this.held.has(id) || this.ignored.has(id)) continue;
+        for (const key of [...this.ignored]) if (!pressed.has(key)) this.ignored.delete(key);
+        for (const key of [...this.held.keys()]) if (!pressed.has(key)) this.release(key);
+        for (const key of pressed) {
+            if (this.held.has(key) || this.ignored.has(key)) continue;
             this.active = true;
+            const [pad, id] = key.split(":").map(Number);
             // the Gamepad screen waits for a control: this one is the binding
             if (engine.padCapturing) {
                 if (id !== PAD_START) engine.options.bindPad(engine.padCapturing, id);
                 engine.padCapturing = null;
-                this.ignored.add(id);
+                this.ignored.add(key);
                 continue;
             }
-            const code = this.codeFor(id);
-            if (!code) continue;
+            const sends = this.sendsFor(pad, id);
+            if (!sends) continue;
             // the Keybinds screen waits for a key: only back (cancel) passes
-            if (engine.capturing && code !== "Escape") continue;
-            const already = [...this.held.values()].includes(code); // two controls on one action
-            this.held.set(id, code);
-            if (!already) this.send(code, true);
-            if (MENU_REPEAT_KEYS.includes(code)) this.repeatAt = ticks + PAD_REPEAT_DELAY;
+            if (engine.capturing && sends.code !== "Escape") continue;
+            const already = this.holding(sends, pad); // two controls on one action
+            this.held.set(key, sends);
+            if (!already) this.send(sends, pad, true);
+            if (MENU_REPEAT_KEYS.includes(sends.code)) this.repeatAt = ticks + PAD_REPEAT_DELAY;
         }
         // held menu arrows repeat, the latest one pressed
         if (mode === "menu" && ticks >= this.repeatAt) {
-            const dir = [...this.held.values()].reverse().find(c => MENU_REPEAT_KEYS.includes(c));
+            const dir = [...this.held.values()].reverse().find(s => MENU_REPEAT_KEYS.includes(s.code));
             if (dir) {
-                this.send(dir, true, true);
+                engine.onKey(this.keyEvent(dir.code, true), true);
                 this.repeatAt = ticks + PAD_REPEAT_RATE;
             }
         }
     }
 
-    // Key code of a control in the current mode (bindings can change between presses). The sound
-    // button works in menus too
-    codeFor(id) {
-        if (this.mode === "menu" && PAD_MENU[id]) return PAD_MENU[id];
-        if (id === PAD_START) return "Escape";
+    // What control id on a pad sends in the current mode (bindings can change between presses), or
+    // null. The sound button works everywhere
+    sendsFor(pad, id) {
+        if (this.mode === "menu" && PAD_MENU[id]) return { code: PAD_MENU[id] };
+        if (id === PAD_START) return { code: "Escape" };
         const action = this.engine.options.padActionFor(id);
-        if (!action || (this.mode === "menu" && action !== "sound")) return null;
-        return this.engine.options.keys[action][0];
+        if (action === "sound") return { code: this.engine.options.keys.sound[0] };
+        if (this.mode === "join") return JOIN_ACTIONS.includes(action) ? { join: true } : null;
+        return this.mode === "game" && action ? { action } : null;
     }
 
-    send(code, down, repeat = false) {
-        this.engine.onKey({ code, repeat, ctrlKey: false, shiftKey: false, preventDefault() {} }, down);
+    // Something held already sends this (key events from any pad; actions and joins per pad)
+    holding(sends, pad) {
+        for (const [key, s] of this.held) {
+            if (sends.code ? s.code === sends.code : (s.action === sends.action && s.join === sends.join && key.startsWith(pad + ":"))) return true;
+        }
+        return false;
     }
 
-    // Two controls may send the same key (B and X both rotate left): it is let go with the last
-    release(id) {
-        const code = this.held.get(id);
-        this.held.delete(id);
-        if (![...this.held.values()].includes(code)) this.send(code, false);
+    send(sends, pad, down) {
+        if (sends.code) this.engine.onKey(this.keyEvent(sends.code), down);
+        else if (sends.action) this.engine.padAction(pad, sends.action, down);
+        else if (sends.join && down) this.engine.joinDevice("pad:" + pad);
+    }
+
+    keyEvent(code, repeat = false) {
+        return { code, repeat, ctrlKey: false, shiftKey: false, preventDefault() {} };
+    }
+
+    // Two controls may send the same (B and X both rotate left): it is let go with the last
+    release(key) {
+        const sends = this.held.get(key), pad = Number(key.split(":")[0]);
+        this.held.delete(key);
+        if (!this.holding(sends, pad)) this.send(sends, pad, false);
+    }
+
+    // The game actions a pad holds now (a resumed game releases the others)
+    heldActions(pad) {
+        const out = new Set();
+        for (const [key, s] of this.held) if (s.action && key.startsWith(pad + ":")) out.add(s.action);
+        return out;
     }
 }

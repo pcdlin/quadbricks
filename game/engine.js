@@ -20,16 +20,21 @@ const PUSH_BITS = { left: LEFT_PUSH, right: RIGHT_PUSH, hard: HARD_PUSH, soft: S
 const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELEASE, rotl: ROTL_RELEASE, rotr: ROTR_RELEASE, rot180: ROT180_RELEASE, hold: HOLD_RELEASE };
 
 // Menu screens
-const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8, MENU_QUICK = 9;
-const MENU_DEPTH = [0, 1, 2, 1, 2, 2, 2, 3, 2, 1];   // by screen; deeper = slide in from the right
+const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8, MENU_QUICK = 9,
+    MENU_SINGLE = 10, MENU_MULTI = 11, MENU_JOIN = 12, MENU_CONTROLS2 = 13;
+const MENU_DEPTH = [0, 2, 3, 1, 2, 2, 2, 4, 2, 2, 1, 1, 2, 2];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
 const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", accent: tetI, resume: true };
 const RESTART_ITEM = { name: "Restart", desc: "Start the current game over", accent: tetL, restart: true };
 const MAIN_ITEMS = [
+    { name: "Single Player", desc: "Quick play or a custom game on your own", accent: tetT, screen: MENU_SINGLE },
+    { name: "Multiplayer", desc: "Versus the bot, or two players side by side", accent: tetI, screen: MENU_MULTI },
+    { name: "Options", desc: "Keybinds, gamepad, visuals and Guideline handling", accent: tetS, screen: MENU_OPTIONS },
+];
+const SINGLE_ITEMS = [
     { name: "Quick Play", desc: "Common modes, straight into the game", accent: tetO, screen: MENU_QUICK },
     { name: "Custom Game", desc: "Choose a rule set and mode", accent: tetT, screen: MENU_RULES },
-    { name: "Options", desc: "Keybinds, gamepad, visuals and Guideline handling", accent: tetS, screen: MENU_OPTIONS },
 ];
 
 // Start step 3 (MENU_SETUP), for modes with `setup`: setting cards changed with ← →, each choosing
@@ -64,6 +69,20 @@ const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off",
 // Guideline versus: the bot's level (bot.js, 0-10), 6 at first
 const BOT_VERSUS_LEVEL = 6;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
+// Multiplayer: Guideline versus against the bot (its setup cards like a Custom Game mode's), or two
+// players on one screen, each on the input device they pick on the join screen (MENU_JOIN)
+const MULTI_ITEMS = [
+    { name: "Versus Bot", desc: "Clears send the bot garbage, the first to top out loses", accent: tetI,
+      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [BOT_SETUP] } },
+    { name: "Versus Player", desc: "Two players side by side, garbage both ways", accent: tetT, screen: MENU_JOIN },
+];
+// Input devices of a two-player game: "keys1" (player 1's keys, and the touch controls), "keys2"
+// (player 2's keys) or "pad:N" (the gamepad at index N)
+function deviceName(device) {
+    if (device === "keys1") return "KEYBOARD  ·  KEYS 1";
+    if (device === "keys2") return "KEYBOARD  ·  KEYS 2";
+    return "GAMEPAD " + (Number(device.slice(4)) + 1);
+}
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
@@ -75,7 +94,6 @@ const RULESETS = [
           { name: "Ultra", mode: guideline, variant: "ultra", setup: [ULTRA_SETUP], accent: tetZ, desc: "Score as much as you can in 1 to 5 minutes" },
           { name: "Dig", mode: guideline, variant: "dig", setup: [DIG_SETUP], accent: tetS, desc: "Clear rows of garbage as fast as you can" },
           { name: "Master", mode: guideline, variant: "master", setup: [MASTER_SETUP], accent: tetJ, desc: "20G from the start, less time to lock as you go" },
-          { name: "Versus", mode: guideline, variant: "versus", setup: [BOT_SETUP], accent: tetI, desc: "Against the bot: clears send it garbage, the first to top out loses" },
       ] },
     { name: "TGM1", accent: tetZ, desc: "ARS, no hard or sonic drop, no hold",
       modes: [
@@ -121,14 +139,14 @@ const QUICK_PLAY = [
     { name: "Marathon", ruleset: "Guideline", mode: "Marathon", accent: tetO, desc: "Guideline · 150 lines from level 1" },
     { name: "Sprint", ruleset: "Guideline", mode: "Sprint", accent: tetL, desc: "Guideline · 40 lines as fast as you can" },
     { name: "Ultra", ruleset: "Guideline", mode: "Ultra", accent: tetZ, desc: "Guideline · score as much as you can in 2 minutes" },
-    { name: "Versus", ruleset: "Guideline", mode: "Versus", accent: tetI, desc: "Guideline · against the Skilled bot, garbage both ways" },
     { name: "TGM1 Master", ruleset: "TGM1", mode: "Master", accent: tetI, desc: "Up to level 999, grades 9 to S9, GM by checkpoints" },
     { name: "TAP Master", ruleset: "TGM2 TAP", mode: "Master", accent: tetT, desc: "Up to level 999, sonic drop, grades 9 to GM" },
     { name: "TGM3 Master", ruleset: "TGM3 TI", mode: "Master", accent: tetS, desc: "World rule with hold, COOLs, REGRETs and exams" },
     { name: "NES A-Type", ruleset: "NES", mode: "A-Type", accent: tetJ, desc: "From level 0, faster every 10 lines" },
 ].map(item => ({ ...item, modeItem: RULESETS.find(r => r.name === item.ruleset).modes.find(m => m.name === item.mode) }));
 const OPTIONS_ITEMS = [
-    { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS },
+    { name: "Keybinds", desc: "Change key bindings (player 1)", accent: tetS, screen: MENU_CONTROLS },
+    { name: "Keybinds P2", desc: "Player 2's keys, for two players on one keyboard", accent: tetZ, screen: MENU_CONTROLS2 },
     { name: "Gamepad", desc: "Change gamepad buttons", accent: tetI, screen: MENU_GAMEPAD },
     { name: "Visuals", desc: "Block style, scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
@@ -248,6 +266,16 @@ function versusLayout(base, s, gap) {
 }
 const LAYOUT_VERSUS_FULL = versusLayout(LAYOUT_FULL, 0.85, 40);
 const LAYOUT_VERSUS_COMPACT = versusLayout(LAYOUT_COMPACT, 0.5, 16);
+// Two players: both board groups (well, panels, meter) whole and the same size, side by side, the
+// view widened about its centre; duo.gx: where each player's group is drawn (translated in x)
+function duoLayout(base, gap) {
+    const left = base.leftX, right = base.rightX + base.sideW; // a group's extent
+    const shift = (right - left + gap) / 2;
+    const [x, y, w, h] = base.view;
+    return { ...base, view: [x - shift, y, w + 2 * shift, h], duo: { gx: [-shift, shift] } };
+}
+const LAYOUT_DUO_FULL = duoLayout(LAYOUT_FULL, 40);
+const LAYOUT_DUO_COMPACT = duoLayout(LAYOUT_COMPACT, 24);
 
 // ----------------------------------------------------------
 // LOOK
@@ -408,6 +436,9 @@ class BoardView {
         this.holdFlash = 0; // frames left of the held piece's flash
         this.enterGlow = 0; // and of the glow round the piece entering from hold (gone when it locks)
         this.messageCache = null; // clear message texture (messageTexture())
+        // the field's shake spring (px, py: before the last step), knocked by its own drops and clears
+        this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 };
+        this.gx = 0; // where its board group is drawn, translated in x (Engine.resize())
     }
 }
 
@@ -435,8 +466,14 @@ class Engine {
         this.setupChoices = {}; // setup card choices ("rule set.mode.card": label index), kept for the session
         // per scrolled list (SCROLLED_LISTS): logical units scrolled out above, eased toward target
         this.menuScroll = Object.fromEntries(Object.keys(SCROLLED_LISTS).map(step => [step, { at: 0, target: 0 }]));
+        this.singlepos = 0;   // Quick Play or Custom Game
+        this.multipos = 0;    // Versus Bot or Versus Player
+        this.setupFrom = MENU_MODES; // the screen the setup cards were opened from (a Custom Game mode, or Multiplayer)
+        this.joined = [];     // join screen: the input devices picked so far, player 1's first (deviceName())
+        this.duoDevices = []; // the two-player game's devices
         this.controlspos = 0; // key action, or "reset" after the last one
-        this.capturing = null; // action waiting for a new key
+        this.capturing = null; // action waiting for a new key (for capturingPlayer's keys, 1 or 2)
+        this.capturingPlayer = 1;
         this.padpos = 0;      // gamepad action, or "reset" after the last one
         this.padCapturing = null; // action waiting for a gamepad button (GamepadControls.poll() binds it)
         this.options = new Options();
@@ -445,8 +482,8 @@ class Engine {
         this.recordNote = null; // the game over banner's record line
         this.recordNew = false;
         this.game = null;
-        this.player_input = 0x0000;
-        this.events = [];
+        this.inputs = [0, 0]; // this frame's input bitmaps by player (the second player's in a two-player game)
+        this.events = [];     // key events { code, down, repeat }, and gamepad actions { pad, action, down }
         this.keysDown = new Set(); // key codes held right now
         this.syncKeys = false;     // the game missed key events: release what isn't held
         this.lastFPS = 0;
@@ -513,11 +550,12 @@ class Engine {
         const winW = Math.max(1, window.innerWidth), winH = Math.max(1, window.innerHeight);
         const fitIn = ([, , w, h], availW, availH) => Math.min(availW / w, availH / h);
         // touch devices always take the compact layout; elsewhere a narrow window does
-        // (a versus match: the same, widened for the bot's board)
-        const [full, compact] = this.match ? [LAYOUT_VERSUS_FULL, LAYOUT_VERSUS_COMPACT] : [LAYOUT_FULL, LAYOUT_COMPACT];
+        // (a versus match: the same, widened for the bot's board; two players: for both groups)
+        const [full, compact] = !this.match ? [LAYOUT_FULL, LAYOUT_COMPACT]
+            : this.match.duo ? [LAYOUT_DUO_FULL, LAYOUT_DUO_COMPACT] : [LAYOUT_VERSUS_FULL, LAYOUT_VERSUS_COMPACT];
         this.layout = this.touch.enabled || fitIn(compact.view, winW, winH) >= COMPACT_GAIN * fitIn(full.view, winW, winH)
             ? compact : full;
-        this.groupX = this.layout.versus ? this.layout.versus.groupX : 0; // where the player's board group is drawn
+        this.placeBoards();
         const [vx, vy, vw, vh] = this.layout.view;
         const inset = this.touch.place(winW, winH, this.layout.view);
         const availW = winW - inset.left - inset.right, availH = winH - inset.bottom;
@@ -547,6 +585,13 @@ class Engine {
         this.backdrop.setBackground(this.renderBackground());
     }
 
+    // Where the player's board group is drawn in the layout (groupX), and the second player's
+    placeBoards() {
+        this.groupX = this.layout.versus ? this.layout.versus.groupX : this.layout.duo ? this.layout.duo.gx[0] : 0;
+        if (this.ownBoard) this.ownBoard.gx = this.groupX;
+        if (this.match && this.match.duo && this.layout.duo) this.match.view.gx = this.layout.duo.gx[1];
+    }
+
     // The theme chosen in Options → Visuals (themes.js)
     get theme() { return THEMES[this.options.theme]; }
 
@@ -571,7 +616,7 @@ class Engine {
         if (this.capturing) {
             e.preventDefault();
             if (down && !e.repeat) {
-                if (e.code !== "Escape") this.options.bind(this.capturing, e.code);
+                if (e.code !== "Escape") this.options.bind(this.capturing, e.code, this.capturingPlayer);
                 this.capturing = null;
             }
             return;
@@ -593,7 +638,7 @@ class Engine {
             if (down && !e.repeat) this.sound.toggleMute();
             return;
         }
-        if (!MENU_KEYS.includes(e.code) && !this.options.actionFor(e.code)) return;
+        if (!MENU_KEYS.includes(e.code) && !this.options.actionFor(e.code) && !this.options.actionFor(e.code, 2)) return;
         e.preventDefault();
         // SDL key repeat was not enabled; menus take it for the arrows, to scroll while held
         if (e.repeat) {
@@ -601,6 +646,26 @@ class Engine {
             return;
         }
         this.events.push({ code: e.code, down });
+    }
+
+    // A game action pressed or let go on the gamepad at index pad (GamepadControls, in games)
+    padAction(pad, action, down) {
+        if (down) this.sound.unlock();
+        this.events.push({ pad, action, down });
+    }
+
+    // Multiplayer join screen: a rotate press on an input device (deviceName()) picks it for the next
+    // player; the second starts the game. A device already picked is ignored
+    joinDevice(device) {
+        if (this.GAMESTATE !== STATE_MENU || this.menuStep !== MENU_JOIN || this.joined.includes(device)) return;
+        this.sound.unlock();
+        this.joined.push(device);
+        this.sound.play("rotate");
+        if (this.joined.length < 2) return;
+        this.duoDevices = this.joined;
+        this.joined = [];
+        this.initGame(guideline, "versus", 0, 0, { duo: true });
+        this.GAMESTATE = STATE_GAME;
     }
 
     start() {
@@ -651,14 +716,14 @@ class Engine {
         switch (this.GAMESTATE) {
             case STATE_GAME:
                 // reset inputs
-                this.player_input = 0x0000;
+                this.inputs[0] = this.inputs[1] = 0;
 
                 this.handleGameInput();
 
                 // Advance the game by one frame (input may have switched to the menu); a versus
                 // match that is decided stands still until a rematch
                 if (this.GAMESTATE === STATE_GAME) {
-                    if (!(this.match && this.match.result)) this.game.advanceFrame(this.player_input);
+                    if (!(this.match && this.match.result)) this.game.advanceFrame(this.inputs[0]);
                     this.takeGameEvents(this.ownBoard, true);
                     if (this.match) this.matchFrame();
                     if (this.game.isGameOver() && !this.recordDone) this.submitRecord();
@@ -704,52 +769,61 @@ class Engine {
     }
 
     // -----------------------------------
-    // VERSUS: a Guideline match against the bot
+    // VERSUS: a Guideline match against the bot, or between two players
 
     // A match against the bot at BOT_LEVELS[level]: its game is dealt from the player's seed, so both
-    // sides get the same pieces
+    // sides get the same pieces. view: the other side's board (here the bot's)
     newMatch(seed, level) {
         const game = createGame(guideline, "versus", 0, 0, {}, { seed });
         return {
             bot: new Bot(level, seed), level, view: new BoardView(game),
-            popups: [],   // lines the player sent: "+4" rising over the well
-            result: null, // "win" or "lose" once a side tops out
+            popups: [[], []], // lines each side sent: "+4" rising over its well (only the player's are shown against the bot)
+            result: null,     // "win" or "lose" (for player 1) once a side tops out
         };
     }
 
-    // One frame of the match, after the player's: the bot plays its game, each side's attacks go
-    // to the other (all the lines of one attack with their hole in one random column), and the
-    // first side to top out loses; the other's game ends there too
-    matchFrame() {
-        const m = this.match, game = this.game, botGame = m.view.game;
-        const hole = () => Math.floor(Math.random() * WIDTH);
-        if (!m.result) {
-            botGame.advanceFrame(m.bot.input(botGame));
-            for (const lines of game.takeAttacks()) {
-                botGame.receiveGarbage({ lines, hole: hole() });
-                m.popups.push({ lines, life: ATTACK_LIFE });
-                this.sound.play("attack");
-            }
-            for (const lines of botGame.takeAttacks()) game.receiveGarbage({ lines, hole: hole() });
-            if (game.isGameOver()) {
-                m.result = "lose";
-                if (!botGame.isGameOver()) botGame.endGame("WINNER", null);
-            } else if (botGame.isGameOver()) {
-                m.result = "win";
-                game.endGame("VICTORY", null);
-                this.sound.play("ko");
-            }
-        }
-        for (const rows of game.takeRisenGarbage()) if (this.options.shakeScale) this.riseShake(rows);
-        botGame.takeRisenGarbage();
-        this.takeGameEvents(m.view, false);
-        for (const p of m.popups) p.life--;
-        m.popups = m.popups.filter(p => p.life > 0);
+    // A match between two players (duo), each on their own input device (duoDevices): player 2's
+    // game, with the player's handling, is dealt from the same seed; view is player 2's board
+    newDuo(seed) {
+        const game = createGame(guideline, "versus", 0, 0, this.options.handling, { seed });
+        return { duo: true, devices: this.duoDevices, view: new BoardView(game), popups: [[], []], result: null };
     }
 
-    // Garbage rising pushes the field up a little
-    riseShake(rows) {
-        this.shake.vy -= SHAKE_RISE * this.options.shakeScale * Math.min(1, 0.4 + rows / 6);
+    // One frame of the match, after player 1's: the other side plays its frame (the bot's input,
+    // or player 2's), each side's attacks go to the other (all the lines of one attack with their
+    // hole in one random column), and the first side to top out loses; the other's game ends there too
+    matchFrame() {
+        const m = this.match, games = [this.game, m.view.game];
+        const hole = () => Math.floor(Math.random() * WIDTH);
+        if (!m.result) {
+            games[1].advanceFrame(m.duo ? this.inputs[1] : m.bot.input(games[1]));
+            games.forEach((game, side) => {
+                for (const lines of game.takeAttacks()) {
+                    games[1 - side].receiveGarbage({ lines, hole: hole() });
+                    m.popups[side].push({ lines, life: ATTACK_LIFE });
+                    if (side === 0 || m.duo) this.sound.play("attack");
+                }
+            });
+            const over = games.map(g => g.isGameOver());
+            if (over[0] || over[1]) {
+                m.result = over[0] ? "lose" : "win";
+                const winner = games[over[0] ? 1 : 0];
+                if (!winner.isGameOver()) winner.endGame(m.duo || winner === this.game ? "VICTORY" : "WINNER", null);
+                if (m.duo || !over[0]) this.sound.play("ko");
+            }
+        }
+        // garbage rising pushes a player's field up
+        [this.ownBoard, m.view].forEach((view, side) => {
+            for (const rows of view.game.takeRisenGarbage()) if (side === 0 || m.duo) this.riseShake(view, rows);
+        });
+        this.takeGameEvents(m.view, !!m.duo);
+        for (const popups of m.popups) for (const p of popups) p.life--;
+        m.popups = m.popups.map(popups => popups.filter(p => p.life > 0));
+    }
+
+    // Garbage rising pushes a field up a little
+    riseShake(view, rows) {
+        view.shake.vy -= SHAKE_RISE * this.options.shakeScale * Math.min(1, 0.4 + rows / 6);
     }
 
     // Moves the animations on by dt game frames (fractional above 60 Hz), once per refresh
@@ -806,19 +880,22 @@ class Engine {
         const ambient = this.options.effects && this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
         const color = (s) => ({ ...s, rgb: hslToRgb(s.h, s.s, s.l) });
         const ps = this.pixelScale;
-        const m = this.motion;
-        const gx = this.offX + (this.groupX + m.dx) * ps, gy = this.offY + m.dy * ps; // follows the shake
-        // and the fly-in: scaled about the board's centre
-        const fs = this.flyScale(m), hw = (BOARD_W / 2 + 8) * fs, hh = (this.boardH / 2 + 8) * fs;
-        const bcx = BOARD_X + BOARD_W / 2, bcy = this.boardY + this.boardH / 2;
         const glowRgb = this.theme.glowRgb ? this.theme.glowRgb(this) : hslToRgb(this.hue, 90, 62);
-        const glow = inGame && glowRgb ? {
-            rect: [gx + (bcx - hw) * ps, gy + (bcy - hh) * ps, gx + (bcx + hw) * ps, gy + (bcy + hh) * ps],
-            // blur given like canvas shadowBlur: twice the Gaussian's sigma
-            sigma: (BOARD_GLOW_BLUR[0] + (BOARD_GLOW_BLUR[1] - BOARD_GLOW_BLUR[0]) * Math.min(1, this.pulse)) / 2 * fs,
-            rgb: glowRgb,
-            a: this.boardGlowAlpha() * m.alpha * m.alpha,
-        } : null;
+        // a glow round each player's board (not the bot's, drawn flat and smaller)
+        const glows = !inGame || !glowRgb ? [] : [this.ownBoard, this.match && this.match.duo && this.match.view].filter(Boolean).map(view => {
+            const m = view === this.ownBoard ? this.motion : this.boardMotion(view);
+            const gx = this.offX + (view.gx + m.dx) * ps, gy = this.offY + m.dy * ps; // follows the shake
+            // and the fly-in: scaled about the board's centre
+            const fs = this.flyScale(m), hw = (BOARD_W / 2 + 8) * fs, hh = (this.boardH / 2 + 8) * fs;
+            const bcx = BOARD_X + BOARD_W / 2, bcy = this.boardY + this.boardH / 2;
+            return {
+                rect: [gx + (bcx - hw) * ps, gy + (bcy - hh) * ps, gx + (bcx + hw) * ps, gy + (bcy + hh) * ps],
+                // blur given like canvas shadowBlur: twice the Gaussian's sigma
+                sigma: (BOARD_GLOW_BLUR[0] + (BOARD_GLOW_BLUR[1] - BOARD_GLOW_BLUR[0]) * Math.min(1, this.pulse)) / 2 * fs,
+                rgb: glowRgb,
+                a: this.boardGlowAlpha() * m.alpha * m.alpha,
+            };
+        });
         const rings = this.ringMode() === "rings" ? this.ringShapes().map(r => ({
             ...r, rgb: hslToRgb(r.hue, 90, 75), glowRgb: hslToRgb(r.hue, 95, 65),
         })) : [];
@@ -833,7 +910,7 @@ class Engine {
             lines: this.theme.lines ? this.theme.lines(this) : null,
             rings,
             ringSigma: 6, // like a shadowBlur of 12
-            glow,
+            glows,
         };
     }
 
@@ -866,16 +943,19 @@ class Engine {
             const state = this.exams.get(this.examRule);
             Object.assign(gameOptions, { qualified: state.qualified, exam: tgm3ExamFor(state) });
         }
-        // Guideline versus: a match against the bot (options.bot: its level), both sides dealt from one seed
+        // Guideline versus: a match against the bot (options.bot: its level) or between two players
+        // (options.duo, on duoDevices), both sides dealt from one seed
         const versus = mode === guideline && variant === "versus";
         if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
-        const hadMatch = !!this.match;
-        this.match = versus ? this.newMatch(gameOptions.seed, options.bot ?? BOT_VERSUS_LEVEL) : null;
-        if (hadMatch !== versus) this.resize(); // the view widens for the bot's board, or back
+        const hadKind = this.match ? (this.match.duo ? "duo" : "bot") : null;
+        this.match = !versus ? null : options.duo ? this.newDuo(gameOptions.seed) : this.newMatch(gameOptions.seed, options.bot ?? BOT_VERSUS_LEVEL);
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
+        // the view widens for the other board, or back; the boards take their places
+        if (hadKind !== (this.match ? (this.match.duo ? "duo" : "bot") : null)) this.resize();
+        else this.placeBoards();
         this.newTiltWaves();
         this.flySide = Math.random() < 0.5 ? -1 : 1; // which way the field comes in turned
         this.hue = this.hueTarget = HUE_DEFAULT; // every game starts on the default blue
@@ -886,8 +966,8 @@ class Engine {
     clearEffects() {
         if (this.ownBoard && this.ownBoard.messageCache) this.r.releaseTexture(this.ownBoard.messageCache.tex);
         this.ownBoard = this.board = new BoardView(this.game);
+        this.ownBoard.gx = this.groupX || 0;
         this.rings = [];
-        this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 }; // px, py: before the last step
     }
 
     // Top-left corner of a field cell in logical units (the well's rows start at wellTop)
@@ -911,16 +991,17 @@ class Engine {
     // -----------------------------------
     // PLAYING FIELD MOTION
 
-    // A hard drop knocks the field down, harder for longer drops, with a little sideways jolt
+    // A hard drop knocks the field (the current board's) down, harder for longer drops, with a
+    // little sideways jolt
     kickShake(dist) {
         const kick = SHAKE_KICK * this.options.shakeScale * (0.5 + 0.5 * Math.min(1, dist / 16));
-        this.shake.vy += kick;
-        this.shake.vx += (Math.random() - 0.5) * kick * 0.5;
+        this.board.shake.vy += kick;
+        this.board.shake.vx += (Math.random() - 0.5) * kick * 0.5;
     }
 
     // A piece pushed against the left or right border nudges the field that way
     bumpShake(dir) {
-        this.shake.vx += dir * SHAKE_BUMP * this.options.shakeScale;
+        this.board.shake.vx += dir * SHAKE_BUMP * this.options.shakeScale;
     }
 
     // A line clear jolts the field in a random direction (mostly down), harder for more
@@ -930,14 +1011,17 @@ class Engine {
         const kick = SHAKE_CLEAR_KICK * this.options.shakeScale * (1 + SHAKE_CLEAR_LINE * (lines - 1))
             * (1 + SHAKE_CLEAR_CHAIN * Math.min(Math.max(0, chain), RING_CHAIN_MAX));
         const angle = Math.PI / 2 + (Math.random() - 0.5) * 2.2; // within ~63° of straight down
-        this.shake.vx += Math.cos(angle) * kick;
-        this.shake.vy += Math.sin(angle) * kick;
+        this.board.shake.vx += Math.cos(angle) * kick;
+        this.board.shake.vy += Math.sin(angle) * kick;
     }
 
-    // Damped spring back to rest, stepped once per game frame (as tuned) and shown between
-    // its last two steps (t: share of a frame since the last step)
+    // Every board's damped spring back to rest, stepped once per game frame (as tuned) and shown
+    // between its last two steps (t: share of a frame since the last step)
     updateShake(dt) {
-        const s = this.shake;
+        for (const view of this.boards()) this.stepShake(view.shake, dt);
+    }
+
+    stepShake(s, dt) {
         for (s.t += dt; s.t >= 1; s.t--) {
             s.px = s.x;
             s.py = s.y;
@@ -959,14 +1043,15 @@ class Engine {
         ]);
     }
 
-    // The field's tilt now (radians about the x and y axes) and shake offset (logical units)
-    boardMotion() {
+    // A board's field: its tilt now (radians about the x and y axes; the drift is shared, the
+    // second player's mirrored) and its shake offset (logical units)
+    boardMotion(view = this.ownBoard) {
         const t = (this.clock - this.tiltStart) / 60 * TILT_SPEED;
-        const k = this.options.tiltAngle;
+        const k = this.options.tiltAngle * (view === this.ownBoard ? 1 : -1);
         const [ax, ay] = this.tiltWaves.map(([a, b], i) =>
             TILT_MAX[i] * k * (0.65 * Math.sin(t * a.f + a.p) + 0.35 * Math.sin(t * b.f + b.p)));
         const rad = Math.PI / 180;
-        const s = this.shake;
+        const s = view.shake;
         const dx = s.px + (s.x - s.px) * s.t, dy = s.py + (s.y - s.py) * s.t;
         const fly = this.flyIn();
         return {
@@ -1027,21 +1112,25 @@ class Engine {
     // -----------------------------------
     // INPUT
 
+    // This frame's input bitmaps (inputs[]) from the events: player 1's alone takes player 1's keys,
+    // the touch controls and every gamepad; in a two-player game each player takes only their own
+    // device's (duoDevices). Esc (or Start on any pad) opens the menu for both
     handleGameInput() {
+        const players = this.match && this.match.duo ? 2 : 1;
         // Keys let go while the game wasn't listening (menu, another window) are released now
         if (this.syncKeys) {
             this.syncKeys = false;
-            for (const { id } of KEY_ACTIONS) {
-                if (RELEASE_BITS[id] && !this.options.keys[id].some(c => this.keysDown.has(c))) this.player_input |= RELEASE_BITS[id];
+            for (let p = 0; p < players; p++) {
+                for (const id in RELEASE_BITS) if (!this.actionHeld(p, id)) this.inputs[p] |= RELEASE_BITS[id];
             }
         }
         while (this.events.length) {
             if (this.events[0].repeat) { this.events.shift(); continue; } // left from the menu
-            const { code, down } = this.events[0];
+            const ev = this.events[0], { code, down } = ev;
+            const [p, action] = this.eventTarget(ev);
             // A release of an action pressed this frame waits for the next one: the bitmap
             // doesn't say which came first, and the rules apply releases before presses
-            const action = this.options.actionFor(code);
-            if (!down && RELEASE_BITS[action] && (this.player_input & PUSH_BITS[action])) return;
+            if (!down && p >= 0 && RELEASE_BITS[action] && (this.inputs[p] & PUSH_BITS[action])) return;
             this.events.shift();
             if (down) {
                 if (code === "Escape") {
@@ -1056,33 +1145,75 @@ class Engine {
                     this.syncKeys = true;
                     return;
                 }
-                if (PUSH_BITS[action]) this.player_input |= PUSH_BITS[action];
-            } else if (RELEASE_BITS[action] && !this.options.keys[action].some(c => this.keysDown.has(c))) {
-                this.player_input |= RELEASE_BITS[action]; // not while the action's other key is held
+                if (p >= 0 && PUSH_BITS[action]) this.inputs[p] |= PUSH_BITS[action];
+            } else if (p >= 0 && RELEASE_BITS[action] && !this.actionHeld(p, action)) {
+                this.inputs[p] |= RELEASE_BITS[action]; // not while the action's other key is held
             }
         }
     }
 
-    // Quick Play -> game; Custom Game -> rule set -> sub-mode -> game; or Options -> Keybinds, Gamepad, Visuals or Guideline handling.
+    // The player (0 or 1, -1 for none) and game action of an input event: a key in the keys of a
+    // player's device, or an action on a pad
+    eventTarget(ev) {
+        if (!(this.match && this.match.duo)) {
+            return ev.pad !== undefined ? [0, ev.action] : [0, this.options.actionFor(ev.code)];
+        }
+        const devices = this.match.devices;
+        if (ev.pad !== undefined) return [devices.indexOf("pad:" + ev.pad), ev.action];
+        for (let p = 0; p < 2; p++) {
+            const keys = devices[p] === "keys1" ? 1 : devices[p] === "keys2" ? 2 : 0;
+            const action = keys && this.options.actionFor(ev.code, keys);
+            if (action) return [p, action];
+        }
+        return [-1, null];
+    }
+
+    // A player still holds an action on their device (another key, or another pad, bound to it)
+    actionHeld(p, action) {
+        const keyHeld = keys => (this.options.keysOf(keys)[action] || []).some(c => this.keysDown.has(c));
+        if (!(this.match && this.match.duo)) {
+            return keyHeld(1) || this.gamepad.pads.some(pad => this.gamepad.heldActions(pad).has(action));
+        }
+        const device = this.match.devices[p];
+        if (device.startsWith("pad:")) return this.gamepad.heldActions(Number(device.slice(4))).has(action);
+        return keyHeld(device === "keys2" ? 2 : 1);
+    }
+
+    // Single Player -> Quick Play -> game, or Custom Game -> rule set -> sub-mode -> game; Multiplayer
+    // -> Versus Bot -> its setup -> game, or Versus Player -> join screen -> game; or Options ->
+    // Keybinds (each player's), Gamepad, Visuals or Guideline handling.
     // Esc goes back a screen, and on the first one resumes a paused game.
     handleMenuInput() {
         // count() is only called for the screen on show: a rule set's modes depend on rulesetpos
         const screens = {
             [MENU_MAIN]: { pos: "mainpos", count: () => this.mainItems().length, back: null },
-            [MENU_QUICK]: { pos: "quickpos", count: () => QUICK_PLAY.length, back: MENU_MAIN },
-            [MENU_RULES]: { pos: "rulesetpos", count: () => RULESETS.length, back: MENU_MAIN },
+            [MENU_SINGLE]: { pos: "singlepos", count: () => SINGLE_ITEMS.length, back: MENU_MAIN },
+            [MENU_MULTI]: { pos: "multipos", count: () => MULTI_ITEMS.length, back: MENU_MAIN },
+            [MENU_JOIN]: { pos: "multipos", count: () => 1, back: MENU_MULTI },
+            [MENU_QUICK]: { pos: "quickpos", count: () => QUICK_PLAY.length, back: MENU_SINGLE },
+            [MENU_RULES]: { pos: "rulesetpos", count: () => RULESETS.length, back: MENU_SINGLE },
             [MENU_MODES]: { pos: "menupos", count: () => RULESETS[this.rulesetpos].modes.length, back: MENU_RULES },
             [MENU_OPTIONS]: { pos: "optionspos", count: () => OPTIONS_ITEMS.length, back: MENU_MAIN },
             [MENU_CONTROLS]: { pos: "controlspos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
+            [MENU_CONTROLS2]: { pos: "controlspos", count: () => PLAYER2_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_GAMEPAD]: { pos: "padpos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
-            [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: MENU_MODES },
+            [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: this.setupFrom },
         };
         while (this.events.length) {
             // repeat: the key is held. Lists and values then stop at their ends instead of wrapping
             const { code, down, repeat } = this.events.shift();
             if (!down) continue;
+            // the join screen: a rotate key picks player 1's or 2's keys for the next player; Esc goes back
+            if (this.menuStep === MENU_JOIN && code !== "Escape") {
+                if (repeat) continue;
+                for (const keys of [1, 2]) {
+                    if (JOIN_ACTIONS.includes(this.options.actionFor(code, keys))) { this.joinDevice("keys" + keys); break; }
+                }
+                if (this.GAMESTATE === STATE_GAME) return;
+                continue;
+            }
             // per event: an earlier key this frame may have changed the screen
             const settings = this.menuStep === MENU_SETUP ? this.setupItems() : SETTING_ITEMS[this.menuStep];
             const screen = screens[this.menuStep];
@@ -1106,10 +1237,19 @@ class Engine {
                     this.initGame(...this.lastGameArgs);
                     this.GAMESTATE = STATE_GAME;
                     return;
-                } else if (this.menuStep === MENU_MAIN || this.menuStep === MENU_OPTIONS) {
-                    const next = (this.menuStep === MENU_MAIN ? this.mainItems() : OPTIONS_ITEMS)[pos].screen;
+                } else if (this.menuStep === MENU_MULTI && MULTI_ITEMS[pos].modeItem) { // its setup cards
+                    this.setupFrom = MENU_MULTI;
+                    this.menuStep = MENU_SETUP;
+                    this.setuppos = 0;
+                } else if (this.menuStep === MENU_MULTI) { // the join screen: devices picked afresh
+                    this.joined = [];
+                    this.menuStep = MENU_JOIN;
+                } else if (this.menuStep === MENU_MAIN || this.menuStep === MENU_OPTIONS || this.menuStep === MENU_SINGLE) {
+                    const items = this.menuStep === MENU_MAIN ? this.mainItems() : this.menuStep === MENU_SINGLE ? SINGLE_ITEMS : OPTIONS_ITEMS;
+                    const next = items[pos].screen;
                     this.menuStep = next;
-                    if (next !== MENU_RULES && next !== MENU_QUICK) this[screens[next].pos] = 0; // the start lists remember their place
+                    // the start lists remember their place
+                    if (![MENU_RULES, MENU_QUICK, MENU_SINGLE, MENU_MULTI].includes(next)) this[screens[next].pos] = 0;
                     if (this.menuScroll[next]) this.menuScroll[next] = { at: 0, target: 0 };
                 } else if (this.menuStep === MENU_QUICK) {
                     this.initGame(...this.quickArgs());
@@ -1118,6 +1258,7 @@ class Engine {
                 } else if (this.menuStep === MENU_RULES) {
                     this.menuStep = MENU_MODES;
                     this.menupos = 0;
+                    this.setupFrom = MENU_MODES;
                 } else if (this.menuStep === MENU_MODES && this.chosenMode().setup) {
                     this.menuStep = MENU_SETUP;
                     this.setuppos = 0;
@@ -1126,9 +1267,13 @@ class Engine {
                     return;
                 } else if (settings) {
                     this.changeOption(settings[pos].id, 1);
-                } else if (this.menuStep === MENU_CONTROLS) {
-                    if (pos === KEY_ACTIONS.length) this.options.resetKeys();
-                    else this.capturing = KEY_ACTIONS[pos].id; // next key press becomes the binding
+                } else if (this.menuStep === MENU_CONTROLS || this.menuStep === MENU_CONTROLS2) {
+                    const player = this.menuStep === MENU_CONTROLS2 ? 2 : 1, actions = player === 2 ? PLAYER2_ACTIONS : KEY_ACTIONS;
+                    if (pos === actions.length) this.options.resetKeys(player);
+                    else { // next key press becomes the binding
+                        this.capturing = actions[pos].id;
+                        this.capturingPlayer = player;
+                    }
                 } else if (this.menuStep === MENU_GAMEPAD) {
                     if (pos === KEY_ACTIONS.length) this.options.resetPad();
                     else this.padCapturing = KEY_ACTIONS[pos].id; // next pad button becomes the binding
@@ -1189,9 +1334,14 @@ class Engine {
         });
     }
 
-    // The mode selected on the modes screen
+    // The mode selected on the modes screen, or on Multiplayer when the setup cards come from there
     chosenMode() {
-        return RULESETS[this.rulesetpos].modes[this.menupos];
+        return this.setupFrom === MENU_MULTI ? MULTI_ITEMS[this.multipos].modeItem : RULESETS[this.rulesetpos].modes[this.menupos];
+    }
+
+    // The chosen mode's key in setupChoices
+    chosenKey() {
+        return this.setupFrom === MENU_MULTI ? `multi.${this.multipos}` : `${this.rulesetpos}.${this.menupos}`;
     }
 
     // The setup screen's cards for the chosen mode (ids "setup0", "setup1", ...)
@@ -1203,12 +1353,12 @@ class Engine {
     setupCard(id) {
         if (!id.startsWith("setup")) return null;
         const n = Number(id.slice(5));
-        return { n, item: this.chosenMode().setup[n], key: `${this.rulesetpos}.${this.menupos}.${n}` };
+        return { n, item: this.chosenMode().setup[n], key: `${this.chosenKey()}.${n}` };
     }
 
     // The chosen mode's remembered label index for setup card n (0 at first)
     setupIndex(n) {
-        return this.setupChoices[`${this.rulesetpos}.${this.menupos}.${n}`] ?? (this.chosenMode().setup[n].initial || 0);
+        return this.setupChoices[`${this.chosenKey()}.${n}`] ?? (this.chosenMode().setup[n].initial || 0);
     }
 
     // The chosen mode with its setup cards' choices: initGame's arguments
@@ -1317,6 +1467,7 @@ class Engine {
             const mode = this.options.rings;
             const span = mode === "ripple" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
             this.rings.push({
+                gx: this.board.gx, // the board's group: the burst spreads from its well
                 y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
                 life: span, span, power: rows.size,
                 chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
@@ -1757,7 +1908,7 @@ class Engine {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const ease = 1 - Math.pow(1 - k, 3);
             return {
-                x: this.groupX + BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue + 20,
+                x: ring.gx + BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue + 20,
                 r: 30 + ease * (260 + 120 * ring.power),
                 width: 3 + 5 * (1 - k) * ring.power,
                 // brighter with more lines (1-4) and with a longer combo (chain 0 = no combo)
@@ -1776,7 +1927,7 @@ class Engine {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const ease = 1 - Math.pow(1 - k, 3);
             return {
-                x: this.groupX + BOARD_X + BOARD_W / 2, y: (ring.top + ring.bottom) / 2, hue: ring.hue + 20,
+                x: ring.gx + BOARD_X + BOARD_W / 2, y: (ring.top + ring.bottom) / 2, hue: ring.hue + 20,
                 r: 200 + 700 * ease,
                 half: (ring.bottom - ring.top) / 2,
                 width: 4 * (1 - k) + 2,
@@ -1799,7 +1950,7 @@ class Engine {
             const k = 1 - ring.life / ring.span; // 0 -> 1
             const fade = Math.pow(1 - k, 2.5); // strong at first, gone well before the end
             return {
-                x: this.groupX + BOARD_X + BOARD_W / 2, y: ring.y,
+                x: ring.gx + BOARD_X + BOARD_W / 2, y: ring.y,
                 r: 20 + (1 - Math.pow(1 - k, 1.6)) * RIPPLE_REACH,
                 width: (14 + 4 * ring.power) * (1 + 1.5 * k), // spreads as it goes
                 amp: fade * (4 + 2.5 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * RIPPLE_AMP,
@@ -2194,10 +2345,23 @@ class Engine {
                 hint = "ENTER  SELECT" + (this.game ? "      ESC  RESUME" : "");
                 break;
             }
+            case MENU_SINGLE:
+                heading("SINGLE PLAYER");
+                this.drawMenuList(SINGLE_ITEMS, this.singlepos, listTop);
+                hint = "ENTER  SELECT      ESC  BACK";
+                break;
+            case MENU_MULTI:
+                heading("MULTIPLAYER");
+                this.drawMenuList(MULTI_ITEMS, this.multipos, listTop);
+                hint = "ENTER  SELECT      ESC  BACK";
+                break;
+            case MENU_JOIN:
+                hint = this.drawJoin(listTop, heading);
+                break;
             case MENU_QUICK: {
                 // tighter cards like the rule sets', the best for the selected mode and the hint under them
                 const top = listTop - 20, rowH = 44, gap = 4;
-                heading("QUICK PLAY  ·  CHOOSE A MODE", INK_DIM, top - 26);
+                heading("SINGLE PLAYER  ·  QUICK PLAY", INK_DIM, top - 26);
                 this.drawMenuList(QUICK_PLAY, this.quickpos, top, rowH, gap);
                 const bottom = top + menuListHeight(QUICK_PLAY, rowH, gap);
                 this.drawBest(bottom + 22, this.quickArgs());
@@ -2208,7 +2372,7 @@ class Engine {
             case MENU_RULES: {
                 // the longest list: tighter cards, from a little higher up, the hint under them
                 const top = listTop - 20, rowH = 44, gap = 4;
-                heading("START  ·  CHOOSE A RULE SET", INK_DIM, top - 26);
+                heading("SINGLE PLAYER  ·  CHOOSE A RULE SET", INK_DIM, top - 26);
                 this.drawMenuList(RULESETS, this.rulesetpos, top, rowH, gap);
                 hintY = Math.max(hintY, top + menuListHeight(RULESETS, rowH, gap) + 22);
                 hint = "ENTER  SELECT      ESC  BACK";
@@ -2226,9 +2390,9 @@ class Engine {
                 break;
             }
             case MENU_SETUP: {
-                // Breadcrumb: rule set and mode, then a generic prompt
-                const ruleset = RULESETS[this.rulesetpos];
-                heading(`${ruleset.name}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase());
+                // Breadcrumb: rule set (or Multiplayer) and mode, then a generic prompt
+                const from = this.setupFrom === MENU_MULTI ? "Multiplayer" : RULESETS[this.rulesetpos].name;
+                heading(`${from}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase());
                 const items = this.settingCards(this.setupItems(), true);
                 this.drawMenuList(items, this.setuppos, listTop);
                 const bottom = listTop + menuListHeight(items, 64, 10);
@@ -2268,13 +2432,17 @@ class Engine {
                 break;
             }
             case MENU_CONTROLS:
-                heading("OPTIONS  ·  KEYBINDS");
-                this.drawBindings(listTop - 8, this.options.keys, keyLabel, this.controlspos, this.capturing, "PRESS A KEY", tetS);
+            case MENU_CONTROLS2: {
+                const p2 = step === MENU_CONTROLS2;
+                heading(p2 ? "OPTIONS  ·  KEYBINDS  ·  PLAYER 2" : "OPTIONS  ·  KEYBINDS  ·  PLAYER 1");
+                this.drawBindings(listTop - 8, p2 ? PLAYER2_ACTIONS : KEY_ACTIONS, this.options.keysOf(p2 ? 2 : 1), keyLabel, this.controlspos,
+                    this.capturing, "PRESS A KEY", p2 ? tetZ : tetS);
                 hint = this.capturing ? "NEW KEY ADDS · BOUND KEY REMOVES      ESC  CANCEL" : "ENTER  CHANGE      ESC  BACK";
                 break;
+            }
             case MENU_GAMEPAD:
-                heading("OPTIONS  ·  GAMEPAD");
-                this.drawBindings(listTop - 8, this.options.pad, padLabel, this.padpos, this.padCapturing, "PRESS A BUTTON", tetI);
+                heading("OPTIONS  ·  GAMEPAD  ·  EVERY PAD");
+                this.drawBindings(listTop - 8, KEY_ACTIONS, this.options.pad, padLabel, this.padpos, this.padCapturing, "PRESS A BUTTON", tetI);
                 // the cancel hint names Start, the pad's only way out (Esc works too)
                 hint = this.padCapturing ? "NEW BUTTON ADDS · BOUND BUTTON REMOVES      START  CANCEL"
                     : this.gamepad.connected ? "ENTER  CHANGE      ESC  BACK" : "NO GAMEPAD FOUND: PRESS A BUTTON ON IT      ESC  BACK";
@@ -2285,6 +2453,33 @@ class Engine {
         if (this.gamepad.active) hint = padWords(hint);
         else if (this.touch.enabled) hint = touchWords(hint);
         this.text(hint, cx, hintY, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
+    }
+
+    // Multiplayer's join screen: a card per player with the device they picked, or the prompt for
+    // the one whose turn it is; under them which keys and buttons pick a device. Returns the hint
+    // (Start, not B, goes back on a pad: B rotates)
+    drawJoin(top, heading) {
+        const cx = VIEW_W / 2, o = this.options;
+        heading("MULTIPLAYER  ·  VERSUS PLAYER");
+        const cards = [0, 1].map(p => ({
+            name: "Player " + (p + 1), accent: p ? tetZ : tetT, noArrow: true,
+            value: this.joined[p] ? deviceName(this.joined[p]) : p === this.joined.length ? "PRESS ROTATE" : "WAITING",
+        }));
+        this.drawMenuList(cards, this.joined.length, top);
+        const y = top + menuListHeight(cards, 64, 10) + 30;
+        const pair = (a, b) => `${a} / ${b}`;
+        this.text(`PLAYER ${this.joined.length + 1}: PRESS ROTATE ON YOUR KEYS OR GAMEPAD`, cx, y,
+            { size: 12, weight: 800, color: this.pulseInk(10), align: "center", spacing: 3 });
+        const ways = [
+            "KEYS 1  " + pair(keyLabel(o.keys.rotl[0]), keyLabel(o.keys.rotr[0])),
+            "KEYS 2  " + pair(keyLabel(o.keys2.rotl[0]), keyLabel(o.keys2.rotr[0])),
+            "GAMEPAD  " + pair(padLabel(o.pad.rotl[0]), padLabel(o.pad.rotr[0])),
+        ];
+        this.text(ways.join("      ·      "), cx, y + 28, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 2 });
+        const pads = this.gamepad.pads.length;
+        this.text(pads ? `${pads} GAMEPAD${pads > 1 ? "S" : ""} CONNECTED` : "NO GAMEPAD FOUND: PRESS A BUTTON ON IT TO WAKE IT", cx, y + 52,
+            { size: 11, weight: 700, color: INK_FAINT, align: "center", spacing: 2 });
+        return this.gamepad.active ? "START  BACK" : "ESC  BACK";
     }
 
     // One block each as a falling piece, settled stack and ghost in the chosen block style, at
@@ -2311,12 +2506,12 @@ class Engine {
         return inkAlpha(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(this.clock / period)));
     }
 
-    // Rows of action name and keys (or gamepad buttons: table, labelled by label); Enter on a row
-    // waits for a key to add (or remove, if it has it): capturing is the action waiting, prompt is
-    // shown in its row
-    drawBindings(top, table, label, pos, capturing, prompt, accent) {
+    // Rows of action name and keys (or gamepad buttons: table, labelled by label) for the actions
+    // listed; Enter on a row waits for a key to add (or remove, if it has it): capturing is the action
+    // waiting, prompt is shown in its row
+    drawBindings(top, actions, table, label, pos, capturing, prompt, accent) {
         const listW = 420, rowH = 31, x = VIEW_W / 2 - listW / 2;
-        const rows = [...KEY_ACTIONS.map(a => ({ name: a.name, key: table[a.id], id: a.id })), { name: "Reset to defaults" }];
+        const rows = [...actions.map(a => ({ name: a.name, key: table[a.id], id: a.id })), { name: "Reset to defaults" }];
         rows.forEach((row, n) => {
             const y = top + n * (rowH + 2);
             const selected = n === pos;
@@ -2408,25 +2603,34 @@ class Engine {
     }
 
     drawGame() {
-        const r = this.r, game = this.game;
-        this.board = this.ownBoard;
-        r.save();
-        r.translate(this.groupX, 0); // left of the bot's board in a versus match
+        this.drawSide(this.ownBoard, this.motion, 0);
+        if (this.match && this.match.duo) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
+        else if (this.match) this.drawOpponent();
+    }
 
-        const m = this.motion;
+    // A player's board group where its view is placed (view.gx): the field in its motion m, the
+    // panels, in a match the garbage meter, the lines sent and (two players) whose it is, and the
+    // banners. side: 0 for player 1, 1 for player 2
+    drawSide(view, m, side) {
+        const r = this.r, game = view.game, match = this.match;
+        this.board = view;
+        r.save();
+        r.translate(view.gx, 0); // left of the other board in a versus match
+
         if (m.rx || m.ry || m.dx || m.dy || m.dz) this.drawBoardInMotion(m);
         else this.drawBoard(); // straight onto the screen, pixel-sharp
         this.drawParticles();  // confetti flies off the field: never tilted
         if (this.layout.compact) this.drawCompactPanels();
         else this.drawSidePanels();
-        if (this.match) {
+        if (match) {
             this.drawGarbageMeter(game);
-            this.drawAttackPopups();
+            this.drawAttackPopups(match.popups[side]);
+            if (match.duo) this.drawPlayerTag(side, match.devices[side]);
         }
 
         // Overlays
-        if (this.match && this.match.result) {
-            const won = this.match.result === "win";
+        if (match && match.result) {
+            const won = (match.result === "win") === (side === 0);
             const sub = this.gamepad.active ? "START FOR MENU" : this.touch.enabled ? "TAP MENU" : "ENTER  REMATCH  ·  ESC  MENU";
             this.boardBanner(won ? "VICTORY" : "DEFEAT", sub, 1, PIECE_COLORS[won ? tetO : tetZ].base);
         } else if (game.isGameOver()) {
@@ -2437,7 +2641,13 @@ class Engine {
             this.boardBanner(title, this.gamepad.active ? padWords(sub) : this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew, game.endNotes());
         }
         r.restore();
-        if (this.match) this.drawOpponent();
+        this.board = this.ownBoard;
+    }
+
+    // Two players: above the well, which player's board it is and the device they play with
+    drawPlayerTag(side, device) {
+        this.text("PLAYER " + (side + 1), BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
+        this.text(deviceName(device), BOARD_X + BOARD_W, this.boardY - 25, { size: 11, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
     }
 
     // Garbage waiting for a board, beside its well: a bar per attack, rising from the bottom
@@ -2453,10 +2663,10 @@ class Engine {
         }
     }
 
-    // Lines the player sent: "+4" rising from the upper part of the well and fading
-    drawAttackPopups() {
+    // Lines a player sent (popups): "+4" rising from the upper part of their well and fading
+    drawAttackPopups(popups) {
         const r = this.r;
-        for (const p of this.match.popups) {
+        for (const p of popups) {
             const k = 1 - p.life / ATTACK_LIFE;
             r.save();
             r.globalAlpha = Math.min(1, p.life / 15);

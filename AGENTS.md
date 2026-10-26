@@ -47,7 +47,7 @@ when WebGL is unavailable).
 | `game/themes.js` | Themes (`THEMES`; `THEME_IDS` gives the menu order, the first is the default): the look around the blocks. Deep Space (the default; a starfield with drifting nebulae (the backdrop's colour blobs shaped by a flowing domain-warped noise in `WASH_FS`, `nebula` in the ambient shapes; their hue follows clears like Gallery's wash, at 0.4 of its step, `hueStep`), a ringed planet and a cratered moon in a gibbous phase (`spaceMoon()`), both lit from `SPACE_LIGHT` and hiding the nebulae (`shade` in the ambient shapes) and drifting stars behind them; stars drift left, nearer ones faster, rushing on a clear's pulse, with a shooting star now and then and, every one to two minutes, a bright warm star with a halo and diffraction spikes drifting across in about 30 s (`SPACE_SUN_*`), all passing behind the planet and moon (`spaceInView()`); cyan HUD hairlines and corner brackets on the well, panels and cards; three concentric orbital rings in one plane under the wordmark with the seven colours going round them, `SPACE_ORBITS`, rendered once per resolution, `orbitTexture()`), Night Gallery (id `gallery`: the original night gallery look; the code calls it Gallery) and Field lines (fine lines across a near-black view bending round four slowly drifting bumps, `LINES_BUMPS`, coloured where they bend most (piece colours turned with the backdrop's hue, `LINES_HUE_STEP` times Gallery's step per clear) and swelling on a clear's pulse, drawn by the backdrop's `LINES_FS`, still with the animated backdrop or effects off, and faintly through the well (`LINES_WELL_ALPHA`; solid with effects off); flat black panels and cards with a light rule along the top, a thin wordmark over seven dashes). A theme has `name` and `background()` (the static picture); its optional hooks (`ink`, `ambient()` / `update()`, `lines()`, `glowRgb()`, `frame()`, `panel()`, `label()`, `card()`, `stripe()`, `wordmark()`) replace the engine's Gallery drawing (`Engine.theme`). Text in `INK`'s colour (any alpha) takes the theme's `ink` (`Engine.text()`). |
 | `game/options.js` | `Options`: key and gamepad bindings, block style and effects level in localStorage; `keyLabel()` for keycaps. |
 | `game/touch.js` | `TouchControls`: handheld-style on-screen controls on touch devices (or `?touch=1`): a D-pad (up = hard drop, down = soft drop; one touch area, so the finger can roll between arms, the lower diagonals add soft drop to a move, and up needs a fresh touch in games), rotate and HOLD buttons and a MENU pill; in menus the D-pad gives the arrows and the round buttons OK/BACK. They feed `Engine.onKey()` with the same key codes. `place()` puts them in a bar below the view (portrait) or beside it (landscape) and returns the room they take, which `Engine.resize()` leaves free. |
-| `game/gamepad.js` | `GamepadControls`: gamepads (Gamepad API, standard layout, every pad merged), polled each game frame (`poll()`, from `Engine.frame()`). Like the touch controls they feed `Engine.onKey()` with each action's first key. In games the buttons and left stick directions act as bound in `options.pad` (Options → Gamepad; Start always opens the menu); menus take fixed ones (`PAD_MENU`: D-pad or stick arrows, A = Enter, B and Start = Esc; the sound button works there too), held directions repeat. A control held over a switch between menu and game, or over a binding, is ignored until let go. While a pad was used last (`active`, cleared by any keydown) hints name its buttons (`padWords()`). |
+| `game/gamepad.js` | `GamepadControls`: gamepads (Gamepad API, standard layout), polled each game frame (`poll()`, from `Engine.frame()`), each pad on its own (state keyed `"pad:control"`, by the pad's index; `pads`: those connected). In games the buttons and left stick directions act as bound in `options.pad` (Options → Gamepad, one table for every pad): each pad's actions go to `Engine.padAction(pad, action, down)`, so any pad drives a one-player game and each its own player in a two-player one (`heldActions(pad)` for releases); Start opens the menu. On the multiplayer join screen (mode `"join"`) a pad's rotate buttons (`JOIN_ACTIONS`) call `Engine.joinDevice("pad:N")` and Start goes back. Menus take fixed ones, from any pad, fed to `Engine.onKey()` as key events (`PAD_MENU`: D-pad or stick arrows, A = Enter, B and Start = Esc; the sound button works there too), held directions repeat. A control held over a switch between menu and game, or over a binding, is ignored until let go. While a pad was used last (`active`, cleared by any keydown) hints name its buttons (`padWords()`). |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for the rule sets (~425 checks). |
@@ -96,10 +96,10 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `RuleGame.testSetup()`, which refuses during READY, after game over, in the Guideline, and for
   setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4; TGM+,
   TAP Normal and Shirase: 1 and 4; Easy: 1, 4, 5 and 6; 5 is TGM3 Master's and Easy's only).
-- Game keys come from `options.keys` (rebindable): each action has a list of one or two key codes
+- Game keys come from `options.keys` (rebindable; player 2's from `options.keys2`, `PLAYER2_ACTIONS`: the same but the sound key, which works for both; defaults `DEFAULT_KEYS2`, ESDF to move and drop, W/R turn, Q 180°, left Shift hold, clear of player 1's): each action has a list of one or two key codes
   (`MAX_KEYS_PER_ACTION`). On the Keybinds screen, Enter then a new key adds it (a third replaces
   the action's oldest); a key the action already has is removed, unless it is its only one
-  (`Options.bind()`). A key taken from another action leaves that one its other key, or if it had
+  (`Options.bind(action, code, player)`; the other player's keys give the key up where that leaves the action another, player 2 can't take the sound key). A key taken from another action leaves that one its other key, or if it had
   none, the replaced key (or, with nothing replaced, the two swap). An action is released only when
   none of its keys is held. Key hints and the touch controls use each action's first key.
 - Gamepad bindings (`options.pad`, Options → Gamepad, `drawBindings()` like the Keybinds screen): per action one or two
@@ -109,16 +109,16 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `padCapturing`; the next control pressed on a pad is bound by `GamepadControls.poll()` (`Options.bindPad()`, the same rules
   as keys, `bindIn()`), Start or Esc cancels. Start (`PAD_START`) can't be bound. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
-- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Quick Play, Custom Game, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, Versus, TGM1 Master,
+- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Single Player, Multiplayer, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Single Player → `MENU_SINGLE` (`SINGLE_ITEMS`: Quick Play, Custom Game). Multiplayer → `MENU_MULTI` (`MULTI_ITEMS`): Versus Bot (its `modeItem`, Guideline versus with the Bot card, goes through `MENU_SETUP` like a Custom Game mode: `setupFrom` says which screen the cards came from, for `chosenMode()`, its `setupChoices` key (`chosenKey()`) and Esc) or Versus Player → `MENU_JOIN` (below). Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
   TAP Master, TGM3 Master, NES A-Type, each a `RULESETS` mode named by rule set and mode, started at once with its setup
   cards' first or `initial` choices (`quickArgs()` → `modeArgs()`), so its records are Custom Game's for those choices; the
   list keeps its place like the rule sets'). Custom Game → `MENU_RULES` (rule sets) →
-  `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master/Versus for the Guideline, Master/20G
+  `MENU_MODES` (each rule set's `modes`: Marathon/Sprint/Ultra/Dig/Master for the Guideline, Master/20G
   for TGM1, Normal/Master/Death/TGM+ for TAP, Master/Easy/Shirase for TGM3, Normal/Hi-Speed 1/Hi-Speed 2/
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or a hidden mode's option
-  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, and Versus's `"bot"`, gathered into `options`) (the label's entry in
+  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, and Versus Bot's `"bot"`, gathered into `options`) (the label's entry in
   `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
   but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; TGM3 Master's Exams,
   On / Off; GB's Heart, Off / On; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
@@ -128,7 +128,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
   `menuAction()` turns them into arguments). The mode lists use the Visuals screen's
   tighter cards (`VISUALS_ROWS`), the rule set list (seven) tighter still, a little higher, with its
-  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds"),
+  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds"), `MENU_CONTROLS2` (player 2's, "Keybinds P2"),
   `MENU_GAMEPAD` (gamepad bindings), `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
 - Visuals and Guideline handling are setting screens (`SETTING_ITEMS`: `VISUAL_ITEMS`, `HANDLING_ITEMS`),
@@ -258,10 +258,10 @@ frame takes only IRS and gravity (`moveOnSpawn` false, as NullpoMino's Classic r
 shifts and up pressed on it act on the next frame if still held (`deferredPush`), and soft drop waits
 too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`, `ihs`; the Guideline's can be turned off).
 
-### Versus against the bot (`engine.js`, VERSUS section)
-- Guideline → Versus (or Quick Play → Versus) starts a match (`initGame()` → `newMatch()`): the player's game and the
+### Versus: against the bot, or two players (`engine.js`, VERSUS section)
+- Multiplayer → Versus Bot starts a match (`initGame()` → `newMatch()`): the player's game and the
   bot's (`Bot` at the Bot card's level, `BOT_SETUP`), both `"versus"` and dealt from one random seed. `this.match` holds
-  the bot, its `BoardView`, the "+lines" pop-ups and `result` ("win"/"lose"). `matchFrame()` runs after the player's
+  the bot, the other side's `BoardView` (`view`), the "+lines" pop-ups by side and `result` ("win"/"lose", for player 1). `matchFrame()` runs after the player's
   frame: the bot plays a frame, each side's attacks go to the other with a random hole column, garbage rising shakes
   the player's field up (`riseShake()`); the first to top out loses, the other's game ends (VICTORY / WINNER), both stand
   still, and Enter starts a rematch (Restart in the menu too). The match pauses with the menu like any game.
@@ -275,6 +275,19 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   scaled 0.85 (compact 0.5), flat and without side panels (`drawOpponent()`). Garbage meters beside the wells
   (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" over the player's well (`drawAttackPopups()`), sounds
   `"garbage"`, `"attack"`, `"ko"`.
+- Two players (Multiplayer → Versus Player): the join screen (`MENU_JOIN`, `drawJoin()`) takes a rotate press (`JOIN_ACTIONS`)
+  on an input device for player 1, then another device for player 2 (`joinDevice()`, `joined`; Esc or a pad's Start goes
+  back): `"keys1"` (player 1's keys, and the touch controls), `"keys2"` (player 2's keys) or `"pad:N"` (`deviceName()`).
+  The second starts the game (`initGame()` with `options.duo` → `newDuo()`: `match.duo`, `devices` (`duoDevices`, kept
+  for rematches), `view` player 2's board, both games with the player's handling and one seed). Input: every event is a
+  key `{code}` or a pad action `{pad, action}`; `handleGameInput()` gives each player's to `inputs[p]` (`eventTarget()`;
+  one player alone takes player 1's keys and every pad), releasing an action only when the player's device holds it no
+  more (`actionHeld()`); `matchFrame()` plays player 2's frame with `inputs[1]`. Esc or Start pauses both. Both boards
+  are drawn whole by `drawSide()` (panels, meter, "+lines", `drawPlayerTag()`: PLAYER n and the device), side by side at
+  `duo.gx` (`LAYOUT_DUO_FULL` / `LAYOUT_DUO_COMPACT`, `duoLayout()`, `placeBoards()`, `BoardView.gx`); both are `own`
+  (sounds, shake, bursts), each with its own shake (`BoardView.shake`; the drift is shared, player 2's mirrored,
+  `boardMotion(view)`), board glow (the backdrop takes up to two, `glows`) and clear bursts (`ring.gx`). VICTORY and
+  DEFEAT bannered on each side; Enter rematches.
 
 ### Rendering (`engine.js`, `renderer.js`, `backdrop.js`, `tiles.js`)
 - Everything on screen is drawn with WebGL (1) into one canvas, `#screen`; there is no 2D
@@ -782,11 +795,11 @@ export names explicitly at the top; add new globals there, and new rule files to
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
-- Menu: main screen with Quick Play, Custom Game and Options (Continue and Restart on top during a game); Quick Play lists
+- Menu: main screen with Single Player, Multiplayer and Options (Continue and Restart on top during a game; the user's request: Quick Play and Custom Game moved under Single Player, Multiplayer has Versus Bot and Versus Player, a local split screen whose devices are picked by a rotate press on each); Quick Play lists
   common modes with no setup step (the user's request); Custom Game (named New Game until Quick Play came; the user's rename) has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
   the rule set and mode lists use tighter cards). Guideline's
-  modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig", "Master"
-  and "Versus" (Bot: Level 0 … Level 10, 6 at first; also in Quick Play, the user's request: play the Guideline against the bot);
+  modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master"
+  (Versus against the bot is Multiplayer → Versus Bot: Bot card Level 0 … Level 10, 6 at first);
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,
   Mono and Ghost cards), TGM3's are
   "Master", "Easy" and "Shirase" (each with a Rule card, World or Classic), TAP's "Normal", "Master", "Death" and
@@ -802,7 +815,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), pad (the same actions, lists of pad controls), theme, tileset, confetti, effects, backdrop, rings, flash, tilt, shake (an index into `SHAKE_LEVELS`; a saved true/false from before becomes Normal/Off), trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), keys2 (player 2's, the same without sound), pad (the same actions, lists of pad controls), theme, tileset, confetti, effects, backdrop, rings, flash, tilt, shake (an index into `SHAKE_LEVELS`; a saved true/false from before becomes Normal/Off), trail, border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
   qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).

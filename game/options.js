@@ -20,13 +20,26 @@ const KEY_ACTIONS = [
     { id: "sound", name: "Sound on/off" },
 ];
 
+// Player 2's keys (local multiplayer on one keyboard): the same actions but the sound key, which
+// stays player 1's and works for both
+const PLAYER2_ACTIONS = KEY_ACTIONS.filter(a => a.id !== "sound");
+// the actions that pick a player's input device on the multiplayer join screen
+const JOIN_ACTIONS = ["rotl", "rotr", "rot180"];
+
 // Each action takes up to MAX_KEYS_PER_ACTION keys (lists of KeyboardEvent.code), at least one
 const DEFAULT_KEYS = {
     left: ["ArrowLeft"], right: ["ArrowRight"], soft: ["ArrowDown"], hard: ["ArrowUp"],
     rotl: ["KeyZ"], rotr: ["KeyX"], rot180: ["KeyA"], hold: ["Space"], sound: ["KeyM"],
 };
+// player 2's, clear of player 1's: ESDF to move and drop, W and R to turn, Q 180°, left Shift hold
+const DEFAULT_KEYS2 = {
+    left: ["KeyS"], right: ["KeyF"], soft: ["KeyD"], hard: ["KeyE"],
+    rotl: ["KeyW"], rotr: ["KeyR"], rot180: ["KeyQ"], hold: ["ShiftLeft"],
+};
 const MAX_KEYS_PER_ACTION = 2;
-const defaultKeys = () => Object.fromEntries(Object.entries(DEFAULT_KEYS).map(([id, codes]) => [id, [...codes]]));
+const copyTable = table => Object.fromEntries(Object.entries(table).map(([id, codes]) => [id, [...codes]]));
+const defaultKeys = () => copyTable(DEFAULT_KEYS);
+const defaultKeys2 = () => copyTable(DEFAULT_KEYS2);
 
 // Gamepad bindings: per action, up to MAX_KEYS_PER_ACTION controls of the standard layout, a button
 // index or a left stick direction (PAD_STICK). Start (PAD_START) can't be bound: it opens the menu
@@ -36,7 +49,7 @@ const DEFAULT_PAD = {
     left: [14, PAD_STICK.left], right: [15, PAD_STICK.right], soft: [13, PAD_STICK.down], hard: [12],
     rotl: [1, 2], rotr: [0], rot180: [3], hold: [4, 5], sound: [8],
 };
-const defaultPad = () => Object.fromEntries(Object.entries(DEFAULT_PAD).map(([id, buttons]) => [id, [...buttons]]));
+const defaultPad = () => copyTable(DEFAULT_PAD);
 const PAD_LABELS = {
     0: "A", 1: "B", 2: "X", 3: "Y", 4: "LB", 5: "RB", 6: "LT", 7: "RT", 8: "BACK", 9: "START", 10: "LS", 11: "RS",
     12: "D ↑", 13: "D ↓", 14: "D ←", 15: "D →", 16: "HOME",
@@ -155,6 +168,7 @@ function stepIndex(i, dir, n, wrap = true) {
 class Options {
     constructor() {
         this.keys = defaultKeys();
+        this.keys2 = defaultKeys2(); // player 2's (PLAYER2_ACTIONS)
         this.pad = defaultPad();
         this.theme = THEME_IDS[0]; // the look around the blocks (themes.js)
         this.tileset = TILESET_IDS[0];
@@ -171,12 +185,13 @@ class Options {
         Object.assign(this, GUIDELINE_HANDLING);
         try {
             const saved = JSON.parse(localStorage.getItem(OPTIONS_STORAGE_KEY) || "{}");
-            if (saved.keys) {
-                for (const { id } of KEY_ACTIONS) {
-                    const codes = saved.keys[id];
+            for (const [field, actions] of [["keys", KEY_ACTIONS], ["keys2", PLAYER2_ACTIONS]]) {
+                if (!saved[field]) continue;
+                for (const { id } of actions) {
+                    const codes = saved[field][id];
                     if (!Array.isArray(codes)) continue;
                     const valid = [...new Set(codes.filter(c => typeof c === "string" && !RESERVED_KEYS.includes(c)))];
-                    if (valid.length) this.keys[id] = valid.slice(0, MAX_KEYS_PER_ACTION);
+                    if (valid.length) this[field][id] = valid.slice(0, MAX_KEYS_PER_ACTION);
                 }
             }
             if (saved.pad) {
@@ -199,7 +214,7 @@ class Options {
     }
 
     save() {
-        const saved = { keys: this.keys, pad: this.pad };
+        const saved = { keys: this.keys, keys2: this.keys2, pad: this.pad };
         for (const id of [...Object.keys(OPTION_CHOICES), ...OPTION_TOGGLES]) saved[id] = this[id];
         if (!Number.isFinite(saved.sdf)) saved.sdf = null;
         try {
@@ -211,9 +226,15 @@ class Options {
     // only one); a key past MAX_KEYS_PER_ACTION replaces the action's oldest. Another action using
     // the key loses it, and if that was its only key it takes the replaced one (or, with none
     // replaced, swaps: it gets this action's old key, which this action gives up)
-    bind(action, code) {
-        if (RESERVED_KEYS.includes(code)) return false;
-        bindIn(this.keys, action, code);
+    // player: 1 or 2, whose keys. The other player's keys give the key up where that leaves the
+    // action another one (else both have it); player 2 can't take player 1's sound key
+    bind(action, code, player = 1) {
+        if (RESERVED_KEYS.includes(code) || (player === 2 && this.keys.sound.includes(code))) return false;
+        const [mine, theirs] = player === 2 ? [this.keys2, this.keys] : [this.keys, this.keys2];
+        bindIn(mine, action, code);
+        for (const codes of Object.values(theirs)) {
+            if (codes.includes(code) && codes.length > 1) codes.splice(codes.indexOf(code), 1);
+        }
         this.save();
         return true;
     }
@@ -226,9 +247,15 @@ class Options {
         return true;
     }
 
-    resetKeys() {
-        this.keys = defaultKeys();
+    resetKeys(player = 1) {
+        if (player === 2) this.keys2 = defaultKeys2();
+        else this.keys = defaultKeys();
         this.save();
+    }
+
+    // A player's key table (1 or 2)
+    keysOf(player) {
+        return player === 2 ? this.keys2 : this.keys;
     }
 
     resetPad() {
@@ -268,9 +295,10 @@ class Options {
         return Object.fromEntries(HANDLING_IDS.map(id => [id, this[id]]));
     }
 
-    // Action bound to a key code, or null
-    actionFor(code) {
-        for (const { id } of KEY_ACTIONS) if (this.keys[id].includes(code)) return id;
+    // Action bound to a key code in a player's keys (1 or 2), or null
+    actionFor(code, player = 1) {
+        const table = this.keysOf(player);
+        for (const id in table) if (table[id].includes(code)) return id;
         return null;
     }
 
@@ -290,7 +318,7 @@ function bindIn(table, action, code) {
     }
     keys.push(code);
     const replaced = keys.length > MAX_KEYS_PER_ACTION ? keys.shift() : null;
-    for (const { id } of KEY_ACTIONS) {
+    for (const id in table) {
         const other = table[id];
         if (id === action || !other.includes(code)) continue;
         other.splice(other.indexOf(code), 1);

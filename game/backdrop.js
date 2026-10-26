@@ -138,9 +138,9 @@ const BOARD_FS = `
 precision highp float;
 uniform vec2 uSize;
 uniform vec3 uView;                       // scale, offset x, offset y of the logical view
-uniform vec4 uGlowRect;                   // x0, y0, x1, y1
-uniform float uGlowSigma;
-uniform vec4 uGlowColor;                  // rgb, alpha (0: no glow)
+uniform vec4 uGlowRect[2];                // x0, y0, x1, y1 (a glow per board: two players have two)
+uniform float uGlowSigma[2];
+uniform vec4 uGlowColor[2];               // rgb, alpha (0: no glow)
 uniform vec4 uRing[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, line width (logical)
 uniform vec4 uRingColor[${BACKDROP_MAX_RINGS}];  // core rgb, alpha (0: unused)
 uniform vec3 uRingGlow[${BACKDROP_MAX_RINGS}];   // glow rgb
@@ -166,11 +166,18 @@ void main() {
         float glow = 0.5 * (erf((hw - d) * k) + erf((hw + d) * k));
         ring += uRingColor[i].a * (uRingGlow[i] * glow + uRingColor[i].rgb * core);
     }
-    float s = 1.0 / (uGlowSigma * 1.4142136);
-    float gx = 0.5 * (erf((p.x - uGlowRect.x) * s) - erf((p.x - uGlowRect.z) * s));
-    float gy = 0.5 * (erf((p.y - uGlowRect.y) * s) - erf((p.y - uGlowRect.w) * s));
-    float ga = uGlowColor.a * gx * gy;
-    gl_FragColor = vec4(uGlowColor.rgb * ga + ring * (1.0 - ga), ga);
+    vec3 rgb = ring;
+    float alpha = 0.0;
+    for (int i = 0; i < 2; i++) { // each glow painted over what is under it
+        if (uGlowColor[i].a <= 0.0) continue;
+        float s = 1.0 / (uGlowSigma[i] * 1.4142136);
+        float gx = 0.5 * (erf((p.x - uGlowRect[i].x) * s) - erf((p.x - uGlowRect[i].z) * s));
+        float gy = 0.5 * (erf((p.y - uGlowRect[i].y) * s) - erf((p.y - uGlowRect[i].w) * s));
+        float ga = uGlowColor[i].a * gx * gy;
+        rgb = uGlowColor[i].rgb * ga + rgb * (1.0 - ga);
+        alpha = ga + alpha * (1.0 - ga);
+    }
+    gl_FragColor = vec4(rgb, alpha);
 }`;
 
 // Clear ripples (Clear burst: Ripple): the finished frame, drawn onto the screen through a
@@ -250,6 +257,9 @@ class GLBackdrop {
         this.ring = new Float32Array(BACKDROP_MAX_RINGS * 4);
         this.ringColor = new Float32Array(BACKDROP_MAX_RINGS * 4);
         this.ringGlow = new Float32Array(BACKDROP_MAX_RINGS * 3);
+        this.glowRect = new Float32Array(2 * 4);
+        this.glowSigma = new Float32Array(2);
+        this.glowColor = new Float32Array(2 * 4);
         this.waveAmp = new Float32Array(BACKDROP_MAX_RINGS);
         this.bump = new Float32Array(BACKDROP_MAX_BUMPS * 4);
         this.bumpColor = new Float32Array(BACKDROP_MAX_BUMPS * 3);
@@ -295,7 +305,7 @@ class GLBackdrop {
     //   shade: [[x, y, r]] (backdrop logical, at most 2) circles in front of the blobs,
     //   lines: null or {spacing, ink: [r, g, b, a], bumps: [{x, y, r, amp, rgb}]} (same),
     //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
-    //   glow: null or {rect: [x0, y0, x1, y1], sigma, rgb, a} }
+    //   glows: up to two of {rect: [x0, y0, x1, y1], sigma, rgb, a}, a board glow each }
     render(scene) {
         const gl = this.gl;
         this.r.flush(); // anything queued before goes underneath
@@ -403,15 +413,18 @@ class GLBackdrop {
             gl.uniform4fv(p.u("uRingColor"), ringColor);
             gl.uniform3fv(p.u("uRingGlow"), ringGlow);
             gl.uniform1f(p.u("uRingSigma"), scene.ringSigma);
-            const glow = scene.glow;
-            if (glow) {
-                gl.uniform4fv(p.u("uGlowRect"), glow.rect);
-                gl.uniform1f(p.u("uGlowSigma"), glow.sigma);
-                gl.uniform4f(p.u("uGlowColor"), glow.rgb[0], glow.rgb[1], glow.rgb[2], glow.a);
-            } else {
-                gl.uniform1f(p.u("uGlowSigma"), 1);
-                gl.uniform4f(p.u("uGlowColor"), 0, 0, 0, 0);
-            }
+            const glowRect = this.glowRect, glowSigma = this.glowSigma, glowColor = this.glowColor;
+            glowSigma.fill(1);
+            glowColor.fill(0); // alpha 0: no glow
+            scene.glows.slice(0, 2).forEach((glow, i) => {
+                glowRect.set(glow.rect, i * 4);
+                glowSigma[i] = glow.sigma;
+                glowColor.set(glow.rgb, i * 4);
+                glowColor[i * 4 + 3] = glow.a;
+            });
+            gl.uniform4fv(p.u("uGlowRect"), glowRect);
+            gl.uniform1fv(p.u("uGlowSigma"), glowSigma);
+            gl.uniform4fv(p.u("uGlowColor"), glowColor);
             gl.enable(gl.SCISSOR_TEST);
             gl.scissor(box[0], height - box[3], box[2] - box[0], box[3] - box[1]); // GL counts from the bottom
             this.drawFullscreen(p);
@@ -497,8 +510,8 @@ class GLBackdrop {
             x0 = Math.min(x0, ax); y0 = Math.min(y0, ay);
             x1 = Math.max(x1, bx); y1 = Math.max(y1, by);
         };
-        const glow = scene.glow;
-        if (glow && glow.a > 0) {
+        for (const glow of scene.glows) {
+            if (glow.a <= 0) continue;
             const m = 4 * glow.sigma;
             add(glow.rect[0] - m, glow.rect[1] - m, glow.rect[2] + m, glow.rect[3] + m);
         }
