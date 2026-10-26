@@ -284,7 +284,11 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   one player alone takes player 1's keys and every pad), releasing an action only when the player's device holds it no
   more (`actionHeld()`); `matchFrame()` plays player 2's frame with `inputs[1]`. Esc or Start pauses both. Both boards
   are drawn whole by `drawSide()` (panels, meter, "+lines", `drawPlayerTag()`: PLAYER n and the device), side by side at
-  `duo.gx` (`LAYOUT_DUO_FULL` / `LAYOUT_DUO_COMPACT`, `duoLayout()`, `placeBoards()`, `BoardView.gx`); both are `own`
+  `duo.gx` (`duoFitted()`, `placeBoards()`, `BoardView.gx`): each field the size and height one player's would have in
+  that window (the single-player layout's scale; the user's request), with the full panels when both groups fit on screen
+  at the size drawn (the Options scale, which shrinks games, counts: in 16:9 they fit from 80%), else the compact ones
+  (shrinking only when even those don't, 4:3 and narrower), and the width left over between the groups (`DUO_MIN_GAP` to
+  `DUO_MAX_GAP`, the rest equal margins, at least `DUO_MARGIN`); both are `own`
   (sounds, shake, bursts), each with its own shake (`BoardView.shake`; the drift is shared, player 2's mirrored,
   `boardMotion(view)`), board glow (the backdrop takes up to two, `glows`) and clear bursts (`ring.gx`). VICTORY and
   DEFEAT bannered on each side; Enter rematches.

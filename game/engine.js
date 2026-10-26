@@ -266,16 +266,29 @@ function versusLayout(base, s, gap) {
 }
 const LAYOUT_VERSUS_FULL = versusLayout(LAYOUT_FULL, 0.85, 40);
 const LAYOUT_VERSUS_COMPACT = versusLayout(LAYOUT_COMPACT, 0.5, 16);
-// Two players: both board groups (well, panels, meter) whole and the same size, side by side, the
-// view widened about its centre; duo.gx: where each player's group is drawn (translated in x)
-function duoLayout(base, gap) {
-    const left = base.leftX, right = base.rightX + base.sideW; // a group's extent
-    const shift = (right - left + gap) / 2;
-    const [x, y, w, h] = base.view;
-    return { ...base, view: [x - shift, y, w + 2 * shift, h], duo: { gx: [-shift, shift] } };
+// Two players: both board groups (well, panels, meter) whole and the same size, side by side about
+// the view's centre; duo.gx: where each player's group is drawn (translated in x). Each field is the
+// size one player's would be in the window (the single-player layout single: its scale and height),
+// with the full panels when both groups fit on screen at the size drawn (the Options scale, which
+// shrinks games, leaves more room), else the compact ones; the width left goes between the groups,
+// up to DUO_MAX_GAP, and the rest to the margins. Only when even the compact ones don't fit does the
+// view widen, so the fields shrink.
+// room: the window's width in logical units at the single-player fit; scale: the Options scale
+const DUO_MIN_GAP = 24, DUO_MAX_GAP = 120, DUO_MARGIN = 16; // between the groups, and from the window's edges, at the least
+function duoFitted(single, room, scale) {
+    const [, y, , h] = single.view;
+    const shown = room / scale; // the window's width in logical units at the size drawn
+    for (const base of [LAYOUT_FULL, LAYOUT_COMPACT]) {
+        const groupW = base.rightX + base.sideW - base.leftX; // centred on VIEW_W / 2
+        const need = 2 * groupW + DUO_MIN_GAP + 2 * DUO_MARGIN;
+        if (base === LAYOUT_COMPACT || need <= shown) {
+            const gap = clamp(shown - 2 * groupW - 2 * DUO_MARGIN, DUO_MIN_GAP, DUO_MAX_GAP);
+            const shift = (groupW + gap) / 2;
+            const w = Math.max(room, need * scale);
+            return { ...base, view: [VIEW_W / 2 - w / 2, y, w, h], duo: { gx: [-shift, shift] } };
+        }
+    }
 }
-const LAYOUT_DUO_FULL = duoLayout(LAYOUT_FULL, 40);
-const LAYOUT_DUO_COMPACT = duoLayout(LAYOUT_COMPACT, 24);
 
 // ----------------------------------------------------------
 // LOOK
@@ -550,11 +563,13 @@ class Engine {
         const winW = Math.max(1, window.innerWidth), winH = Math.max(1, window.innerHeight);
         const fitIn = ([, , w, h], availW, availH) => Math.min(availW / w, availH / h);
         // touch devices always take the compact layout; elsewhere a narrow window does
-        // (a versus match: the same, widened for the bot's board; two players: for both groups)
-        const [full, compact] = !this.match ? [LAYOUT_FULL, LAYOUT_COMPACT]
-            : this.match.duo ? [LAYOUT_DUO_FULL, LAYOUT_DUO_COMPACT] : [LAYOUT_VERSUS_FULL, LAYOUT_VERSUS_COMPACT];
-        this.layout = this.touch.enabled || fitIn(compact.view, winW, winH) >= COMPACT_GAIN * fitIn(full.view, winW, winH)
+        // (a versus match: the same, widened for the bot's board; two players: duoFitted())
+        const pick = (full, compact) => this.touch.enabled || fitIn(compact.view, winW, winH) >= COMPACT_GAIN * fitIn(full.view, winW, winH)
             ? compact : full;
+        if (this.match && this.match.duo) {
+            const single = pick(LAYOUT_FULL, LAYOUT_COMPACT);
+            this.layout = duoFitted(single, winW / fitIn(single.view, winW, winH), this._state === STATE_GAME ? this.options.scale : 1);
+        } else this.layout = this.match ? pick(LAYOUT_VERSUS_FULL, LAYOUT_VERSUS_COMPACT) : pick(LAYOUT_FULL, LAYOUT_COMPACT);
         this.placeBoards();
         const [vx, vy, vw, vh] = this.layout.view;
         const inset = this.touch.place(winW, winH, this.layout.view);
