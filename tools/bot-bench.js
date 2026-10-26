@@ -1,11 +1,11 @@
 // Bench for the bot: plays each mode headless and prints the mode's own result (record()).
-// Usage: node tools/bot-bench.js [level 0-4] [games] [mode filter] [profile override]
+// Usage: node tools/bot-bench.js [level 0-10] [games] [mode filter] [profile override]
 const fs = require("fs"), vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 const FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "bot.js"];
 vm.runInThisContext(FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
     ";Object.assign(globalThis,{createGame,Bot,BOT_LEVELS,BOT_WEIGHTS,guideline,arika,tgmClassic,tgmTap,gbTetris,tgmOriginal,nesTetris,tgmAce,aceArs,aceArs2});");
-const [level = 4, games = 3, filter = "", force = ""] = process.argv.slice(2);
+const [level = 10, games = 3, filter = "", force = ""] = process.argv.slice(2);
 // the bag and garbage use Math.random, the NES and GB randomizers Date.now(): both seeded so games repeat
 function seeded(seed) { Date.now = () => seed; let a = seed >>> 0; Math.random = () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 // [name, mode, variant, startLevel, height, options, max frames]

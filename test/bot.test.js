@@ -78,7 +78,7 @@ function poseKey(g) {
     for (let c = 0; c < 9; c++) g.setCell(21, c, 1);
     const snapshot = () => JSON.stringify({ ...g, queue: g.queue, field: g.field });
     const before = snapshot();
-    const bot = new Bot(4, 1);
+    const bot = new Bot(10, 1);
     bot.attach(g);
     bot.decide(g);
     check("a full search leaves the game as it was", snapshot() === before);
@@ -87,7 +87,7 @@ function poseKey(g) {
     seeded(7);
     const g = started(tgmClassic, "standard");
     const before = JSON.stringify(g);
-    const bot = new Bot(4, 1);
+    const bot = new Bot(10, 1);
     bot.attach(g);
     bot.decide(g);
     check("a full search leaves an ARS game as it was", JSON.stringify(g) === before);
@@ -98,7 +98,7 @@ function poseKey(g) {
     // an empty well: a flat piece goes in many places, every one on the floor
     seeded(3);
     const g = started(guideline, "standard");
-    const bot = new Bot(4, 1);
+    const bot = new Bot(10, 1);
     bot.attach(g);
     const out = [];
     bot.gather(g, g.curPiece_type, g.curPiece_row, g.curPiece_col, g.curPiece_rotation, false, out);
@@ -110,7 +110,7 @@ function poseKey(g) {
     seeded(3);
     const g = started(tgmClassic, "death");
     for (let r = 20; r < 22; r++) for (let c = 6; c < 10; c++) g.setCell(r, c, 1);
-    const bot = new Bot(4, 1);
+    const bot = new Bot(10, 1);
     bot.attach(g);
     check("20G game has 20 rows per frame gravity", g.gravity >= 20);
     let row = 0;
@@ -167,22 +167,22 @@ const MODES = [
 for (const [name, mode, variant] of MODES) {
     seeded(11);
     const g = started(mode, variant);
-    const bot = new Bot(4, 5);
+    const bot = new Bot(10, 5);
     const r = play(g, bot, 120);
-    check(`${name}: Expert places pieces without getting stuck (${r.locked} placed, ${g.lines || 0} lines, ${Math.round(r.hit / Math.max(1, r.planned) * 100)}% as planned, slowest piece ${r.worst} frames, ${(r.ms / Math.max(1, r.frames)).toFixed(2)} ms/frame, at most ${r.maxMs.toFixed(0)} ms)`,
+    check(`${name}: level 10 places pieces without getting stuck (${r.locked} placed, ${g.lines || 0} lines, ${Math.round(r.hit / Math.max(1, r.planned) * 100)}% as planned, slowest piece ${r.worst} frames, ${(r.ms / Math.max(1, r.frames)).toFixed(2)} ms/frame, at most ${r.maxMs.toFixed(0)} ms)`,
         r.stuck === 0 && (r.locked >= 100 || r.over && r.locked >= 20), JSON.stringify(r));
 }
 {
     seeded(5);
     const g = started(nesTetris, "standard");
-    const r = play(g, new Bot(4, 5), 100);
+    const r = play(g, new Bot(10, 5), 100);
     check("NES: places pieces at level 0 as planned", r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
 }
 {
     seeded(5);
     const g = started(guideline, "standard");
-    const r = play(g, new Bot(4, 5), 100);
-    check("Guideline: Expert's pieces land where planned", r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
+    const r = play(g, new Bot(10, 5), 100);
+    check("Guideline: level 10's pieces land where planned", r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
 }
 
 // ---------------------------------------------------------------- versus
@@ -191,7 +191,7 @@ for (const [name, mode, variant] of MODES) {
     // the stronger one wins, and neither gets stuck under the garbage
     seeded(21);
     const games = [createGame(guideline, "versus", 0, 0, {}, { seed: 99 }), createGame(guideline, "versus", 0, 0, {}, { seed: 99 })];
-    const bots = [new Bot(4, 1), new Bot(0, 2)];
+    const bots = [new Bot(10, 1), new Bot(0, 2)];
     let frames = 0, stuck = false, risen = 0;
     while (!games.some(g => g.isGameOver()) && frames < 60 * 60 * 10) {
         games.forEach((g, i) => g.advanceFrame(bots[i].input(g)));
@@ -203,7 +203,7 @@ for (const [name, mode, variant] of MODES) {
         if (stuck) break;
         frames++;
     }
-    check(`versus: Master beats Novice (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} lines sent, ${risen} garbage rows risen in all)`,
+    check(`versus: level 10 beats level 0 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} lines sent, ${risen} garbage rows risen in all)`,
         !stuck && games[1].isGameOver() && !games[0].isGameOver() && games[0].linesSent > 0, JSON.stringify({ frames, stuck, over: games.map(g => g.isGameOver()) }));
 }
 
@@ -217,13 +217,13 @@ for (const [name, mode, variant] of MODES) {
             seeded(100 + game);
             const g = started(guideline, "marathon");
             const r = play(g, new Bot(level, 7 + game), 400);
-            check(`level ${BOT_LEVELS[level].name}, game ${game} never gets stuck`, r.stuck === 0, JSON.stringify(r));
+            check(`level ${level}, game ${game} never gets stuck`, r.stuck === 0, JSON.stringify(r));
             total += g.lines;
         }
         lines.push(total / 3);
     }
-    console.log("     average lines (of 400 pieces):", lines.map((n, i) => `${BOT_LEVELS[i].name} ${n.toFixed(0)}`).join(", "));
-    check("Master clears at least as many lines as Novice", lines[4] >= lines[0], JSON.stringify(lines));
+    console.log("     average lines (of 400 pieces):", lines.map((n, i) => `${i}: ${n.toFixed(0)}`).join(", "));
+    check("level 10 clears at least as many lines as level 0", lines[10] >= lines[0], JSON.stringify(lines));
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed");

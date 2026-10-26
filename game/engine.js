@@ -61,9 +61,9 @@ const TGM1_SETUP = [BIG_SETUP, REV_SETUP, MONO_SETUP, TLS_SETUP]; // TGM1's code
 // TGM3 Master: the qualified grade and its exams (Exams, tgm3ExamFor); none with Big
 const EXAMS_SETUP = { name: "Exams", accent: tetJ, arg: "exams", labels: ["On", "Off"], values: [true, false] };
 const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off", "On"], values: [false, true] }; // GB: gravity 10 levels on
-// Guideline versus: the bot's level (bot.js), Skilled at first
-const BOT_VERSUS_LEVEL = 2;
-const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map(l => l.name), initial: BOT_VERSUS_LEVEL };
+// Guideline versus: the bot's level (bot.js, 0-10), 6 at first
+const BOT_VERSUS_LEVEL = 6;
+const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
 
 // Start step 1: rule sets; step 2: their sub-modes; step 3 for modes with setup cards (above). See rules.js
 // The "death" and "test" variants still exist in rules.js but aren't offered (TAP's Death mode is)
@@ -2510,7 +2510,7 @@ class Engine {
         this.drawBoard();
         this.drawParticles();
         this.drawGarbageMeter(game);
-        this.text("BOT  ·  " + BOT_LEVELS[m.level].name.toUpperCase(), BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
+        this.text("BOT  ·  LV " + m.level, BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
         this.text("SENT " + game.linesSent, BOARD_X + BOARD_W, this.boardY - 25, { size: 13, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
         if (m.result) {
             const won = m.result === "lose"; // the bot won

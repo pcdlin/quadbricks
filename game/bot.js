@@ -27,13 +27,19 @@ const BOT_FULL = (1 << WIDTH) - 1;
 // (what using the hold costs in evaluation points; Infinity: never), noise (σ of each evaluation
 // weight, per game), temp (softmax temperature over the best placements), misdrop (chance of
 // aiming one column or rotation off), irs (turns a piece as it enters by holding the key through
-// ARE), tucks (waits and soft-drops to slide under overhangs)
+// ARE), tucks (waits and soft-drops to slide under overhangs). Levels 0-10, the index.
 const BOT_LEVELS = [
-    { name: "Novice", irs: false, reaction: 30, interval: 8, das: false, hard: 0.3, depth: 0, beam: 1, hold: Infinity, noise: 0.35, temp: 1, misdrop: 0.06, tucks: false },
-    { name: "Casual", irs: false, reaction: 15, interval: 5, das: false, hard: 0.7, depth: 0, beam: 1, hold: 12, noise: 0.2, temp: 0.5, misdrop: 0.03, tucks: false },
-    { name: "Skilled", irs: false, reaction: 8, interval: 3, das: true, hard: 1, depth: 1, beam: 4, hold: 0, noise: 0.1, temp: 0.2, misdrop: 0.01, tucks: true },
-    { name: "Expert", irs: true, reaction: 3, interval: 2, das: true, hard: 1, depth: 2, beam: 8, hold: 0, noise: 0.03, temp: 0.03, misdrop: 0.002, tucks: true },
-    { name: "Master", irs: true, reaction: 0, interval: 1, das: true, hard: 1, depth: 3, beam: 16, hold: 0, noise: 0, temp: 0, misdrop: 0, tucks: true },
+    { irs: false, reaction: 30, interval: 8, das: false, hard: 0.3, depth: 0, beam: 1, hold: Infinity, noise: 0.35, temp: 1, misdrop: 0.06, tucks: false },
+    { irs: false, reaction: 25, interval: 7, das: false, hard: 0.45, depth: 0, beam: 1, hold: Infinity, noise: 0.3, temp: 0.8, misdrop: 0.05, tucks: false },
+    { irs: false, reaction: 20, interval: 6, das: false, hard: 0.55, depth: 0, beam: 1, hold: 24, noise: 0.25, temp: 0.65, misdrop: 0.04, tucks: false },
+    { irs: false, reaction: 15, interval: 5, das: false, hard: 0.7, depth: 0, beam: 1, hold: 12, noise: 0.2, temp: 0.5, misdrop: 0.03, tucks: false },
+    { irs: false, reaction: 12, interval: 4, das: true, hard: 0.85, depth: 0, beam: 1, hold: 6, noise: 0.16, temp: 0.35, misdrop: 0.02, tucks: true },
+    { irs: false, reaction: 10, interval: 4, das: true, hard: 1, depth: 1, beam: 2, hold: 3, noise: 0.13, temp: 0.27, misdrop: 0.015, tucks: true },
+    { irs: false, reaction: 8, interval: 3, das: true, hard: 1, depth: 1, beam: 4, hold: 0, noise: 0.1, temp: 0.2, misdrop: 0.01, tucks: true },
+    { irs: true, reaction: 5, interval: 2, das: true, hard: 1, depth: 1, beam: 6, hold: 0, noise: 0.06, temp: 0.1, misdrop: 0.005, tucks: true },
+    { irs: true, reaction: 3, interval: 2, das: true, hard: 1, depth: 2, beam: 8, hold: 0, noise: 0.03, temp: 0.03, misdrop: 0.002, tucks: true },
+    { irs: true, reaction: 1, interval: 1, das: true, hard: 1, depth: 2, beam: 12, hold: 0, noise: 0.015, temp: 0.01, misdrop: 0.001, tucks: true },
+    { irs: true, reaction: 0, interval: 1, das: true, hard: 1, depth: 3, beam: 16, hold: 0, noise: 0, temp: 0, misdrop: 0, tucks: true },
 ];
 
 // Evaluation weights (Thiery and Scherrer's BCTS set); clear: bonus per lines cleared at a low stack.
@@ -399,8 +405,8 @@ class BotExplorer {
 // ----------------------------------------------------------
 
 class Bot {
-    // level: an index into BOT_LEVELS; seed: for its noise and mistakes
-    constructor(level = 3, seed = 1) {
+    // level: 0-10, an index into BOT_LEVELS; seed: for its noise and mistakes
+    constructor(level = 8, seed = 1) {
         this.explorer = new BotExplorer();
         this.board = new Int32Array(BOT_ROWS);
         this.deepBuf = new Int32Array(BOT_ROWS);
@@ -415,7 +421,7 @@ class Bot {
         this.weights = null; // drawn again, with the new level's noise, at the next input
     }
 
-    get name() { return this.hands.name; }
+    get name() { return "Level " + this.level; }
 
     // A new game (or a new level in the same one: keepHeld): weights with its noise
     attach(game, keepHeld = false) {
