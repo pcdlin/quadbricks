@@ -788,3 +788,11 @@ export names explicitly at the top; add new globals there, and new rule files to
   - Reset any options you change while testing (`engine.options.resetKeys()`,
     `tileset = "flat"`, `save()`); the browser pane's storage is the user's.
 - Windows checkout: git warns about LF→CRLF on every commit; that's expected.
+
+## Deploying a new version
+
+Pushing to `release` deploys the site to GitHub Pages (`.github/workflows/pages.yml`). To release:
+
+1. Bump `VERSION` in `game/engine.js` (shown in the top left corner) and commit it on `main`.
+2. Create a tag for the version on that commit, such as `v0.8`, and push it.
+3. Merge `main` into `release` and push both branches.
