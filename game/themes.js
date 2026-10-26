@@ -170,7 +170,7 @@ const LINES_WELL_ALPHA = 0.7; // the well's fill (0.94 with effects off, as Gall
 const THEMES = {
     // Night gallery: deep gradient, soft spotlight, receding floor grid
     gallery: {
-        name: "Default", // the night gallery (id "gallery", as saved)
+        name: "Night Gallery", // id "gallery", as saved
         background(g, x0, y0, x1, y1) {
             const sky = g.createLinearGradient(0, y0, 0, y1);
             sky.addColorStop(0, "#0d1230");
@@ -534,7 +534,7 @@ const THEMES = {
         },
     },
 };
-const THEME_IDS = Object.keys(THEMES);
+const THEME_IDS = ["space", "gallery", "lines"]; // menu order; the first is the default
 
 // [r, g, b] (0..1) to [h, s, l] (degrees, percent), as hslToRgb() takes them
 function rgbToHsl([r, g, b]) {
