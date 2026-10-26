@@ -418,16 +418,28 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   field (`collapse()`). Level 1 throughout; COMPLETE when every garbage row is cleared. Stats: TIME,
   GARBAGE (cleared / total), LINES.
 - Versus (`"versus"`, against the bot; ported from the `multiplayer` branch, its server left out): sources tetris.wiki
-  *Garbage* and *Combo*, Tetris 99 and Puyo Puyo Tetris for the back-to-back bonus. Lines sent (`versusAttack()`, `VS_*`):
+  *Garbage* and *Combo*, the clients for the back-to-back bonus (below). Lines sent (`versusAttack()`, `VS_*`):
   single 0, double 1, triple 2, Tetris 4; T-spin single 2, double 4, triple 6; mini single 0, mini double 1; back-to-back +1;
   combo (0 = first clear) 0 0 1 1 2 2 3 3 4 4 4 5 5 5, 13+ as 13 (the wiki's "Guideline Standard"); perfect clear +10. An
   attack first cancels the garbage waiting, oldest first; the rest goes to the other side. Garbage waits until a piece
   locks without clearing, then all of it rises (`riseAfterLock()`, a hook of the base `lock()`; grey `tetGARBAGE` rows, one
   hole column per attack); blocks pushed out of the buffer zone top out ("TOP OUT"). Both sides are dealt from one seed
   (`options.seed`, `BagRandomizer`). Levels and speed follow the lines as in Marathon. No record. Stats: SENT, APM (attack
-  per minute, cancelled lines included), PPS, LINES. Assumptions (the wiki's general table gives +1 to +3 for back-to-back;
-  Tetris 99 caps waiting garbage at 12 and a clear at 20): +1, no caps, no delay before garbage counts, one random hole
-  column per attack ("random clean columns", Tetris Effect: Connected).
+  per minute, cancelled lines included), PPS, LINES.
+  Checked against tetris.wiki (*Garbage*, *Combo*, *Top out*, *Tetris Guideline*) and the wiki's pages on other clients:
+  - Agree everywhere: the base table (Tetris 99, Puyo Puyo Tetris, Jstris give the same); cancelling, the rest sent back
+    (*Garbage*); garbage entering on the next lock that clears nothing (*Garbage*, Puyo Puyo Tetris, Tetris Effect:
+    Connected's Zone Battle); top out only when a block is pushed above the 20-row buffer (vanish) zone (*Top out*,
+    *Tetris Guideline*); grey garbage (*Garbage*); one hole column per attack, changing between attacks (TETR.IO's
+    "change on attack", Tetris Effect: Connected's "random clean columns").
+  - The general table, against some clients: combos by the wiki's "Guideline Standard" (Tetris 99, Puyo Puyo Tetris 2
+    and Tetris Effect: Connected each have their own, TETR.IO a multiplier); perfect clear 10 plus the clear's own
+    lines (*Garbage*, Jstris; Tetris 99 +4, Puyo Puyo Tetris 10 in all).
+  - The clients, against the general table: back-to-back +1 for every clear (Tetris 99, Puyo Puyo Tetris, Jstris; TETR.IO
+    +1 per level of its streak), where *Garbage* gives +1 (minis, TSS), +2 (TSD, Tetris), +3 (TST) with no game named.
+  - Left out (each client's own): caps (Tetris 99: 12 waiting, 20 per clear; TETR.IO splits attacks of 8+ into 4s), delays
+    before garbage counts (Tetris 99, TETR.IO), messier holes (TETR.IO's Quick Play, Tetris Effect: Connected at high
+    scores), Tetris 99's badges and targeting.
 
 ### TGM3 World (Master mode, World rule)
 - SRS with **Arika's I-piece kicks**; Ti randomizer (35-piece pool, 4-piece history,

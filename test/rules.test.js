@@ -2731,7 +2731,14 @@ function secretAt(g, rows, cover = true) {
     check("  ...the hard drop's flash and trail follow the piece up", g.takeHardDropCells().every(c => g.getCell(c.row, c.col) === tetO), true);
 
     for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
-    g.setCell(FIELD_TOP, 0, 1); // a block at the very top of the buffer zone
+    g.setCell(FIELD_TOP + 1, 0, 1); // a block one row below the top of the buffer (vanish) zone
+    g.receiveGarbage({ lines: 1, hole: 0 });
+    place(g, tetO, 0, 15, 4);
+    g.advanceFrame(HARD_PUSH);
+    check("  ...garbage pushing a block up to the buffer zone's top row is no top out (tetris.wiki: above it)",
+        [g.isGameOver(), g.getCell(FIELD_TOP, 0)], [false, 1]);
+
+    for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
     g.receiveGarbage({ lines: 1, hole: 0 });
     place(g, tetO, 0, 15, 4);
     g.advanceFrame(HARD_PUSH);

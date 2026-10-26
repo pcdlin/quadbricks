@@ -54,8 +54,9 @@ const GUIDELINE_HANDLING = { das: GUIDELINE_DAS, arr: GUIDELINE_ARR, sdf: GUIDEL
     previews: GUIDELINE_NEXT, holdPiece: true, irs: true, ihs: true, rot180: false };
 const GUIDELINE_DROP_GUARD = 8;
 
-// Versus: garbage lines a clear sends (tetris.wiki Garbage and Combo; Tetris 99 and Puyo Puyo
-// Tetris for the back-to-back bonus, where the wiki's general table gives +1 to +3)
+// Versus: garbage lines a clear sends: tetris.wiki's general Guideline table (Garbage) and its
+// "Guideline Standard" combos (Combo), but the back-to-back bonus +1 for every clear, as Tetris 99,
+// Puyo Puyo Tetris, Jstris and TETR.IO give it, where the wiki's table gives +1 to +3
 const VS_LINES = [0, 0, 1, 2, 4];         // by lines cleared: single 0 ... Tetris 4
 const VS_TSPIN_LINES = [0, 2, 4, 6];      // T-spin single 2, double 4, triple 6
 const VS_MINI_LINES = [0, 0, 1];          // T-spin mini single 0, mini double 1
