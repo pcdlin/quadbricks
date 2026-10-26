@@ -1,6 +1,6 @@
-// Piece randomizers of the rule sets that don't use a 7-bag. Each deals piece types (game.js) with
-// next(); they draw from the arcade's linear congruential generator so sequences can be checked
-// against published ones (test/rules.test.js).
+// Piece randomizers of the rule sets that don't use a 7-bag, and a seeded 7-bag for Guideline
+// versus. Each deals piece types (game.js) with next(); they draw from the arcade's linear
+// congruential generator so sequences can be checked against published ones (test/rules.test.js).
 
 // ----------------------------------------------------------
 // TGM family randomizers, written from the behaviour tetris.wiki describes ("TGM randomizer"):
@@ -22,6 +22,26 @@ class LcgRandomizer {
 
     next() {
         return this.pieces[this.nextIndex()];
+    }
+}
+
+// A 7-bag drawn from a seeded generator, so games given the same seed deal the same pieces (both
+// sides of a Guideline versus match). Each bag is shuffled (Fisher-Yates) and dealt from its end.
+class BagRandomizer extends LcgRandomizer {
+    constructor(seed) {
+        super(seed, [tetI, tetT, tetL, tetJ, tetS, tetZ, tetO]);
+        this.bag = [];
+    }
+
+    nextIndex() {
+        if (!this.bag.length) {
+            this.bag = [0, 1, 2, 3, 4, 5, 6];
+            for (let i = 6; i > 0; i--) {
+                const j = this.rand(i + 1);
+                [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
+            }
+        }
+        return this.bag.pop();
     }
 }
 

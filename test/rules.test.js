@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -2681,6 +2681,62 @@ function secretAt(g, rows, cover = true) {
     g.gravityAcc = 0;
     for (let f = 0; f < 200 && g.lines === 0; f++) g.advanceFrame(0);
     check("  ...a single at level 0 scores 40 as without it", [g.lines, g.score], [1, 40]);
+}
+
+// ---------------------------------------------------------------- Guideline versus
+{
+    const deal = (seed, n) => {
+        const g = createGame(guideline, "versus", 0, 0, {}, { seed }), q = [];
+        while (q.length < n) { q.push(g.queue.shift()); g.fillQueue(); }
+        return q;
+    };
+    const a = deal(5, 14), b = deal(5, 14), c = deal(6, 14);
+    check("Versus: the same seed deals the same pieces, another seed others, each bag of 7 one of every piece",
+        [a.join("") === b.join(""), a.join("") === c.join(""), a.slice(0, 7).sort(), a.slice(7).sort()],
+        [true, false, [1, 2, 3, 4, 5, 6, 7], [1, 2, 3, 4, 5, 6, 7]]);
+}
+{
+    const lines = (n, more = {}) => versusAttack({ n, tspin: null, b2b: false, combo: 0, pc: false, ...more });
+    check("Versus attacks: single 0, double 1, triple 2, Tetris 4; T-spin single 2, double 4, triple 6; mini single 0, double 1",
+        [lines(1), lines(2), lines(3), lines(4), lines(1, { tspin: "full" }), lines(2, { tspin: "full" }), lines(3, { tspin: "full" }),
+            lines(1, { tspin: "mini" }), lines(2, { tspin: "mini" })],
+        [0, 1, 2, 4, 2, 4, 6, 0, 1]);
+    check("  ...back-to-back +1, combos by the Guideline table (combo 2: +1, 13 and on: +5), perfect clear +10, nothing without lines",
+        [lines(4, { b2b: true }), lines(1, { combo: 2 }), lines(2, { combo: 20 }), lines(4, { pc: true }), lines(0, { tspin: "full" })],
+        [5, 1, 6, 14, 0]);
+}
+{
+    const g = startedGuideline("versus");
+    check("  ...stats: sent, attack per minute, pieces per second, lines", g.getStats().map(s => s[0]), ["GUIDELINE", "SENT", "APM", "PPS", "LINES"]);
+    g.receiveGarbage({ lines: 3, hole: 4 });
+    g.attack({ n: 4, tspin: null, b2b: false, combo: 0, pc: false });
+    check("  ...an attack cancels the garbage waiting first and sends the rest", [g.pendingGarbage(), g.takeAttacks(), g.linesSent, g.attackTotal], [0, [1], 1, 4]);
+
+    clearField(g);
+    fill(g, ["#.........", "###....###"]); // the block left over: not a perfect clear
+    place(g, tetI, 0, 20, 3); // fills the gap: a single, which sends nothing
+    g.receiveGarbage({ lines: 2, hole: 7 });
+    g.advanceFrame(HARD_PUSH);
+    check("  ...garbage waits while pieces clear lines", [g.lines, g.pendingGarbage(), g.takeRisenGarbage()], [1, 2, []]);
+
+    for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
+    place(g, tetO, 0, 19, 0); // clears nothing
+    g.takeHardDropCells();
+    g.advanceFrame(HARD_PUSH);
+    const row = r => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c));
+    const garbageRow = Array.from({ length: WIDTH }, (_, c) => c === 7 ? 0 : tetGARBAGE);
+    check("  ...then all of it rises under the stack: grey rows with the attack's hole, the piece pushed up",
+        [g.pendingGarbage(), g.takeRisenGarbage(), row(21), row(20), [g.getCell(19, 1), g.getCell(18, 1)]],
+        [0, [2], garbageRow, garbageRow, [tetO, tetO]]);
+    check("  ...the hard drop's flash and trail follow the piece up", g.takeHardDropCells().every(c => g.getCell(c.row, c.col) === tetO), true);
+
+    for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
+    g.setCell(FIELD_TOP, 0, 1); // a block at the very top of the buffer zone
+    g.receiveGarbage({ lines: 1, hole: 0 });
+    place(g, tetO, 0, 15, 4);
+    g.advanceFrame(HARD_PUSH);
+    check("  ...garbage pushing blocks out of the top tops the player out", [g.isGameOver(), g.endTitle, g.endSub], [true, "GAME OVER", "TOP OUT — ESC FOR MENU"]);
+    check("  ...versus games keep no record", startedGuideline("versus").record(), null);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");

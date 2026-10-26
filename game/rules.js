@@ -17,7 +17,8 @@
 // (shapes, next pieces, hold, spawn, randomizer, ...) and override hooks: setTimings, spawnPosition,
 // beforeSpawn / onNewPiece / afterSpawn / onBlockOut, onClock, onActiveFrame, dasCharges, canShift,
 // onShiftBlocked, rotate, onMoveReset, advanceDrop / upKey / onGround / onHardDrop, beforeLock,
-// scoreClear, onCollapse, afterClear, ghostVisible, getStats, record, setupField, setHandling, testSetup.
+// scoreClear, riseAfterLock, onCollapse, afterClear, ghostVisible, getStats, record, setupField, setHandling,
+// testSetup.
 //
 // Variants shared by several rule sets (the menu offers each family's own, see VARIANT_NAMES):
 //  - standard: the rule set as specified
@@ -31,7 +32,7 @@ const guideline = 3, arika = 4, tgmClassic = 5, tgmTap = 6, gbTetris = 7, tgmOri
 const VARIANT_NAMES = { test: "TEST", death: "DEATH", marathon: "MARATHON", sprint: "SPRINT", ultra: "ULTRA", btype: "B-TYPE", "20g": "20G",
     variable: "VARIABLE", dig: "DIG", master: "MASTER", shirase: "SHIRASE", easy: "EASY", plus: "TGM+",
     normal: "NORMAL", hispeed1: "HI-SPEED 1", hispeed2: "HI-SPEED 2", another: "ANOTHER", another2: "ANOTHER 2", big: "BIG",
-    sprint20: "SPRINT", sprint100: "SPRINT", ultra1: "ULTRA", ultra3: "ULTRA", ultra5: "ULTRA" };
+    sprint20: "SPRINT", sprint100: "SPRINT", ultra1: "ULTRA", ultra3: "ULTRA", ultra5: "ULTRA", versus: "VERSUS" };
 
 const FIELD_TOP = -18;  // the highest row kept: 20 visible rows + 20-row buffer
 
@@ -96,8 +97,9 @@ function parseShapes(pieces) {
 }
 
 // Colour of each piece type, as an index into the engine's palette (cyan, purple, orange,
-// blue, green, red, yellow)
-const DEFAULT_PALETTE = [0, 1, 2, 3, 4, 5, 6, 7];
+// blue, green, red, yellow), and of the versus garbage cells (tetGARBAGE): GARBAGE_COLOR, a dark grey
+const GARBAGE_COLOR = 9;
+const DEFAULT_PALETTE = [0, 1, 2, 3, 4, 5, 6, 7, GARBAGE_COLOR];
 const MONO_PALETTE = [0, 8, 8, 8, 8, 8, 8, 8]; // every piece one colour (index 8, the neutral white-grey)
 
 // ----------------------------------------------------------
@@ -1068,6 +1070,8 @@ class RuleGame {
 
         this.scoreClear(n, rows);
         if (this.gameover) return;
+        const risen = this.riseAfterLock(n); // versus garbage pushes the stack up
+        if (this.gameover) return;
 
         const collapseNow = rows.length > 0 && this.lineClearDelay === 0;
         if (fromHardDrop) {
@@ -1075,7 +1079,7 @@ class RuleGame {
                 // cleared cells keep the row they landed in, for the drop trail (there's no block to flash)
                 const cleared = rows.includes(cell.row);
                 const below = collapseNow && !cleared ? rows.filter(r => r > cell.row).length : 0;
-                this.hardDropCells.push({ row: cell.row + below, col: cell.col, type, dist: this.hardDropDistance, cleared });
+                this.hardDropCells.push({ row: cell.row + below - risen, col: cell.col, type, dist: this.hardDropDistance, cleared });
             }
         }
 
@@ -1093,6 +1097,7 @@ class RuleGame {
     beforeLock() {} // the piece is about to lock (still where it is)
     onBlockLocked(cell) {} // one of its blocks was set in the field
     scoreClear(n, rows) {} // a piece locked, clearing n lines (rows): score, levels, the end
+    riseAfterLock(n) { return 0; } // after scoreClear: rows of garbage that rose (Guideline versus)
 
     // Timed phases (are, lineclear, rollstart) count phaseCounter up to phaseLength
     setPhase(phase, length) {

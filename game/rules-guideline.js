@@ -6,8 +6,10 @@
 //    2 minutes (ultra1, ultra3, ultra5: 1, 3 or 5); both at level 1
 //  - dig: clear 5, 10 or 18 rows of garbage as fast as possible, level 1
 //  - master: 20G, shorter lock and line clear delays by level M1-M30, 300 lines
+//  - versus: one side of a match (against the bot): clears send garbage to the other side, which
+//    rises when it locks a piece without clearing; both sides deal the same pieces (options.seed)
 // (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin; Master's delays
-//  from the Tetris_Effect page; Dig as NullpoMino's DigRaceMode)
+//  from the Tetris_Effect page; Dig as NullpoMino's DigRaceMode; versus from Garbage and Combo)
 
 // Seconds per row: (0.8 - (level-1) * 0.007) ^ (level-1); returned as rows per frame
 function guidelineGravity(level) {
@@ -52,6 +54,26 @@ const GUIDELINE_HANDLING = { das: GUIDELINE_DAS, arr: GUIDELINE_ARR, sdf: GUIDEL
     previews: GUIDELINE_NEXT, holdPiece: true, irs: true, ihs: true, rot180: false };
 const GUIDELINE_DROP_GUARD = 8;
 
+// Versus: garbage lines a clear sends (tetris.wiki Garbage and Combo; Tetris 99 and Puyo Puyo
+// Tetris for the back-to-back bonus, where the wiki's general table gives +1 to +3)
+const VS_LINES = [0, 0, 1, 2, 4];         // by lines cleared: single 0 ... Tetris 4
+const VS_TSPIN_LINES = [0, 2, 4, 6];      // T-spin single 2, double 4, triple 6
+const VS_MINI_LINES = [0, 0, 1];          // T-spin mini single 0, mini double 1
+const VS_B2B_BONUS = 1;                   // a difficult clear right after another
+const VS_COMBO_LINES = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5]; // by combo (0 = the first clear), 13+ as 13
+const VS_PERFECT_CLEAR = 10;              // added to the clear's own lines
+
+// Lines a clear sends ({ n, tspin, b2b, combo, pc } from scoreGuideline); nothing without lines
+function versusAttack({ n, tspin, b2b, combo, pc }) {
+    if (n === 0) return 0;
+    const table = tspin === "full" ? VS_TSPIN_LINES : tspin === "mini" ? VS_MINI_LINES : VS_LINES;
+    let lines = table[n] ?? VS_LINES[n];
+    if (b2b) lines += VS_B2B_BONUS;
+    lines += VS_COMBO_LINES[Math.min(combo, VS_COMBO_LINES.length - 1)];
+    if (pc) lines += VS_PERFECT_CLEAR;
+    return lines;
+}
+
 class GuidelineGame extends RuleGame {
     constructor(mode, variant, startLevel, height, handling) {
         super(mode, variant);
@@ -60,6 +82,14 @@ class GuidelineGame extends RuleGame {
         this.dig = variant === "dig";
         this.sprint = GUIDELINE_SPRINTS.includes(variant);
         this.ultraFrames = GUIDELINE_ULTRA_FRAMES[variant] || 0; // ultra: its length
+        this.versus = variant === "versus";
+        this.pieces = 0; // pieces locked (versus: pieces per second)
+        // Versus garbage
+        this.incoming = []; // attacks received and not yet risen, oldest first: { lines, hole }
+        this.attacks = []; // lines sent since the last takeAttacks(), after cancelling
+        this.risen = []; // garbage rows that rose, per lock, since the last takeRisenGarbage()
+        this.attackTotal = 0; // lines of attack made, cancelled ones included (APM)
+        this.linesSent = 0; // lines that went to the other side
         // level 1 + startLevel: Master M1-M30, the marathons 1-15
         this.startLevel = this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1)
             : GUIDELINE_MARATHONS.includes(variant) ? clamp(startLevel, 0, GUIDELINE_MAX_LEVEL - 1) : 0;
@@ -75,6 +105,12 @@ class GuidelineGame extends RuleGame {
 
     setupField() {
         if (this.dig) this.fillDigGarbage(GUIDELINE_DIG_ROWS[this.height]);
+    }
+
+    // Versus: both sides' bags are dealt from the match's seed (options.seed)
+    setOptions(options = {}) {
+        super.setOptions(options);
+        if (this.versus) this.randomizer = new BagRandomizer(options.seed ?? Date.now());
     }
 
     // Dig: full rows with one hole each, the hole never above the one in the row below; isGarbage
@@ -110,12 +146,18 @@ class GuidelineGame extends RuleGame {
             return [mode, ["LEVEL", String(this.level)], ["GOAL", `${this.goalPoints} / ${GUIDELINE_VARIABLE_GOAL * this.level}`], lines, ["SCORE", score]];
         }
         if (this.dig) return [mode, ["TIME", this.formatTime()], ["GARBAGE", `${this.digCleared} / ${this.digRows}`], lines, ["SCORE", score]];
+        if (this.versus) { // attack per minute (cancelled lines too) and pieces per second
+            const seconds = this.frames / 60;
+            const apm = seconds ? this.attackTotal * 60 / seconds : 0, pps = seconds ? this.pieces / seconds : 0;
+            return [mode, ["SENT", String(this.linesSent)], ["APM", apm.toFixed(1)], ["PPS", pps.toFixed(2)], lines];
+        }
         if (this.master) return [mode, ["LEVEL", `M${this.level}`], lines, ["TIME", this.formatTime()], ["SCORE", score]];
         return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
     }
 
-    // Sprint and Dig: the time, if finished; Master: lines, then time; the rest: the score
+    // Sprint and Dig: the time, if finished; Master: lines, then time; versus: no record; the rest: the score
     record() {
+        if (this.versus) return null;
         if (this.sprint || this.dig) {
             return this.endTitle === "COMPLETE" ? { key: [-this.frames], text: this.formatTime() } : null;
         }
@@ -185,6 +227,7 @@ class GuidelineGame extends RuleGame {
 
     beforeLock() {
         this.tspin = this.lockedType === tetT && this.lastRotation ? this.detectTSpin() : null;
+        this.pieces++;
     }
 
     // 3-corner T-spin with pointing-side mini rule
@@ -200,10 +243,12 @@ class GuidelineGame extends RuleGame {
     }
 
     scoreClear(n, rows) {
-        this.scoreGuideline(n, this.tspin, rows);
+        const clear = this.scoreGuideline(n, this.tspin, rows);
+        if (this.versus) this.attack(clear);
     }
 
-    // rows: the rows this lock cleared
+    // rows: the rows this lock cleared. Returns what the clear was, for versus attacks:
+    // { n, tspin, b2b (with the back-to-back bonus), combo (0: the first clear), pc }
     scoreGuideline(n, tspin, rows) {
         const L = this.level;
         let base, difficult;
@@ -233,13 +278,14 @@ class GuidelineGame extends RuleGame {
         }
         this.score += Math.floor(action);
 
+        const pc = n > 0 && this.fieldEmpty();
         if (n > 0) {
             this.combo++;
             if (this.combo > 0) {
                 this.score += 50 * this.combo * L;
                 this.addAction(this.combo + " COMBO", "combo", this.chain);
             }
-            if (this.fieldEmpty()) {
+            if (pc) {
                 const bonus = n === 4 && b2bBefore ? 3200 : [0, 800, 1200, 1800, 2000][n];
                 this.score += bonus * L;
                 this.addAction("PERFECT CLEAR", "pc");
@@ -266,6 +312,74 @@ class GuidelineGame extends RuleGame {
         }
         // variable goal: T-spins without lines count too
         if (this.variant === "variable" && base > 0) this.addGoalPoints(Math.floor(base * (b2bBonus ? 1.5 : 1) / 100));
+        return { n, tspin, b2b: b2bBonus, combo: this.combo, pc };
+    }
+
+    // ----------------------------------------------------------
+    // Versus garbage
+
+    // A clear's attack first cancels the garbage waiting for this side, oldest first; what is left
+    // goes to the other side (takeAttacks)
+    attack(clear) {
+        let lines = versusAttack(clear);
+        this.attackTotal += lines;
+        while (lines > 0 && this.incoming.length) {
+            const g = this.incoming[0];
+            const k = Math.min(lines, g.lines);
+            g.lines -= k;
+            lines -= k;
+            if (!g.lines) this.incoming.shift();
+        }
+        if (lines > 0) {
+            this.attacks.push(lines);
+            this.linesSent += lines;
+        }
+    }
+
+    // An attack from the other side: lines of garbage, all with their hole in column `hole`. It
+    // waits until this side locks a piece that clears nothing.
+    receiveGarbage({ lines, hole }) {
+        if (!this.versus || this.gameover || lines <= 0) return;
+        this.incoming.push({ lines, hole });
+    }
+
+    pendingGarbage() {
+        return this.incoming.reduce((sum, g) => sum + g.lines, 0);
+    }
+
+    // Lines sent since the last call, one entry per clear
+    takeAttacks() {
+        return this.drain("attacks");
+    }
+
+    // Garbage rows that rose since the last call, one entry per lock
+    takeRisenGarbage() {
+        return this.drain("risen");
+    }
+
+    riseAfterLock(n) {
+        return this.versus && n === 0 ? this.riseGarbage() : 0;
+    }
+
+    // All the garbage waiting rises from the bottom, pushing the stack up; blocks pushed out of the
+    // top of the buffer zone top this side out. Returns the number of rows.
+    riseGarbage() {
+        let rows = 0, toppedOut = false;
+        for (const g of this.incoming) {
+            for (let k = 0; k < g.lines; k++) {
+                if (this.field[0].some(v => v !== 0)) toppedOut = true;
+                const row = new Array(WIDTH).fill(tetGARBAGE);
+                row[g.hole] = 0;
+                this.raiseRow(row);
+                rows++;
+            }
+        }
+        this.incoming = [];
+        if (!rows) return 0;
+        this.risen.push(rows);
+        this.sounds.push("garbage");
+        if (toppedOut) this.endGame("GAME OVER", "TOP OUT — ESC FOR MENU");
+        return rows;
     }
 
     // Variable goal: the level goes up once its goal is met (the rest is lost), and meeting
