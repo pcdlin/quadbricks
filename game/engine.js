@@ -265,20 +265,7 @@ const LAYOUT_COMPACT = (() => {
     return { compact: true, view: [x0, 24, VIEW_W - 2 * x0, BOARD_Y + BOARD_H + 16 - 24],
         leftX, rightX: BOARD_X + BOARD_W + 8 + COMPACT_GAP, sideW: COMPACT_SIDE_W };
 })();
-// Versus (against the bot): the bot's board, smaller, to the right of the player's. The view widens
-// about its centre (so themes stay centred): the player's board and panels move left by
-// -versus.groupX, the bot's board group is drawn translated to versus.opp and scaled by its s.
 const METER_W = 6, METER_GAP = 2; // garbage meter beside a well's frame (clear of the compact layout's column)
-// a board group drawn for the opponent, in board coordinates: meter, frame, and its name above
-const OPP_GROUP = [BOARD_X - 8 - METER_GAP - METER_W, BOARD_Y - 44, BOARD_W + 16 + METER_GAP + METER_W, BOARD_H + 8 + 44];
-function versusLayout(base, s, gap) {
-    const [x, y, w, h] = base.view, [gx, gy, gw, gh] = OPP_GROUP;
-    const shift = (gap + gw * s) / 2; // half the room the bot's board takes
-    const ox = x + w - shift + gap, oy = y + (h - gh * s) / 2; // its group's top left
-    return { ...base, view: [x - shift, y, w + 2 * shift, h], versus: { groupX: -shift, opp: { x: ox - gx * s, y: oy - gy * s, s } } };
-}
-const LAYOUT_VERSUS_FULL = versusLayout(LAYOUT_FULL, 0.85, 40);
-const LAYOUT_VERSUS_COMPACT = versusLayout(LAYOUT_COMPACT, 0.5, 16);
 // Versus (two players, or a player and the bot): both board groups (well, panels, meter) whole and the same size, side by side about
 // the view's centre; duo.gx: where each player's group is drawn (translated in x). Each field is the
 // size one player's would be in the window (the single-player layout single: its scale and height),
@@ -2836,28 +2823,6 @@ class Engine {
             }
             r.restore();
         }
-    }
-
-    // The bot's board, smaller, right of the player's: its well and effects, garbage meter, its
-    // level and the lines it sent; flat (no tilt or shake), without side panels
-    drawOpponent() {
-        const r = this.r, m = this.match, game = m.view.game, { x, y, s } = this.layout.versus.opp;
-        r.save();
-        r.translate(x, y);
-        r.scale(s);
-        this.board = m.view;
-        this.drawBoard();
-        this.drawParticles();
-        if (game.sendsGarbage) this.drawGarbageMeter(game);
-        this.text("BOT  ·  LV " + m.level, BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
-        this.text(game.versusNote(), BOARD_X + BOARD_W, this.boardY - 25, { size: 13, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
-        if (m.result) {
-            const won = m.result === "lose", draw = m.result === "draw"; // the bot won, or neither
-            const out = ["GAME OVER", "TOPPED OUT"].includes(game.endTitle); // topped out, not beaten on level or time
-            this.boardBanner(draw ? "DRAW" : won ? "WINNER" : out ? "KNOCKED OUT" : "BEATEN", null, 1, draw ? INK : PIECE_COLORS[won ? tetO : tetZ].base);
-        }
-        r.restore();
-        this.board = this.ownBoard;
     }
 
     // Strength of the board glow: the shadow's alpha times the frame's fill alpha

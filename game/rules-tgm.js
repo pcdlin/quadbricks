@@ -1669,10 +1669,6 @@ class TiVersusGame extends TiGame {
             ["TIME", this.formatTime(Math.max(0, TGM_VS_FRAMES - this.frames))], ["SENT", String(this.linesSent)], ["SCORE", this.scoreText()]];
     }
 
-    versusNote() {
-        return `LEVEL ${this.level}`;
-    }
-
     record() { return null; }
     secretGradeLabels() { return null; }
     testSetup() { return false; }

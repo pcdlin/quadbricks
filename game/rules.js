@@ -1220,11 +1220,6 @@ class RuleGame {
         return rows;
     }
 
-    // One line about this side for the engine to show over the bot's well
-    versusNote() {
-        return `SENT ${this.linesSent}`;
-    }
-
     // Hidden test setups (the engine's Ctrl+Shift+digit keys); TGM only. Returns whether one applied.
     testSetup(name) {
         return false;

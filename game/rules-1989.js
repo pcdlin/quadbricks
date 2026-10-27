@@ -284,10 +284,6 @@ class NesGame extends Game1989 {
         return null;
     }
 
-    versusNote() {
-        return `SCORE ${this.scoreText()}`;
-    }
-
     // Versus: topped out, the score is there for the other side to beat
     onBlockOut() {
         if (this.versus) this.endGame("TOPPED OUT", `SCORE ${this.scoreText()} TO BEAT`);

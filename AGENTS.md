@@ -245,7 +245,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   Versus (the base's VERSUS section; the rule sets decide what a clear sends, when garbage rises (`riseAfterLock()`), how
   much may wait (`maxIncoming()`) and the result (`versusOutcome()`)): `takeAttacks()` (`{ lines }` per clear, Guideline's
   after cancelling; TGM3's with `rows`), `takeRisenGarbage()` (rows risen per lock), `receiveGarbage({lines, hole, rows})`,
-  `pendingGarbage()` and `incoming` (the attacks waiting, for the meter), `sendsGarbage`, `versusWins`, `versusNote()`,
+  `pendingGarbage()` and `incoming` (the attacks waiting, for the meter), `sendsGarbage`, `versusWins`,
   `rival` (set by the engine), `clearedRows` (the last lock's full rows as they were).
 - `chain`: consecutive clearing pieces, −1 after a miss, then 0, 1, 2…; identical in every
   rule set and used only for presentation (TGM's `combo` is a score multiplier).
