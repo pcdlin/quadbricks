@@ -462,6 +462,7 @@ class BoardView {
         this.holdFlash = 0; // frames left of the held piece's flash
         this.enterGlow = 0; // and of the glow round the piece entering from hold (gone when it locks)
         this.messageCache = null; // clear message texture (messageTexture())
+        this.popupTop = 0; // where versus's "+lines" go in the side column: under the clear message (drawSidePanels())
         // the field's shake spring (px, py: before the last step), knocked by its own drops and clears
         this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 };
         this.gx = 0; // where its board group is drawn, translated in x (Engine.resize())
@@ -2818,15 +2819,21 @@ class Engine {
         }
     }
 
-    // Lines a player sent (popups): "+4" rising from the upper part of their well and fading
+    // Lines a player sent (popups): "+4" fading, in the right column under the clear message that
+    // sent it (popupTop, from drawSidePanels()), settling up into place; in the compact layout, whose
+    // column has no room, rising from the upper part of the well
     drawAttackPopups(popups) {
-        const r = this.r;
+        const r = this.r, compact = this.layout.compact;
         for (const p of popups) {
-            const k = 1 - p.life / ATTACK_LIFE;
+            const k = 1 - p.life / ATTACK_LIFE, size = 34 + 4 * Math.min(p.lines, 6);
+            const style = { size, weight: 900, color: MESSAGE_GOLD, align: compact ? "center" : "left", spacing: 2 };
             r.save();
             r.globalAlpha = Math.min(1, p.life / 15);
-            this.text("+" + p.lines, BOARD_X + BOARD_W / 2, this.boardY + this.boardH * 0.3 - 50 * k,
-                { size: 34 + 4 * Math.min(p.lines, 6), weight: 900, color: MESSAGE_GOLD, align: "center", spacing: 2 });
+            if (compact) this.text("+" + p.lines, BOARD_X + BOARD_W / 2, this.boardY + this.boardH * 0.3 - 50 * k, style);
+            else {
+                const y = Math.min(this.board.popupTop + 8 + size / 2, this.boardY + this.boardH - size / 2);
+                this.text("+" + p.lines, RIGHT_X, y + 16 * Math.pow(1 - Math.min(1, k * 4), 2), style);
+            }
             r.restore();
         }
     }
@@ -3023,10 +3030,11 @@ class Engine {
     // Clear names in the right column, starting at top (below the next pieces), or centred over the
     // well in the compact layout: pop in, then fade out. Back-to-back sits above the clear name;
     // combo and perfect clear below it.
+    // Returns the y below it (its lines at their resting size), or top with none showing
     drawClearMessage(top) {
         const game = this.board.game;
         const age = game.actionAge + this.tickPhase; // frames, and how far into the next one
-        if (!game.actions.length || age >= MESSAGE_LIFE) return;
+        if (!game.actions.length || age >= MESSAGE_LIFE) return top;
         const r = this.r;
         const c = this.messageTexture(game.actions);
         const alpha = Math.min(1, (MESSAGE_LIFE - age) / 25);
@@ -3037,6 +3045,7 @@ class Engine {
         r.scale(pop);
         r.image(c.tex, -c.pad - c.anchor, -c.pad, c.tex.w / c.res, c.tex.h / c.res);
         r.restore();
+        return top + c.height;
     }
 
     // The message lines with their shadows, rendered into a texture once per set of
@@ -3082,7 +3091,7 @@ class Engine {
             y += s.size * 0.575;
         }
         if (cached) this.r.releaseTexture(cached.tex);
-        this.board.messageCache = { actions, count: actions.length, tex: this.r.texture(canvas), pad, res, anchor };
+        this.board.messageCache = { actions, count: actions.length, tex: this.r.texture(canvas), pad, res, anchor, height };
         return this.board.messageCache;
     }
 
@@ -3145,8 +3154,9 @@ class Engine {
         // the rest of the rule set's preview, tighter when there are more than two
         // (none for TAP's single next piece)
         const rest = game.nextCount - 1;
+        // versus: the lines a clear sent show under its message (popupTop, drawAttackPopups)
         if (game.nextCount === 0) {
-            this.drawClearMessage(this.boardY + 20);
+            this.board.popupTop = this.drawClearMessage(this.boardY + 20);
         } else if (rest > 0) {
             const spacing = rest > 2 ? 50 : 80, size = rest > 2 ? 16 : 18;
             const listH = rest * spacing + 10;
@@ -3155,9 +3165,9 @@ class Engine {
                 const y = this.boardY + 140 + 5 + spacing / 2 + (n - 1) * spacing;
                 this.drawPieceCentered(game.rnd_get_queue(n), RIGHT_X + SIDE_W / 2, y, size, "locked", game);
             }
-            this.drawClearMessage(this.boardY + 140 + listH + 30);
+            this.board.popupTop = this.drawClearMessage(this.boardY + 140 + listH + 30);
         } else {
-            this.drawClearMessage(this.boardY + 140 + 20);
+            this.board.popupTop = this.drawClearMessage(this.boardY + 140 + 20);
         }
         this.drawGameBest(RIGHT_X, SIDE_W, this.boardY + this.boardH - 6, false); // level with the wordmark
     }

@@ -289,7 +289,9 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   centred: the player's board and panels are drawn translated by `groupX` (the backdrop's board glow and the clear
   bursts follow it), the bot's board group (`OPP_GROUP`: garbage meter, well, its level and SENT) at `versus.opp`,
   scaled 0.85 (compact 0.5), flat and without side panels (`drawOpponent()`). Garbage meters beside the wells
-  (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" over the player's well (`drawAttackPopups()`), sounds
+  (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" for each attack sent (`drawAttackPopups()`): in the full
+  layout in the right column under the clear message that sent it (`drawClearMessage()` returns its bottom,
+  `BoardView.popupTop`; the user's request), in the compact one over the player's well; sounds
   `"garbage"`, `"attack"`, `"ko"`.
 - Two players (Multiplayer → Versus Player): the join screen (`MENU_JOIN`, `drawJoin()`) takes a rotate press (`JOIN_ACTIONS`)
   on an input device for player 1, then another device for player 2 (`joinDevice()`, `joined`): `"keys1"` (player 1's
