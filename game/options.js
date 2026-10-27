@@ -42,7 +42,8 @@ const defaultKeys = () => copyTable(DEFAULT_KEYS);
 const defaultKeys2 = () => copyTable(DEFAULT_KEYS2);
 
 // Gamepad bindings: per action, up to MAX_KEYS_PER_ACTION controls of the standard layout, a button
-// index or a left stick direction (PAD_STICK). Start (PAD_START) can't be bound: it opens the menu
+// index or a left stick direction (PAD_STICK). Start (PAD_START) can't be bound: it opens the menu.
+// Each gamepad has its own table (Options.pads, by GamepadControls' padKey())
 const PAD_STICK = { left: 100, right: 101, up: 102, down: 103 };
 const PAD_START = 9;
 const DEFAULT_PAD = {
@@ -169,7 +170,8 @@ class Options {
     constructor() {
         this.keys = defaultKeys();
         this.keys2 = defaultKeys2(); // player 2's (PLAYER2_ACTIONS)
-        this.pad = defaultPad();
+        this.pad = defaultPad(); // the table of a pad not set up on its own: the defaults, or the one saved for every pad before
+        this.pads = {};          // each gamepad's own bindings, by its key (GamepadControls' padKey())
         this.theme = THEME_IDS[0]; // the look around the blocks (themes.js)
         this.tileset = TILESET_IDS[0];
         this.confetti = "sparks"; // line clear confetti, an id from CONFETTI_STYLES
@@ -194,12 +196,10 @@ class Options {
                     if (valid.length) this[field][id] = valid.slice(0, MAX_KEYS_PER_ACTION);
                 }
             }
-            if (saved.pad) {
-                for (const { id } of KEY_ACTIONS) {
-                    const ids = saved.pad[id];
-                    if (!Array.isArray(ids)) continue;
-                    const valid = [...new Set(ids.filter(b => Number.isInteger(b) && b >= 0 && b !== PAD_START))];
-                    if (valid.length) this.pad[id] = valid.slice(0, MAX_KEYS_PER_ACTION);
+            if (saved.pad) loadPadTable(this.pad, saved.pad);
+            if (saved.pads && typeof saved.pads === "object") {
+                for (const [key, table] of Object.entries(saved.pads)) {
+                    if (table && typeof table === "object") this.pads[key] = loadPadTable(defaultPad(), table);
                 }
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
@@ -214,7 +214,7 @@ class Options {
     }
 
     save() {
-        const saved = { keys: this.keys, keys2: this.keys2, pad: this.pad };
+        const saved = { keys: this.keys, keys2: this.keys2, pad: this.pad, pads: this.pads };
         for (const id of [...Object.keys(OPTION_CHOICES), ...OPTION_TOGGLES]) saved[id] = this[id];
         if (!Number.isFinite(saved.sdf)) saved.sdf = null;
         try {
@@ -239,10 +239,12 @@ class Options {
         return true;
     }
 
-    // The same for a gamepad control (a button index or PAD_STICK direction)
-    bindPad(action, button) {
+    // The same for a gamepad control (a button index or PAD_STICK direction), in the pad's table
+    // (key: padKey()); a pad's first binding starts its own table from the shared one
+    bindPad(key, action, button) {
         if (button === PAD_START) return false;
-        bindIn(this.pad, action, button);
+        if (!this.pads[key]) this.pads[key] = copyTable(this.pad);
+        bindIn(this.pads[key], action, button);
         this.save();
         return true;
     }
@@ -258,8 +260,13 @@ class Options {
         return player === 2 ? this.keys2 : this.keys;
     }
 
-    resetPad() {
-        this.pad = defaultPad();
+    // A pad's bindings (key: padKey())
+    padTable(key) {
+        return this.pads[key] || this.pad;
+    }
+
+    resetPad(key) {
+        this.pads[key] = defaultPad();
         this.save();
     }
 
@@ -302,11 +309,23 @@ class Options {
         return null;
     }
 
-    // Action bound to a gamepad control, or null
-    padActionFor(button) {
-        for (const { id } of KEY_ACTIONS) if (this.pad[id].includes(button)) return id;
+    // Action bound to a gamepad control on a pad (key: padKey()), or null
+    padActionFor(button, key) {
+        const table = this.padTable(key);
+        for (const { id } of KEY_ACTIONS) if (table[id].includes(button)) return id;
         return null;
     }
+}
+
+// A saved gamepad table's valid bindings put into table (the actions missing keep theirs); returns table
+function loadPadTable(table, saved) {
+    for (const { id } of KEY_ACTIONS) {
+        const ids = saved[id];
+        if (!Array.isArray(ids)) continue;
+        const valid = [...new Set(ids.filter(b => Number.isInteger(b) && b >= 0 && b !== PAD_START))];
+        if (valid.length) table[id] = valid.slice(0, MAX_KEYS_PER_ACTION);
+    }
+    return table;
 }
 
 // Options.bind() on a binding table (action -> list of keys or pad controls)

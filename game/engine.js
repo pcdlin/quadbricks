@@ -147,7 +147,7 @@ const QUICK_PLAY = [
 const OPTIONS_ITEMS = [
     { name: "Keybinds", desc: "Change key bindings (player 1)", accent: tetS, screen: MENU_CONTROLS },
     { name: "Keybinds P2", desc: "Player 2's keys, for two players on one keyboard", accent: tetZ, screen: MENU_CONTROLS2 },
-    { name: "Gamepad", desc: "Change gamepad buttons", accent: tetI, screen: MENU_GAMEPAD },
+    { name: "Gamepad", desc: "Change each gamepad's buttons", accent: tetI, screen: MENU_GAMEPAD },
     { name: "Visuals", desc: "Block style, scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
@@ -487,8 +487,9 @@ class Engine {
         this.controlspos = 0; // key action, or "reset" after the last one
         this.capturing = null; // action waiting for a new key (for capturingPlayer's keys, 1 or 2)
         this.capturingPlayer = 1;
-        this.padpos = 0;      // gamepad action, or "reset" after the last one
-        this.padCapturing = null; // action waiting for a gamepad button (GamepadControls.poll() binds it)
+        this.padpos = 0;      // the gamepad chosen, then its actions (from 1), then "reset" after the last one
+        this.padConfig = null; // the gamepad the Gamepad screen sets up, a pad index (configPad())
+        this.padCapturing = null; // action waiting for a button of that gamepad (GamepadControls.poll() binds it)
         this.options = new Options();
         this.records = new Records();
         this.exams = new Exams(); // TGM3 Master's qualified grades
@@ -1223,7 +1224,7 @@ class Engine {
             [MENU_OPTIONS]: { pos: "optionspos", count: () => OPTIONS_ITEMS.length, back: MENU_MAIN },
             [MENU_CONTROLS]: { pos: "controlspos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_CONTROLS2]: { pos: "controlspos", count: () => PLAYER2_ACTIONS.length + 1, back: MENU_OPTIONS },
-            [MENU_GAMEPAD]: { pos: "padpos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
+            [MENU_GAMEPAD]: { pos: "padpos", count: () => this.gamepad.connected ? KEY_ACTIONS.length + 2 : 1, back: MENU_OPTIONS },
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
             [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: this.setupFrom },
@@ -1256,6 +1257,10 @@ class Engine {
                 this[screen.pos] = repeat ? Math.max(0, pos - 1) : (pos + count - 1) % count;
             } else if (code === "ArrowDown") {
                 this[screen.pos] = repeat ? Math.min(count - 1, pos + 1) : (pos + 1) % count;
+            } else if (this.menuStep === MENU_GAMEPAD && !this.gamepad.connected) {
+                continue; // nothing to set up
+            } else if ((code === "ArrowLeft" || code === "ArrowRight") && this.menuStep === MENU_GAMEPAD && pos === 0) {
+                this.stepConfigPad(code === "ArrowLeft" ? -1 : 1, !repeat);
             } else if ((code === "ArrowLeft" || code === "ArrowRight") && settings && !settings[pos].action) {
                 this.changeOption(settings[pos].id, code === "ArrowLeft" ? -1 : 1, !repeat);
             } else if (code === "Enter") {
@@ -1281,6 +1286,8 @@ class Engine {
                     // the start lists remember their place
                     if (![MENU_RULES, MENU_QUICK, MENU_SINGLE, MENU_MULTI].includes(next)) this[screens[next].pos] = 0;
                     if (this.menuScroll[next]) this.menuScroll[next] = { at: 0, target: 0 };
+                    // opened from a gamepad: that one is set up first
+                    if (next === MENU_GAMEPAD && this.gamepad.active && this.gamepad.pads.includes(this.gamepad.last)) this.padConfig = this.gamepad.last;
                 } else if (this.menuStep === MENU_QUICK) {
                     this.initGame(...this.quickArgs());
                     this.GAMESTATE = STATE_GAME;
@@ -1305,11 +1312,30 @@ class Engine {
                         this.capturingPlayer = player;
                     }
                 } else if (this.menuStep === MENU_GAMEPAD) {
-                    if (pos === KEY_ACTIONS.length) this.options.resetPad();
-                    else this.padCapturing = KEY_ACTIONS[pos].id; // next pad button becomes the binding
+                    const key = this.gamepad.padKey(this.configPad());
+                    if (pos === 0) this.stepConfigPad(1);
+                    else if (pos === KEY_ACTIONS.length + 1) this.options.resetPad(key);
+                    else this.padCapturing = KEY_ACTIONS[pos - 1].id; // the pad's next button becomes the binding
                 }
             }
         }
+    }
+
+    // The gamepad the Gamepad screen sets up: the one chosen while it stays connected, else the first
+    // connected (a binding waiting for the one gone is cancelled), or null with none
+    configPad() {
+        const pads = this.gamepad.pads;
+        if (!pads.includes(this.padConfig)) {
+            this.padConfig = pads.length ? pads[0] : null;
+            this.padCapturing = null;
+        }
+        return this.padConfig;
+    }
+
+    // The Gamepad screen's next or previous gamepad (dir 1 or -1); wrap false (key held) stops at the ends
+    stepConfigPad(dir, wrap = true) {
+        const pads = this.gamepad.pads;
+        if (pads.length) this.padConfig = pads[stepIndex(pads.indexOf(this.configPad()), dir, pads.length, wrap)];
     }
 
     // Visuals, Guideline handling and setup screens: step a setting (dir -1 or 1; toggles ignore it).
@@ -2472,11 +2498,7 @@ class Engine {
                 break;
             }
             case MENU_GAMEPAD:
-                heading("OPTIONS  ·  GAMEPAD  ·  EVERY PAD");
-                this.drawBindings(listTop - 8, KEY_ACTIONS, this.options.pad, padLabel, this.padpos, this.padCapturing, "PRESS A BUTTON", tetI);
-                // the cancel hint names Start, the pad's only way out (Esc works too)
-                hint = this.padCapturing ? "NEW BUTTON ADDS · BOUND BUTTON REMOVES      START  CANCEL"
-                    : this.gamepad.connected ? "ENTER  CHANGE      ESC  BACK" : "NO GAMEPAD FOUND: PRESS A BUTTON ON IT      ESC  BACK";
+                hint = this.drawGamepadScreen(heading);
                 break;
         }
 
@@ -2484,6 +2506,42 @@ class Engine {
         if (this.gamepad.active) hint = padWords(hint);
         else if (this.touch.enabled) hint = touchWords(hint);
         this.text(hint, cx, hintY, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
+    }
+
+    // Options → Gamepad: a card choosing the connected gamepad to set up (with more than one, a dot per
+    // pad, lit while it is pressed, tells them apart), then its bindings; with none connected, a card
+    // saying so. Returns the hint
+    drawGamepadScreen(heading) {
+        const gp = this.gamepad, pad = this.configPad(), top = 236;
+        heading("OPTIONS  ·  GAMEPAD", INK_DIM, 220);
+        if (pad === null) {
+            this.drawMenuList([{ name: "No gamepad", desc: "Connect a gamepad and press a button on it", accent: tetI, noArrow: true }], 0, top);
+            this.text("BROWSERS SHOW A GAMEPAD ONLY ONCE ONE OF ITS BUTTONS IS PRESSED", VIEW_W / 2, top + 64 + 28,
+                { size: 11, weight: 700, color: INK_FAINT, align: "center", spacing: 2 });
+            return "ESC  BACK";
+        }
+        const pads = gp.pads, n = pads.indexOf(pad), many = pads.length > 1;
+        const listW = 420, x = VIEW_W / 2 - listW / 2, rowH = 48, dots = many ? pads.length * 14 + 14 : 0;
+        // the pad's name, cut short to leave room for the dots and the selection arrow
+        let name = gp.padName(pad);
+        const room = listW - 92 - 40 - dots - (many ? this.measureText(`${n + 1} OF ${pads.length}  ·  `, 16, 700) : 0);
+        while (name.length > 1 && this.measureText(name, 16, 700) > room) name = name.slice(0, -2).trimEnd() + "…";
+        this.drawMenuList([{ name: "Gamepad", value: (many ? `${n + 1} OF ${pads.length}  ·  ` : "") + name, accent: tetI }],
+            this.padpos === 0 ? 0 : -1, top, rowH);
+        if (many) pads.forEach((p, i) => {
+            const dx = x + listW - 40 - (pads.length - i) * 14 + 7, cy = top + rowH / 2;
+            const lit = gp.pressing(p);
+            this.r.shape(dx - 4, cy - 4, 8, 8, {
+                radius: 4, lineWidth: 1, stroke: p === pad ? INK : "rgba(244,236,220,0.35)",
+                fill: lit ? PIECE_COLORS[tetI].base : p === pad ? INK : "rgba(244,236,220,0)",
+            });
+        });
+        const table = this.options.padTable(gp.padKey(pad));
+        this.drawBindings(top + rowH + 8, KEY_ACTIONS, table, padLabel, this.padpos - 1, this.padCapturing, "PRESS A BUTTON", tetI);
+        // the cancel hint names Start, the pad's only way out (Esc works too)
+        if (this.padCapturing) return `NEW BUTTON ON GAMEPAD ${n + 1} ADDS · BOUND BUTTON REMOVES      START  CANCEL`;
+        if (this.padpos === 0) return (many ? "← →  CHOOSE GAMEPAD" : "ONE GAMEPAD CONNECTED") + "      ESC  BACK";
+        return "ENTER  CHANGE      ESC  BACK";
     }
 
     // Multiplayer's join screen: a card per player with the device they picked, or the prompt for
@@ -2505,13 +2563,13 @@ class Engine {
                 { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 2 });
             return (this.gamepad.active ? "" : "ENTER  START      ") + `${back}  CHANGE PLAYER 2`;
         }
-        const pair = (a, b) => `${a} / ${b}`;
+        const pair = (a, b) => `${a} / ${b}`, pad = o.padTable(this.gamepad.padKey(this.gamepad.pads[0])); // the first pad's
         this.text(`PLAYER ${this.joined.length + 1}: PRESS ROTATE ON YOUR KEYS OR GAMEPAD`, cx, y,
             { size: 12, weight: 800, color: this.pulseInk(10), align: "center", spacing: 3 });
         const ways = [
             "KEYS 1  " + pair(keyLabel(o.keys.rotl[0]), keyLabel(o.keys.rotr[0])),
             "KEYS 2  " + pair(keyLabel(o.keys2.rotl[0]), keyLabel(o.keys2.rotr[0])),
-            "GAMEPAD  " + pair(padLabel(o.pad.rotl[0]), padLabel(o.pad.rotr[0])),
+            "GAMEPAD  " + pair(padLabel(pad.rotl[0]), padLabel(pad.rotr[0])),
         ];
         this.text(ways.join("      ·      "), cx, y + 28, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 2 });
         const pads = this.gamepad.pads.length;
