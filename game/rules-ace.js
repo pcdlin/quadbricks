@@ -7,6 +7,9 @@
 // kick limit, standard colours, hard drop locks, soft drop about 0.5G and not locking) and ARS2
 // (aceArs2: the same with the drops' locking swapped: up is a sonic drop, soft drop locks on the
 // ground). All three: lock resets up to 128 per piece.
+// "versus" (AceVersusGame, tetris.wiki): a three-minute time limit and a 20-line quota, attacks as in
+// the other TGM games (tgmVersus()), items that can be turned off; first to two rounds, as TAP's (an
+// assumption). Each side plays the speed of one of the modes (options.speed).
 
 const ACE_LEVELS = 15, ACE_LINES_PER_LEVEL = 10;
 // Gravity in 1/256 G by level from 1; past the end of a mode's list, 20G
@@ -28,6 +31,8 @@ const ACE_MOVE_RESETS = 128; // lock resets per piece
 const ACE_NEXT = 3;
 const ACE_SPAWN_ROW = 2; // spawn in the top visible rows, as in TGM3
 const ACE_ARS_SOFT = 0.5; // ARS rules' soft drop, rows per frame
+const ACE_VS_FRAMES = 3 * 60 * 60, ACE_VS_LINES = 20; // versus: 20 lines within 3:00
+const ACE_SPEEDS = ["normal", "hispeed1", "hispeed2", "another", "another2"]; // the modes whose speed versus plays
 const ACE_RULE_NAMES = { [aceArs]: "ARS ", [aceArs2]: "ARS2 " }; // before the mode in the stats
 
 class AceGame extends RuleGame {
@@ -47,15 +52,21 @@ class AceGame extends RuleGame {
             this.floorKickZeroes = false;
         }
         if (variant === "big") this.setBig();
+        this.speed = variant === "big" ? "normal" : variant; // the mode whose speeds it plays (versus: options.speed)
+        this.levelClock = true; // each level has a time limit (not in versus)
         // time left on the level's clock; it waits from a level-up to the next piece
         this.aceTimer = this.aceLimit();
         this.acePaused = false;
     }
 
     getStats() {
-        return [["ACE", (ACE_RULE_NAMES[this.gamemode] || "") + VARIANT_NAMES[this.variant]], ["LEVEL", `${this.level} / ${ACE_LEVELS}`],
+        return [this.statsName(), ["LEVEL", `${this.level} / ${ACE_LEVELS}`],
             ["LINES", `${this.lines} / ${ACE_LEVELS * ACE_LINES_PER_LEVEL}`],
             ["LIMIT", this.formatTime(Math.max(0, this.aceTimer))], ["TIME", this.formatTime()]];
+    }
+
+    statsName() {
+        return ["ACE", (ACE_RULE_NAMES[this.gamemode] || "") + VARIANT_NAMES[this.variant]];
     }
 
     // Lines, then time
@@ -64,7 +75,7 @@ class AceGame extends RuleGame {
     }
 
     setTimings() {
-        const v = this.variant === "big" ? "normal" : this.variant, i = this.level - 1;
+        const v = this.speed, i = this.level - 1;
         const delays = v === "another" ? ACE_ANOTHER_DELAYS[Math.min(i, ACE_ANOTHER_DELAYS.length - 1)]
             : v === "another2" ? ACE_ANOTHER2_DELAYS : ACE_DELAYS;
         [this.are, this.lineAre, this.das, this.lockDelayMax, this.lineClearDelay] = delays;
@@ -105,7 +116,7 @@ class AceGame extends RuleGame {
 
     // The level's clock; running out ends the game
     onClock() {
-        if (!this.acePaused && --this.aceTimer < 0) {
+        if (this.levelClock && !this.acePaused && --this.aceTimer < 0) {
             this.aceTimer = 0;
             this.endGame("TIME OVER", `LEVEL ${this.level} — ${this.lines} LINES`);
             return false;
@@ -115,7 +126,7 @@ class AceGame extends RuleGame {
 
     // The time limit of the current level
     aceLimit() {
-        const limits = ACE_TIME_LIMITS[this.variant === "another" ? "another" : "other"];
+        const limits = ACE_TIME_LIMITS[this.speed === "another" ? "another" : "other"];
         return limits[Math.min(this.level - 1, limits.length - 1)];
     }
 
@@ -144,4 +155,33 @@ class AceGame extends RuleGame {
     }
 }
 
-registerRules([tgmAce, aceArs, aceArs2], () => AceGame);
+// Versus: 20 lines first, or more lines after 3:00 (tgmVersus() does the rest); no level clock
+class AceVersusGame extends tgmVersus(AceGame) {
+    constructor(mode, variant) {
+        super(mode, variant);
+        this.versusFrames = ACE_VS_FRAMES;
+        this.levelClock = false;
+    }
+
+    setOptions(options = {}) {
+        this.speed = ACE_SPEEDS.includes(options.speed) ? options.speed : "normal";
+        this.aceTimer = this.aceLimit();
+        super.setOptions(options);
+    }
+
+    statsName() {
+        return ["ACE", (ACE_RULE_NAMES[this.gamemode] || "") + VARIANT_NAMES[this.speed] + " VS"];
+    }
+
+    getStats() {
+        return [this.statsName(), ["LINES", `${this.lines} / ${ACE_VS_LINES}`], this.timeLeftRow(),
+            ["SENT", String(this.linesSent)], ["LEVEL", String(this.level)]];
+    }
+
+    versusGoal() { return this.lines >= ACE_VS_LINES; }
+    versusGoalValue() { return ACE_VS_LINES; }
+    versusProgress() { return this.lines; }
+    goalText(value) { return `${value} LINES`; }
+}
+
+registerRules([tgmAce, aceArs, aceArs2], variant => variant === "versus" ? AceVersusGame : AceGame);

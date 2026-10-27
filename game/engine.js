@@ -55,9 +55,9 @@ const ULTRA_SETUP = { name: "Time", accent: tetZ, arg: "variant", labels: ["1:00
     values: ["ultra1", "ultra", "ultra3", "ultra5"], initial: 1 };
 const ACE_RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["SRS", "ARS", "ARS2"], values: [tgmAce, aceArs, aceArs2] };
 const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
-// createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams, GB's heart mode
-// (and the Guideline versus match's bot level, the label's index)
-const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart", "bot"];
+// createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams, GB's heart mode,
+// versus's speed (the mode a TGM1, TAP or ACE side plays) and items (and the versus match's bot level, the label's index)
+const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart", "speed", "items", "bot"];
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
 const REV_SETUP = { name: "Reverse", accent: tetZ, arg: "rev", labels: ["Off", "On"], values: [false, true] }; // the well upside down
 const MONO_SETUP = { name: "Mono", accent: tetS, arg: "mono", labels: ["Off", "On"], values: [false, true] }; // one colour
@@ -69,22 +69,34 @@ const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off",
 // Versus: the bot's level (bot.js, 0-10), 6 at first
 const BOT_VERSUS_LEVEL = 6;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
-// Versus: the rule set each side plays ("versus" in each: rules-guideline.js, rules-tgm.js, rules-1989.js),
-// then its own setting, both sides the same: TGM3's rule (World or Classic, which sets the mode again)
-// or NES's start level. A card with `modes` is shown and used only when the cards before it that set
-// the mode chose one of them
-const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM3", "NES"],
-    values: [guideline, arika, nesTetris] };
-const VERSUS_TGM3_RULE_SETUP = { ...RULE_SETUP, modes: [arika, tgmClassic] };
-const VERSUS_NES_LEVEL_SETUP = { ...levelSetup(NES_START_LEVELS), initial: NES_VERSUS_LEVEL, modes: [nesTetris] };
-const VERSUS_SUB_SETUP = [VERSUS_TGM3_RULE_SETUP, VERSUS_NES_LEVEL_SETUP];
+// Versus: the rule set each side plays ("versus" in each: rules-guideline.js, rules-tgm.js, rules-ace.js,
+// rules-1989.js), then its own settings, both sides the same: TGM1's, TAP's and ACE's speed (the mode
+// they play), TGM3's and ACE's rule (which set the mode again), items (TAP, TGM3, ACE), NES's and GB's
+// start level, GB's garbage height. A card with `modes` is shown and used only when the cards before
+// it that set the mode chose one of them
+const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM1", "TAP", "TGM3", "ACE", "NES", "GB"],
+    values: [guideline, tgmOriginal, tgmTap, arika, tgmAce, nesTetris, gbTetris] };
+const VERSUS_ACE_MODES = [tgmAce, aceArs, aceArs2];
+const VERSUS_SUB_SETUP = [
+    { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
+    { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "Death"], values: ["master", "death"], modes: [tgmTap] },
+    { ...RULE_SETUP, modes: [arika, tgmClassic] },
+    { ...ACE_RULE_SETUP, modes: VERSUS_ACE_MODES },
+    { name: "Speed", accent: tetO, arg: "speed", labels: ["Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2"],
+      values: ["normal", "hispeed1", "hispeed2", "another", "another2"], modes: VERSUS_ACE_MODES },
+    { name: "Items", accent: tetS, arg: "items", labels: ["Off", "On"], values: [false, true], modes: [tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] },
+    { ...levelSetup(NES_START_LEVELS), initial: NES_VERSUS_LEVEL, modes: [nesTetris] },
+    { ...levelSetup(GB_START_LEVELS), modes: [gbTetris] },
+    { ...HEIGHT_SETUP, modes: [gbTetris] },
+];
 // The versus rule set's name for a mode (the join screen's heading)
-const VERSUS_RULE_NAMES = { [guideline]: "Guideline", [arika]: "TGM3 World", [tgmClassic]: "TGM3 Classic", [nesTetris]: "NES" };
+const VERSUS_RULE_NAMES = { [guideline]: "Guideline", [tgmOriginal]: "TGM1", [tgmTap]: "TAP", [arika]: "TGM3 World", [tgmClassic]: "TGM3 Classic",
+    [tgmAce]: "ACE", [aceArs]: "ACE ARS", [aceArs2]: "ACE ARS2", [nesTetris]: "NES", [gbTetris]: "GB" };
 // Multiplayer: versus against the bot, or two players on one screen, each on the input device they
 // pick on the join screen (MENU_JOIN, after the setup cards: `join`); the setup cards as a Custom
 // Game mode's
 const MULTI_ITEMS = [
-    { name: "Versus Bot", desc: "Against the bot: Guideline, TGM3 or NES rules", accent: tetI,
+    { name: "Versus Bot", desc: "Against the bot, in the rules of any of the games", accent: tetI,
       modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...VERSUS_SUB_SETUP, BOT_SETUP] } },
     { name: "Versus Player", desc: "Two players side by side, on their own keys or gamepads", accent: tetT,
       modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...VERSUS_SUB_SETUP], join: true } },
@@ -795,25 +807,26 @@ class Engine {
     }
 
     // -----------------------------------
-    // VERSUS: a match against the bot, or between two players, in the Guideline, TGM3 or NES
+    // VERSUS: a match against the bot, or between two players, in any rule set
 
-    // A match against the bot at BOT_LEVELS[level]: its game is dealt from the player's seed, so both
-    // sides get the same pieces. view: the other side's board (here the bot's)
-    newMatch(mode, startLevel, seed, level) {
-        const game = createGame(mode, "versus", startLevel, 0, {}, { seed });
+    // A match against the bot at BOT_LEVELS[level]: its game has the player's settings (startLevel,
+    // height, options: the speed, items and seed), so both sides get the same pieces, but not the
+    // player's handling. view: the other side's board (here the bot's)
+    newMatch(mode, startLevel, height, options, level) {
+        const game = createGame(mode, "versus", startLevel, height, {}, options);
         return {
-            bot: new Bot(level, seed), level, view: new BoardView(game),
+            bot: new Bot(level, options.seed), level, view: new BoardView(game),
             popups: [[], []], // lines each side sent: "+4" beside or over its well
             result: null,     // "win", "lose" or "draw" (for player 1) once the round is decided (versusOutcome)
-            wins: [0, 0],     // rounds each side has won (TGM3: the first to two takes the match)
+            wins: [0, 0],     // rounds each side has won (the TGM games: the first to two takes the match; GB: four)
             round: 1,
         };
     }
 
     // A match between two players (duo), each on their own input device (duoDevices): player 2's
-    // game, with the player's handling, is dealt from the same seed; view is player 2's board
-    newDuo(mode, startLevel, seed) {
-        const game = createGame(mode, "versus", startLevel, 0, this.options.handling, { seed });
+    // game, with the player's handling and settings, is dealt from the same seed; view is player 2's board
+    newDuo(mode, startLevel, height, options) {
+        const game = createGame(mode, "versus", startLevel, height, this.options.handling, options);
         return { duo: true, devices: this.duoDevices, view: new BoardView(game), popups: [[], []], result: null, wins: [0, 0], round: 1 };
     }
 
@@ -842,7 +855,7 @@ class Engine {
             games.forEach((game, side) => {
                 for (const attack of game.takeAttacks()) {
                     games[1 - side].receiveGarbage({ ...attack, hole: hole() });
-                    m.popups[side].push({ lines: attack.lines, life: ATTACK_LIFE });
+                    m.popups[side].push({ lines: attack.lines, item: attack.item, life: ATTACK_LIFE });
                     if (side === 0 || m.duo) this.sound.play("attack");
                 }
             });
@@ -1000,8 +1013,8 @@ class Engine {
         if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
         const hadMatch = !!this.match;
-        this.match = !versus ? null : options.duo ? this.newDuo(mode, startLevel, gameOptions.seed)
-            : this.newMatch(mode, startLevel, gameOptions.seed, options.bot ?? BOT_VERSUS_LEVEL);
+        this.match = !versus ? null : options.duo ? this.newDuo(mode, startLevel, height, gameOptions)
+            : this.newMatch(mode, startLevel, height, gameOptions, options.bot ?? BOT_VERSUS_LEVEL);
         if (this.match) [this.game.rival, this.match.view.game.rival] = [this.match.view.game, this.game];
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
@@ -2812,14 +2825,17 @@ class Engine {
     drawAttackPopups(popups) {
         const r = this.r, compact = this.layout.compact;
         for (const p of popups) {
-            const k = 1 - p.life / ATTACK_LIFE, size = 34 + 4 * Math.min(p.lines, 6);
+            // an item sent shows its name, shrunk to the column (or the well)
+            const text = p.item || "+" + p.lines, room = compact ? BOARD_W - 16 : SIDE_W;
+            const k = 1 - p.life / ATTACK_LIFE, size = p.item ? Math.min(24, Math.floor(24 * room / this.measureText(text, 24, 900, 2)))
+                : 34 + 4 * Math.min(p.lines, 6);
             const style = { size, weight: 900, color: MESSAGE_GOLD, align: compact ? "center" : "left", spacing: 2 };
             r.save();
             r.globalAlpha = Math.min(1, p.life / 15);
-            if (compact) this.text("+" + p.lines, BOARD_X + BOARD_W / 2, this.boardY + this.boardH * 0.3 - 50 * k, style);
+            if (compact) this.text(text, BOARD_X + BOARD_W / 2, this.boardY + this.boardH * 0.3 - 50 * k, style);
             else {
                 const y = Math.min(this.board.popupTop + 8 + size / 2, this.boardY + this.boardH - size / 2);
-                this.text("+" + p.lines, RIGHT_X, y + 16 * Math.pow(1 - Math.min(1, k * 4), 2), style);
+                this.text(text, RIGHT_X, y + 16 * Math.pow(1 - Math.min(1, k * 4), 2), style);
             }
             r.restore();
         }

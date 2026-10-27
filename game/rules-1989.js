@@ -9,6 +9,11 @@
 // NES "versus": one side of a match as Classic Tetris World Championship plays it (the NES itself
 // has no two-player mode): A-Type from one start level, both sides dealt the same pieces, no
 // garbage; the higher score once a side tops out wins.
+// GB "versus": one side of a two-player match over the link cable (tetris.wiki, StrategyWiki): A-Type
+// from one start level over the same garbage (the height), both sides dealt the same pieces; a
+// double sends 1 line, a triple 2, a Tetris 4, all with their hole in one column both sides share;
+// 30 lines or the other side topping out win a round, four rounds the match. The garbage rises when
+// a piece locks without clearing, as in the other rule sets here (the sources don't say when).
 
 // ----------------------------------------------------------
 // NES (1989)
@@ -75,6 +80,8 @@ const GB_GARBAGE_FILL = 0.5; // chance of a block in each garbage cell
 // Heart mode (Down + Start on the title screen): gravity as at the level + 10, at most level 20's;
 // scoring unchanged (tetris.wiki; SetNumFramesUntilPiecesMoveDown in the disassembly)
 const GB_HEART_LEVELS = 10;
+// Versus: lines sent by lines cleared, the lines that win a round, rounds that win the match
+const GB_VS_LINES = [0, 0, 1, 2, 4], GB_VS_GOAL = 30, GB_VS_WINS = 4;
 
 // ----------------------------------------------------------
 // What NES and GB share: no hard drop, no hold, no kicks, no IRS, no lock delay (a piece that
@@ -97,7 +104,7 @@ class Game1989 extends RuleGame {
     setStart(startLevel, levels, height) {
         this.startLevel = clamp(startLevel, 0, levels - 1);
         this.level = this.startLevel;
-        this.height = this.btype ? clamp(height, 0, GB_B_HEIGHTS - 1) : 0;
+        this.height = this.btype || (this.gb && this.versus) ? clamp(height, 0, GB_B_HEIGHTS - 1) : 0;
     }
 
     setupField() {
@@ -110,7 +117,7 @@ class Game1989 extends RuleGame {
     fillGarbage(rows) {
         for (let r = HEIGHT - rows; r < HEIGHT; r++) {
             let cells;
-            do cells = Array.from({ length: WIDTH }, () => Math.random() < GB_GARBAGE_FILL ? 1 + Math.floor(Math.random() * 7) : 0);
+            do cells = Array.from({ length: WIDTH }, () => this.random() < GB_GARBAGE_FILL ? 1 + Math.floor(this.random() * 7) : 0);
             while (cells.every(v => v) || cells.every(v => !v));
             cells.forEach((v, c) => this.setCell(r, c, v));
         }
@@ -351,12 +358,58 @@ class GbGame extends Game1989 {
     setOptions(options = {}) {
         super.setOptions(options);
         this.heart = !!options.heart;
+        if (this.versus) this.setVersus(options.seed ?? Date.now());
+    }
+
+    // Versus: the same pieces, starting garbage and hole column from the match's seed
+    setVersus(seed) {
+        this.randomizer = new GbRandomizer(seed);
+        this.seedVersus(seed);
+        this.sendsGarbage = true;
+        this.versusWins = GB_VS_WINS;
+        this.goalReached = false;
+        this.vsHole = Math.floor(this.random() * WIDTH);
+    }
+
+    record() { return this.versus ? null : super.record(); }
+
+    // Every attack's garbage has its holes in the column both sides share
+    receiveGarbage(attack) {
+        super.receiveGarbage(attack.item ? attack : { ...attack, hole: this.vsHole });
+    }
+
+    // Versus: a clear sends its lines; 30 lines end the round (the rows collapse first, as the round
+    // stops here)
+    scoreClear(n, rows) {
+        super.scoreClear(n, rows);
+        if (!this.versus || this.gameover) return;
+        if (GB_VS_LINES[n]) this.sendAttack({ lines: GB_VS_LINES[n] });
+        if (this.lines >= GB_VS_GOAL) {
+            this.goalReached = true;
+            this.collapse(rows);
+            this.endGame(`${GB_VS_GOAL} LINES`, `SCORE ${this.scoreText()}`);
+        }
+    }
+
+    riseAfterLock(n) {
+        return this.versus && n === 0 ? this.riseGarbage() : 0;
+    }
+
+    // 30 lines first; else topping out loses
+    versusOutcome() {
+        const other = this.rival;
+        if (this.goalReached || other.goalReached) return this.goalReached === other.goalReached ? "draw" : this.goalReached ? "win" : "lose";
+        return super.versusOutcome();
     }
 
     speedLevel() { return this.level + (this.heart ? GB_HEART_LEVELS : 0); }
 
     // The level with a heart in heart mode, as the GB shows it
     getStats() {
+        if (this.versus) {
+            return [["GB", "VERSUS"], ["LINES", `${this.lines} / ${GB_VS_GOAL}`], ["LEVEL", String(this.level)],
+                ["SENT", String(this.linesSent)], ["SCORE", this.scoreText()]];
+        }
         const stats = super.getStats();
         if (this.heart) stats[1] = ["LEVEL", `${this.level} ♥`];
         return stats;

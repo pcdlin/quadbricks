@@ -18,9 +18,10 @@
 //    GradeMania3Mode). "easy": to level 200, scored in fireworks (the community analysis "TGM3 Easy
 //    mode hanabi" that tetris.wiki links to). "shirase": 20G to level 1300, rising garbage,
 //    monochrome blocks, a staff roll with big pieces (roll length from NullpoMino's SpeedMania2Mode).
-//    "versus" (TiVersusGame): one side of a VS Rule match without items (tetris.wiki:
-//    TGM_Versus_Mode_Guide): a race to level 200 in 2:40, first to two rounds, garbage copied
-//    from the rows a clear removes.
+//  - "versus" in all three (tgmVersus(): Tgm1VersusGame, TapVersusGame, TiVersusGame): one side of
+//    a VS match (tetris.wiki: TGM_Versus_Mode_Guide): a race to level 200 in 2:40 (TGM1: to the end,
+//    a draw after 5:00), first to two rounds, garbage copied from the rows a clear removes, items
+//    with the Items card (TAP, TGM3).
 //    (tetris.wiki: Tetris_The_Grand_Master_3_Terror-Instinct, Heboris_Unofficial_Expansion)
 
 const TGM_BUFFER_TOP = 1; // one buffer row: blocks locking above it are deleted
@@ -60,6 +61,7 @@ const TGM_VS_LEVEL_GOAL = 200; // the first to reach it wins the round
 const TGM_VS_FRAMES = (2 * 60 + 40) * 60; // a round's time limit, 2:40: then the higher level wins
 const TGM_VS_WINS = 2; // rounds to win the match ("first to 2", up to 3 rounds)
 const TGM_VS_GARBAGE_MAX = 8; // rows of garbage that may wait ("capped at the first 8 lines")
+const TGM1_VS_FRAMES = 5 * 60 * 60; // TGM1: a round not decided in 5:00 is a draw (tetris.wiki)
 const TGM_TORIKAN_LEVEL = 500, TGM_TORIKAN_FRAMES = 7 * 60 * 60; // ends at 500 if slower than 7:00
 const TGM_GHOST_UNTIL = 100; // ghost piece shown below level 100
 const TGM_ROTATION_RESETS = 8, TGM_MOVE_RESETS = 10; // World rule move reset limits
@@ -550,6 +552,7 @@ class TgmGame extends RuleGame {
     // After a line clear: the next piece, or the staff roll once the timer has stopped
     // (the end level, or TAP Death's level 500 reached too late)
     afterClear() {
+        this.fireItems();
         if (this.timerStopped && !this.roll) this.startRollStart();
         else super.afterClear();
     }
@@ -852,9 +855,8 @@ class TapGame extends TgmGame {
             this.maxLevel = TAP_NORMAL_MAX_LEVEL;
             this.sectionStops = false;
         }
-        // Normal: per cell, the item its block carries (from an item piece); items a clear set off
-        this.itemCells = this.normal ? this.field.map(() => new Array(WIDTH).fill(null)) : null;
-        this.firingItems = [];
+        // Normal: its two items (RuleGame's item pieces)
+        if (this.normal) this.itemCells = this.field.map(() => new Array(WIDTH).fill(null));
         this.sonicTrail = !this.death; // TAP shows the drop trail for the sonic drop too (not Death)
         this.invisibleRollName = "M-ROLL";
         this.rollLength = this.tapPlus ? TAP_PLUS_ROLL_FRAMES : TAP_ROLL_FRAMES;
@@ -919,91 +921,10 @@ class TapGame extends TgmGame {
         }
     }
 
-    // The piece entering takes the item waiting for it, if any
-    onNewPiece() {
-        this.pieceItem = this.nextItem;
-        this.nextItem = null;
-    }
-
-    // An item piece's blocks keep its item in the field
-    onBlockLocked(cell) {
-        super.onBlockLocked(cell);
-        if (this.itemCells && this.pieceItem) this.itemCells[cell.row - FIELD_TOP][cell.col] = this.pieceItem;
-    }
-
-    getCellItem(row, col) {
-        if (!this.itemCells || row < FIELD_TOP || row >= HEIGHT || !this.getCell(row, col)) return null;
-        return this.itemCells[row - FIELD_TOP][col];
-    }
-
-    // A line clear that takes any block of an item piece sets its item off (after the clear); the
-    // piece's other blocks then carry it no more
-    scoreClear(n, rows) {
-        if (this.itemCells) {
-            for (const r of rows) {
-                for (const item of this.itemCells[r - FIELD_TOP]) {
-                    if (item && !this.firingItems.includes(item)) this.firingItems.push(item);
-                }
-            }
-            for (const marks of this.itemCells) {
-                for (let c = 0; c < WIDTH; c++) if (this.firingItems.includes(marks[c])) marks[c] = null;
-            }
-        }
-        super.scoreClear(n, rows);
-    }
-
-    onCollapse(rows) {
-        super.onCollapse(rows);
-        if (this.itemCells) this.itemCells = this.dropRows(this.itemCells, rows, () => new Array(WIDTH).fill(null));
-    }
-
     // The roll starts on an empty field, without items
     onRollBegin() {
         if (this.itemCells) for (const marks of this.itemCells) marks.fill(null);
         this.nextItem = this.pieceItem = null;
-    }
-
-    // The item: Free Fall drops every block down its column, Del Even deletes every other row from the
-    // bottom (the second, fourth, ...). Blocks of another item piece keep their item as they move;
-    // those the item itself removes take it with them (only the player's clears set items off)
-    useItem(item) {
-        this.addAction(item, "grade");
-        if (item === "FREE FALL") {
-            for (let c = 0; c < WIDTH; c++) {
-                const blocks = [];
-                for (let r = HEIGHT - 1; r >= FIELD_TOP; r--) {
-                    if (this.getCell(r, c)) blocks.push([this.getCell(r, c), this.itemCells[r - FIELD_TOP][c]]);
-                }
-                for (let r = HEIGHT - 1, k = 0; r >= FIELD_TOP; r--, k++) {
-                    const [type, mark] = k < blocks.length ? blocks[k] : [0, null];
-                    this.setCell(r, c, type);
-                    this.itemCells[r - FIELD_TOP][c] = mark;
-                }
-            }
-            // rows it fills clear at once (no score or lines: the item's, not the player's)
-            const full = [];
-            for (let r = FIELD_TOP; r < HEIGHT; r++) {
-                if (!this.field[r - FIELD_TOP].every(v => v !== 0)) continue;
-                full.push(r);
-                for (let c = 0; c < WIDTH; c++) this.clearedCells.push({ row: r, col: c, type: this.getCell(r, c) });
-            }
-            this.collapse(full);
-        } else {
-            const rows = [];
-            for (let r = HEIGHT - 2; r >= FIELD_TOP; r -= 2) {
-                rows.push(r);
-                for (let c = 0; c < WIDTH; c++) {
-                    const type = this.getCell(r, c);
-                    if (type) this.clearedCells.push({ row: r, col: c, type });
-                }
-            }
-            this.collapse(rows.reverse());
-        }
-    }
-
-    afterClear() {
-        for (const item of this.firingItems.splice(0)) this.useItem(item);
-        super.afterClear();
     }
 
     // Combo multipliers apply to singles, doubles and triples, never to Tetrises
@@ -1635,96 +1556,195 @@ class TiShiraseGame extends TiGame {
 }
 
 // ----------------------------------------------------------
-// TGM3 versus (World or Classic rule): one side of a VS Rule match as the arcade sets it by default
-// (tetris.wiki, TGM Versus Mode Guide), without the items. Master's levels and speed (no COOLs or
-// REGRETs, so the speed level is the level), no grade, roll or 15-minute speed-up; both sides deal
-// the same pieces (options.seed). A round is won by reaching level 200 first, by the other side
-// topping out, or with the higher level when 2:40 runs out (ties are draws: the guide gives the
-// defending side a goal reached on the same frame, a role this match has no use for). A clear
-// of two lines or more sends the rows it removed, the clearing piece's blocks taken out, upside
-// down ("take the line clear, erase the clearing piece, and send it vertically flipped"); singles
-// send nothing. As in the Guideline here, the garbage rises when this side locks a piece that
-// clears nothing, at most 8 rows of it (the guide's cap); nothing cancels it.
+// Versus: one side of a VS match as the arcade sets it by default (tetris.wiki, TGM Versus Mode
+// Guide; TAP's, TGM3's and ACE's taken as the same), each side at its mode's speed with the mode's
+// levels and score, but no grade, roll, level stop or 15-minute speed-up; both sides deal the same
+// pieces (options.seed). A round is won by reaching the goal first (level 200), by the other side
+// topping out, or by being further on (the higher level) when the 2:40 run out; ties are draws (the
+// guide gives the defending side a goal reached on the same frame, a role this match has no use for).
+// A clear of two lines or more sends the rows it removed, the clearing piece's blocks taken out,
+// upside down ("take the line clear, erase the clearing piece, and send it vertically flipped"), a
+// perfect clear twice; singles and clears that set an item off send nothing. As in the Guideline
+// here, the garbage rises when this side locks a piece that clears nothing, at most 8 rows of it (the
+// guide's cap); nothing cancels it. Items with the Items card (RuleGame's). TGM1 (tetris.wiki): no
+// items, no goal but the game's end, and a round not decided in 5:00 is a draw.
 
-class TiVersusGame extends TiGame {
+// The versus side of a TGM game (TiGame, TapGame, Tgm1Game; ACE's AceGame too)
+function tgmVersus(Base) {
+    return class extends Base {
+        constructor(mode, variant, startLevel, height, handling) {
+            super(mode, variant, startLevel, height, handling);
+            this.sendsGarbage = true;
+            this.versusWins = TGM_VS_WINS;
+            this.versusFrames = TGM_VS_FRAMES; // a round's time limit
+            this.timeDraw = false; // a round that runs out of time is a draw (TGM1), else the one further on wins
+            this.goalReached = false;
+            this.timeUp = false;
+            this.lockCells = []; // the locking piece's cells (beforeLock), taken out of the garbage it sends
+        }
+
+        // Both sides deal the same pieces and items from the match's seed; options.items: the Items card
+        setOptions(options = {}) {
+            super.setOptions(options);
+            const seed = options.seed ?? Date.now();
+            this.randomizer = this.randomizer ? new this.randomizer.constructor(seed) : new BagRandomizer(seed, this.bagNoSzoFirst);
+            this.seedVersus(seed);
+            if (options.items) this.useItems();
+        }
+
+        getStats() {
+            return [this.statsName(), ["LEVEL", `${this.level} / ${this.maxLevel}`], this.timeLeftRow(),
+                ["SENT", String(this.linesSent)], ["SCORE", this.scoreText()]];
+        }
+
+        timeLeftRow() {
+            return ["TIME", this.formatTime(Math.max(0, this.versusFrames - this.frames))];
+        }
+
+        record() { return null; }
+        secretGradeLabels() { return null; }
+        testSetup() { return false; }
+
+        onClock() {
+            if (this.frames >= this.versusFrames) {
+                this.timeUp = true;
+                this.endGame("TIME UP", this.goalText(this.versusProgress()));
+                return false;
+            }
+            return super.onClock();
+        }
+
+        beforeLock() {
+            super.beforeLock();
+            this.lockCells = this.curPieceCells();
+        }
+
+        // 2+ lines send their garbage; the goal ends the round (the rows collapse first, as the round
+        // stops here)
+        scoreClear(n, rows) {
+            if (n >= 2 && !this.firingItems.length) {
+                const garbage = this.garbageFrom(rows);
+                this.sendAttack(this.fieldEmpty() ? { lines: 2 * n, rows: [...garbage, ...garbage] } : { lines: n, rows: garbage });
+            }
+            super.scoreClear(n, rows);
+            if (this.versusGoal()) {
+                this.goalReached = true;
+                this.collapse(rows);
+                this.endGame(this.goalText(this.versusGoalValue()), this.formatTime());
+            }
+        }
+
+        // The goal (the last level: 200, TGM1's 999) and how far this side is towards it
+        versusGoal() { return this.level >= this.maxLevel; }
+        versusGoalValue() { return this.maxLevel; }
+        versusProgress() { return this.level; }
+        goalText(value) { return `LEVEL ${value}`; }
+
+        // The rows a clear removed (rows; clearedRows holds them as they were), without the locking
+        // piece's blocks, upside down: top first, as they rise on the other side
+        garbageFrom(rows) {
+            return this.clearedRows.map((cells, i) => cells.map((v, c) =>
+                this.lockCells.some(cell => cell.row === rows[i] && cell.col === c) ? 0 : v)).reverse();
+        }
+
+        maxIncoming() { return TGM_VS_GARBAGE_MAX; }
+
+        riseAfterLock(n) {
+            return n === 0 ? this.riseGarbage() : 0;
+        }
+
+        // The goal first; else topping out loses; else, when time is up, a draw (TGM1) or the one
+        // further on
+        versusOutcome() {
+            const other = this.rival;
+            if (this.goalReached || other.goalReached) return this.goalReached === other.goalReached ? "draw" : this.goalReached ? "win" : "lose";
+            const out = g => g.gameover && !g.timeUp;
+            if (out(this) || out(other)) return out(this) === out(other) ? "draw" : out(this) ? "lose" : "win";
+            if (!this.timeUp || !other.timeUp) return null;
+            const a = this.versusProgress(), b = other.versusProgress();
+            return this.timeDraw || a === b ? "draw" : a > b ? "win" : "lose";
+        }
+    };
+}
+
+// TGM3 (World or Classic rule): Master's levels and speed without COOLs or REGRETs, so the speed
+// level is the level
+class TiVersusGame extends tgmVersus(TiGame) {
     constructor(mode, variant) {
         super(mode, variant);
         this.internalGrading = false;
         this.hasKill = false;
         this.maxLevel = TGM_VS_LEVEL_GOAL;
-        this.sendsGarbage = true;
-        this.versusWins = TGM_VS_WINS;
-        this.goalReached = false;
-        this.timeUp = false;
-        this.lockCells = []; // the locking piece's cells (beforeLock), taken out of the garbage it sends
+    }
+
+    updateSection() {} // no COOLs or REGRETs
+    checkLevelStop() {}
+}
+
+// TAP: Master's speed or Death's (options.speed: "death"), Master's levels and score, no grades
+class TapVersusGame extends tgmVersus(TapGame) {
+    constructor(mode, variant) {
+        super(mode, variant);
+        this.internalGrading = false;
+        this.maxLevel = TGM_VS_LEVEL_GOAL;
     }
 
     setOptions(options = {}) {
+        this.death = options.speed === "death";
+        this.sonicTrail = !this.death;
         super.setOptions(options);
-        this.randomizer = new TiRandomizer(options.seed ?? Date.now());
     }
 
-    getStats() {
-        return [this.statsName(), ["LEVEL", `${this.level} / ${this.maxLevel}`],
-            ["TIME", this.formatTime(Math.max(0, TGM_VS_FRAMES - this.frames))], ["SENT", String(this.linesSent)], ["SCORE", this.scoreText()]];
+    statsName() {
+        return ["TGM2 TAP", this.death ? "DEATH VERSUS" : "MASTER VERSUS"];
     }
 
-    record() { return null; }
-    secretGradeLabels() { return null; }
-    testSetup() { return false; }
-    updateSection() {} // no COOLs or REGRETs
-    checkLevelStop() {}
-
-    onClock() {
-        if (this.frames >= TGM_VS_FRAMES) {
-            this.timeUp = true;
-            this.endGame("TIME UP", `LEVEL ${this.level}`);
-            return false;
-        }
-        return super.onClock();
+    // Death: 20G (its delays come from TapGame's delayRow) and no ghost
+    updateTimings() {
+        super.updateTimings();
+        if (this.death) this.gravity = this.softGravity = 20;
     }
 
-    beforeLock() {
-        this.lockCells = this.curPieceCells();
-    }
-
-    // Levels and score as in Master; 2+ lines send their garbage; level 200 ends the round (the
-    // rows collapse first, as the round stops here)
-    scoreLines(n, rows) {
-        if (n >= 2) this.sendAttack({ lines: n, rows: this.garbageFrom(rows) });
-        super.scoreLines(n, rows);
-        if (this.level >= this.maxLevel) {
-            this.goalReached = true;
-            this.collapse(rows);
-            this.endGame(`LEVEL ${this.maxLevel}`, this.formatTime());
-        }
-    }
-
-    // The rows a clear removed (rows; clearedRows holds them as they were), without the locking
-    // piece's blocks, upside down: top first, as they rise on the other side
-    garbageFrom(rows) {
-        return this.clearedRows.map((cells, i) => cells.map((v, c) =>
-            this.lockCells.some(cell => cell.row === rows[i] && cell.col === c) ? 0 : v)).reverse();
-    }
-
-    maxIncoming() { return TGM_VS_GARBAGE_MAX; }
-
-    riseAfterLock(n) {
-        return n === 0 ? this.riseGarbage() : 0;
-    }
-
-    // Level 200 first; else topping out loses; else, when time is up, the higher level
-    versusOutcome() {
-        const other = this.rival;
-        if (this.goalReached || other.goalReached) return this.goalReached === other.goalReached ? "draw" : this.goalReached ? "win" : "lose";
-        const out = g => g.gameover && !g.timeUp;
-        if (out(this) || out(other)) return out(this) === out(other) ? "draw" : out(this) ? "lose" : "win";
-        if (!this.timeUp || !other.timeUp) return null;
-        return this.level === other.level ? "draw" : this.level > other.level ? "win" : "lose";
+    ghostVisible() {
+        return !this.death && super.ghostVisible();
     }
 }
 
-registerRules([tgmOriginal], () => Tgm1Game);
-registerRules([tgmTap], () => TapGame);
+// TGM1: Master's speed or its hidden 20G mode's (options.speed: "20g"); no items; the end of the
+// game (level 999) is the only goal, and a round not decided in 5:00 is a draw
+class Tgm1VersusGame extends tgmVersus(Tgm1Game) {
+    constructor(mode, variant) {
+        super(mode, variant);
+        this.versusFrames = TGM1_VS_FRAMES;
+        this.timeDraw = true;
+    }
+
+    setOptions(options = {}) {
+        this.speed20g = options.speed === "20g";
+        super.setOptions({ ...options, items: false });
+    }
+
+    statsName() {
+        return ["TGM1", this.speed20g ? "20G VERSUS" : "MASTER VERSUS"];
+    }
+
+    getStats() {
+        const stats = super.getStats();
+        stats[1] = ["LEVEL", String(this.level)];
+        return stats;
+    }
+
+    updateTimings() {
+        super.updateTimings();
+        if (this.speed20g) this.gravity = this.softGravity = 20;
+    }
+
+    ghostVisible() {
+        return !this.speed20g && super.ghostVisible();
+    }
+}
+
+registerRules([tgmOriginal], variant => variant === "versus" ? Tgm1VersusGame : Tgm1Game);
+registerRules([tgmTap], variant => variant === "versus" ? TapVersusGame : TapGame);
 registerRules([arika, tgmClassic], variant => variant === "easy" ? TiEasyGame : variant === "shirase" ? TiShiraseGame
     : variant === "versus" ? TiVersusGame : TiGame);

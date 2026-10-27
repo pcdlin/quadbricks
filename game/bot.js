@@ -10,7 +10,7 @@
 //    only slides along the stack surface, and at low gravity it hovers.
 //  - Brain: Thiery and Scherrer's evaluator (landing height, eroded cells, transitions, holes, wells,
 //    ...) over bit-row boards, with a beam search over the visible next pieces and the hold; in
-//    versus (Guideline, TGM3) it also reckons with the garbage waiting to rise. Where Tetrises pay it keeps
+//    versus it also reckons with the garbage waiting to rise. Where Tetrises pay it keeps
 //    a well open; in the Guideline the upper levels play as players do there: T-spins (the explorer
 //    finds the turns into a slot, the evaluator credits slots it builds), back-to-backs, combos.
 //  - Hands: turns the chosen route into one input bitmap per frame, closed loop (the route is found
@@ -118,8 +118,9 @@ function botProfile(game, hands) {
         if (!hands.spins || game.variant === "master" || game.big) return "tetris";
         return game.versus ? "versus" : "attack";
     }
-    // TGM3 versus too: a Tetris sends four rows and is worth six levels in the race to 200
-    if ((game.gamemode === arika || game.gamemode === tgmClassic) && (game.variant === "standard" || game.versus)) return "tetris";
+    // versus too (TGM1, TAP, TGM3, ACE, GB): a Tetris sends the most garbage, and in TGM3 is worth six
+    // levels in the race to 200
+    if (game.versus || ((game.gamemode === arika || game.gamemode === tgmClassic) && game.variant === "standard")) return "tetris";
     return "survival";
 }
 
@@ -209,10 +210,12 @@ function botLock(src, dst, cells, row, col) {
 // ones that never clear: a bit beside the well (BOT_GARBAGE_BIT) keeps them from ever being full.
 const BOT_GARBAGE_BIT = 1 << WIDTH;
 
-// Rows of garbage rise under the board; returns false when blocks are pushed out of the top
-function botRise(rows, n) {
+// Rows of garbage rise under the board; returns false when blocks are pushed above the highest row
+// a block may be in
+function botRise(game, rows, n) {
+    const top = Math.max(game.pieceTop, game.bufferTop ?? FIELD_TOP) - FIELD_TOP; // as the game's riseGarbage()
     let fits = true;
-    for (let i = 0; i < n; i++) if (rows[i]) fits = false;
+    for (let i = 0; i < n && top + i < BOT_ROWS; i++) if (rows[top + i]) fits = false;
     rows.copyWithin(0, n);
     rows.fill(BOT_FULL | BOT_GARBAGE_BIT, BOT_ROWS - n);
     return fits;
@@ -863,7 +866,7 @@ class Bot {
             pl.b2b = botClear.b2b;
             pl.combo = botClear.combo;
             pl.pending = botPendingAfter(pending, cleared);
-            const dead = botDead(game, buf, seq[0] || tetT) || (pending && !cleared && !botRise(buf, pending));
+            const dead = botDead(game, buf, seq[0] || tetT) || (pending && !cleared && !botRise(game, buf, pending));
             pl.board = Int32Array.from(buf);
             pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
         }
@@ -907,7 +910,7 @@ class Bot {
                     const acc = st.acc + botStepScore(game, buf, w, cleared, st.b2b, st.combo);
                     const pending = botPendingAfter(st.pending, cleared);
                     const b2b = botClear.b2b, combo = botClear.combo;
-                    const dead = botDead(game, buf, next) || (st.pending && !cleared && !botRise(buf, st.pending));
+                    const dead = botDead(game, buf, next) || (st.pending && !cleared && !botRise(game, buf, st.pending));
                     const score = acc + botBoardScore(buf, w) + (dead || botBlocked(game, buf, next) ? BOT_DANGER : 0);
                     if (last) { if (score > best) best = score; return; }
                     if (kept.length === beam && score <= kept[beam - 1].score) return;

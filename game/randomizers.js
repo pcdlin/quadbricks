@@ -26,20 +26,25 @@ class LcgRandomizer {
 }
 
 // A 7-bag drawn from a seeded generator, so games given the same seed deal the same pieces (both
-// sides of a Guideline versus match). Each bag is shuffled (Fisher-Yates) and dealt from its end.
+// sides of a versus match). Each bag is shuffled (Fisher-Yates) and dealt from its end; noSzoFirst:
+// the first is never S, Z or O (ACE)
 class BagRandomizer extends LcgRandomizer {
-    constructor(seed) {
+    constructor(seed, noSzoFirst = false) {
         super(seed, [tetI, tetT, tetL, tetJ, tetS, tetZ, tetO]);
         this.bag = [];
+        this.first = noSzoFirst;
     }
 
     nextIndex() {
         if (!this.bag.length) {
-            this.bag = [0, 1, 2, 3, 4, 5, 6];
-            for (let i = 6; i > 0; i--) {
-                const j = this.rand(i + 1);
-                [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
-            }
+            do {
+                this.bag = [0, 1, 2, 3, 4, 5, 6];
+                for (let i = 6; i > 0; i--) {
+                    const j = this.rand(i + 1);
+                    [this.bag[i], this.bag[j]] = [this.bag[j], this.bag[i]];
+                }
+            } while (this.first && this.bag[6] >= 4); // S, Z, O
+            this.first = false;
         }
         return this.bag.pop();
     }

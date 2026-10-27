@@ -209,8 +209,8 @@ for (const [name, mode, variant] of MODES) {
 // ---------------------------------------------------------------- versus
 // Two bots in a versus match, attacks going both ways as the engine routes them, until the rule set
 // decides it (versusOutcome); returns who won (for the first side) and what happened
-function versusMatch(mode, levels, seed, startLevel = 0) {
-    const games = [0, 1].map(() => createGame(mode, "versus", startLevel, 0, {}, { seed }));
+function versusMatch(mode, levels, seed, startLevel = 0, options = {}, height = 0) {
+    const games = [0, 1].map(() => createGame(mode, "versus", startLevel, height, {}, { seed, ...options }));
     [games[0].rival, games[1].rival] = [games[1], games[0]];
     const bots = levels.map((level, i) => new Bot(level, i + 1));
     let frames = 0, stuck = false, risen = 0, result = null;
@@ -247,6 +247,20 @@ for (const [mode, name] of [[arika, "TGM3 World"], [tgmClassic, "TGM3 Classic"]]
     const { result, frames, stuck, games } = versusMatch(nesTetris, [10, 0], 41, 9);
     check(`NES versus at level 9: level 10 beats level 0 (${(frames / 60).toFixed(0)} s, scores ${games.map(g => g.score).join(" / ")})`,
         !stuck && result === "win" && games[0].score > games[1].score, JSON.stringify({ frames, stuck, result }));
+}
+
+for (const [name, mode, options, startLevel, height] of [
+    ["TGM1 Master", tgmOriginal, {}], ["TGM1 20G", tgmOriginal, { speed: "20g" }],
+    ["TAP Master with items", tgmTap, { items: true }], ["TAP Death", tgmTap, { speed: "death" }],
+    ["TGM3 World with items", arika, { items: true }],
+    ["ACE ARS2 Normal with items", aceArs2, { speed: "normal", items: true }], ["ACE SRS Another", tgmAce, { speed: "another" }],
+    ["GB level 5, height 2", gbTetris, {}, 5, 2],
+]) {
+    // the other rule sets: a round goes to the stronger side, through garbage (and items) both ways
+    seeded(24);
+    const { result, frames, stuck, risen, games } = versusMatch(mode, [8, 2], 42, startLevel, options, height);
+    check(`${name} versus: level 8 beats level 2 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} / ${games[1].linesSent} sent, ${risen} risen)`,
+        !stuck && result === "win", JSON.stringify({ frames, stuck, result, over: games.map(g => g.endTitle) }));
 }
 
 // ---------------------------------------------------------------- levels
