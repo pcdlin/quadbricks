@@ -62,6 +62,8 @@ const TGM_VS_FRAMES = (2 * 60 + 40) * 60; // a round's time limit, 2:40: then th
 const TGM_VS_WINS = 2; // rounds to win the match ("first to 2", up to 3 rounds)
 const TGM_VS_GARBAGE_MAX = 8; // rows of garbage that may wait ("capped at the first 8 lines")
 const TGM1_VS_FRAMES = 5 * 60 * 60; // TGM1: a round not decided in 5:00 is a draw (tetris.wiki)
+// TGM3's versus styles: the pieces between items, and the name the stats show
+const TGM3_VS_STYLES = { attack: { items: 40, name: "ATTACK" }, defence: { items: 20, name: "DEFENCE" }, item: { items: 10, name: "ITEM" } };
 const TGM_TORIKAN_LEVEL = 500, TGM_TORIKAN_FRAMES = 7 * 60 * 60; // ends at 500 if slower than 7:00
 const TGM_GHOST_UNTIL = 100; // ghost piece shown below level 100
 const TGM_ROTATION_RESETS = 8, TGM_MOVE_RESETS = 10; // World rule move reset limits
@@ -1564,10 +1566,13 @@ class TiShiraseGame extends TiGame {
 // guide gives the defending side a goal reached on the same frame, a role this match has no use for).
 // A clear of two lines or more sends the rows it removed, the clearing piece's blocks taken out,
 // upside down ("take the line clear, erase the clearing piece, and send it vertically flipped"), a
-// perfect clear twice; singles and clears that set an item off send nothing. As in the Guideline
-// here, the garbage rises when this side locks a piece that clears nothing, at most 8 rows of it (the
-// guide's cap); nothing cancels it. Items with the Items card (RuleGame's). TGM1 (tetris.wiki): no
-// items, no goal but the game's end, and a round not decided in 5:00 is a draw.
+// perfect clear twice; singles and clears that set an item off send nothing. At most 8 rows of it
+// wait (the guide's cap), nothing cancels it, and it rises once the receiving side's piece has locked
+// (and its clear is done), before the next piece: Heboris does so "like the original", whatever the
+// lock cleared; rows pushed out of the top are lost ("forgotten", the guide), they don't top a side
+// out. Items with the Items card (RuleGame's). TGM1 (tetris.wiki): the same items but Mirror Block
+// (which TAP added), no goal but the game's end, and a round not decided in 5:00 is a draw. TGM3
+// (tetris.wiki): each side plays a style (TiVersusGame).
 
 // The versus side of a TGM game (TiGame, TapGame, Tgm1Game; ACE's AceGame too)
 function tgmVersus(Base) {
@@ -1581,6 +1586,7 @@ function tgmVersus(Base) {
             this.goalReached = false;
             this.timeUp = false;
             this.lockCells = []; // the locking piece's cells (beforeLock), taken out of the garbage it sends
+            this.garbageEveryLock = true;
         }
 
         // Both sides deal the same pieces and items from the match's seed; options.items: the Items card
@@ -1623,8 +1629,9 @@ function tgmVersus(Base) {
         // stops here)
         scoreClear(n, rows) {
             if (n >= 2 && !this.firingItems.length) {
-                const garbage = this.garbageFrom(rows);
-                this.sendAttack(this.fieldEmpty() ? { lines: 2 * n, rows: [...garbage, ...garbage] } : { lines: n, rows: garbage });
+                const cleared = this.garbageFrom(rows);
+                const garbage = this.styleGarbage(this.fieldEmpty() ? [...cleared, ...cleared] : cleared, n);
+                if (garbage.length) this.sendAttack({ lines: garbage.length, rows: garbage });
             }
             super.scoreClear(n, rows);
             if (this.versusGoal()) {
@@ -1647,11 +1654,10 @@ function tgmVersus(Base) {
                 this.lockCells.some(cell => cell.row === rows[i] && cell.col === c) ? 0 : v)).reverse();
         }
 
-        maxIncoming() { return TGM_VS_GARBAGE_MAX; }
+        // The garbage a clear of n lines sends, as the side's style makes it (TGM3's)
+        styleGarbage(rows, n) { return rows; }
 
-        riseAfterLock(n) {
-            return n === 0 ? this.riseGarbage() : 0;
-        }
+        maxIncoming() { return TGM_VS_GARBAGE_MAX; }
 
         // The goal first; else topping out loses; else, when time is up, a draw (TGM1) or the one
         // further on
@@ -1669,12 +1675,47 @@ function tgmVersus(Base) {
 
 // TGM3 (World or Classic rule): Master's levels and speed without COOLs or REGRETs, so the speed
 // level is the level
+// Each side plays a style (options.style; tetris.wiki's TGM3 page): Attack sends extra copies of the
+// top garbage row (one for a double or triple, two for a Tetris) and gets an item every 40 pieces;
+// Defence sends one row less but deletes as many rows from the bottom of its own stack as it sent
+// (one for a double ... three for a Tetris), with an item every 20 pieces; Item gets one every 10.
 class TiVersusGame extends tgmVersus(TiGame) {
     constructor(mode, variant) {
         super(mode, variant);
         this.internalGrading = false;
         this.hasKill = false;
         this.maxLevel = TGM_VS_LEVEL_GOAL;
+        this.defenceRows = 0; // Defence: rows to delete from the bottom once the clear is done
+    }
+
+    setOptions(options = {}) {
+        super.setOptions(options);
+        this.style = TGM3_VS_STYLES[options.style] ? options.style : "attack";
+        this.itemInterval = TGM3_VS_STYLES[this.style].items;
+    }
+
+    statsName() {
+        return ["TGM3 TI", `${this.ars ? "CLASSIC" : "WORLD"} VS ${TGM3_VS_STYLES[this.style].name}`];
+    }
+
+    styleGarbage(rows, n) {
+        if (this.style === "attack") return [...Array(n === 4 ? 2 : 1).fill(rows[0]), ...rows];
+        if (this.style === "defence") {
+            this.defenceRows = n - 1;
+            return rows.slice(0, -1);
+        }
+        return rows;
+    }
+
+    // Defence: the rows from the bottom go once the clear has collapsed (blocks only, not lines)
+    afterClear() {
+        if (this.defenceRows && !this.gameover) {
+            const rows = [];
+            for (let k = 0; k < this.defenceRows; k++) rows.push(HEIGHT - 1 - k);
+            this.defenceRows = 0;
+            this.deleteRows(rows);
+        }
+        super.afterClear();
     }
 
     updateSection() {} // no COOLs or REGRETs
@@ -1710,8 +1751,8 @@ class TapVersusGame extends tgmVersus(TapGame) {
     }
 }
 
-// TGM1: Master's speed or its hidden 20G mode's (options.speed: "20g"); no items; the end of the
-// game (level 999) is the only goal, and a round not decided in 5:00 is a draw
+// TGM1: Master's speed or its hidden 20G mode's (options.speed: "20g"); items but Mirror Block (TAP's);
+// the end of the game (level 999) is the only goal, and a round not decided in 5:00 is a draw
 class Tgm1VersusGame extends tgmVersus(Tgm1Game) {
     constructor(mode, variant) {
         super(mode, variant);
@@ -1721,7 +1762,8 @@ class Tgm1VersusGame extends tgmVersus(Tgm1Game) {
 
     setOptions(options = {}) {
         this.speed20g = options.speed === "20g";
-        super.setOptions({ ...options, items: false });
+        super.setOptions(options);
+        this.itemSet = this.itemSet.filter(item => item !== "MIRROR BLOCK");
     }
 
     statsName() {

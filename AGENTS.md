@@ -52,7 +52,7 @@ when WebGL is unavailable).
   letting go of an action the keyboard still holds no longer releases it); Start opens the menu. On the multiplayer join screen (mode `"join"`) a pad's rotate buttons (`JOIN_ACTIONS`) call `Engine.joinDevice("pad:N")` and Start goes back. Menus take fixed ones, from any pad, fed to `Engine.onKey()` as key events (`PAD_MENU`: D-pad or stick arrows, A = Enter, B and Start = Esc; the sound button works there too), held directions repeat. A control held over a switch between menu and game, or over a binding, is ignored until let go. While a pad was used last (`active`, cleared by any keydown) hints name its buttons (`padWords()`). |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for the rule sets (~505 checks). |
+| `test/rules.test.js` | Spec checks for the rule sets (~515 checks). |
 | `test/bot.test.js` | The bot: the probe leaves the game alone, plans are carried out as planned, every level plays every rule set without sticking. |
 | `tools/bot-bench.js` | Not in the test run: `node tools/bot-bench.js [level] [games] [mode filter] [profile]` plays modes headless (seeded) and prints each one's own result (`record()`), for tuning the bot. |
 
@@ -174,7 +174,7 @@ a fourth, `height` (their B-Type and GB versus only, clamped to 0–5, `GB_B_HEI
 `GUIDELINE_DIG_ROWS`), the garbage height; a fifth,
 `handling` (Guideline only, overrides of `GUIDELINE_HANDLING`: `das`, `arr`, `sdf`, `dcd`, `ghost`,
 `dropGuard`; ignored by the others, whose timing is part of their spec); a sixth, `options`, versus's `seed` (both sides of a
-match deal the same pieces), `speed` (TGM1 `"20g"`, TAP `"death"`, ACE's mode names) and `items`, and the hidden modes (`setOptions()`, before the first piece; they combine): `big` (`setBig()`; offered for
+match deal the same pieces), `speed` (TGM1 `"20g"`, TAP `"death"`, ACE's mode names), `style` (TGM3's `"attack"`, `"defence"`, `"item"`) and `items`, and the hidden modes (`setOptions()`, before the first piece; they combine): `big` (`setBig()`; offered for
 TGM1, TAP but TGM+, and TGM3; ACE's is its `"big"` variant), and TGM1's `rev`, `mono` (`MONO_PALETTE`)
 and `tls` (the ghost all game).
 
@@ -535,47 +535,72 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   m1…m9, GM). Shown from 5 rows (`SECRET_GRADE_MIN_ROWS`, NullpoMino's) in the game over banner
   (`endNotes()`, lines under its sub-title), not in the records.
 
+### Versus: the sources checked
+The versus modes were reviewed (the user's request) against tetris.wiki (through search excerpts only: tetris.wiki,
+harddrop.com and the fandom wiki can't be reached from here), Heboris (nightmareci/HeborisCE, the continuation of Heboris
+U.E., a TGM clone: `src/game/game.c`), NullpoMino (`VSBattleMode.java`; it has no TGM, GB or NES versus, only an unused
+`Field.getLastLinesAsTGMAttack()` that builds TGM garbage the same way as here) and the Game Boy disassembly
+(vinheim3/tetris-gb-disasm, `multiplayer.s`, `inGameFlow.s`). Where they agree the rule is followed; what none of them
+settles is listed as an assumption below.
+
 ### TGM versus: TGM1, TAP, TGM3 (and ACE)
-- Source: tetris.wiki *TGM Versus Mode Guide* (only through search excerpts: the site can't be reached from here), the
-  arcade's default VS settings, written for TAP; TGM3's and ACE's taken as the same. `tgmVersus(Base)` (rules-tgm.js)
-  makes the versus side of a game: `TiVersusGame`, `TapVersusGame`, `Tgm1VersusGame`, and in rules-ace.js `AceVersusGame`.
+- Source: tetris.wiki *TGM Versus Mode Guide*, the arcade's default VS settings, written for TAP; TGM3's and ACE's taken as
+  the same; Heboris for what the guide doesn't say. `tgmVersus(Base)` (rules-tgm.js) makes the versus side of a game:
+  `TiVersusGame`, `TapVersusGame`, `Tgm1VersusGame`, and in rules-ace.js `AceVersusGame`.
 - Each side at its mode's speed with its levels and score (TGM3: Master's tables without COOLs or REGRETs; TAP: Master or
-  Death, the Speed card, `options.speed`; TGM1: Master or 20G; ACE: one of its five modes, and its Rule card), no grade,
-  roll, exams, 15-minute speed-up or level stop. Both sides deal the same pieces (the rule set's randomizer from the
-  match seed; ACE's `BagRandomizer` never starts with S, Z or O).
+  Death, the Speed card, `options.speed`, a Normal game being played as Master in the arcade; TGM1: Master or 20G; ACE: one
+  of its five modes, and its Rule card), no grade, roll, exams, 15-minute speed-up or level stop. Both sides deal the same
+  pieces (the rule set's randomizer from the match seed; ACE's `BagRandomizer` never starts with S, Z or O).
 - A round: reaching the goal first wins (`TGM_VS_LEVEL_GOAL`, level 200; the rows collapse and the game ends with LEVEL
   200), topping out loses, and when 2:40 runs out (`TGM_VS_FRAMES`, TIME counts down; TIME UP) the higher level wins.
   First to two rounds (`TGM_VS_WINS`) takes the match. TGM1 (tetris.wiki's TGM1 page): no goal but the game's end (level
   999), and a round not decided in 5:00 (`TGM1_VS_FRAMES`) is a draw (`timeDraw`). ACE (tetris.wiki: "a time limit of
   three minutes and a 20-line quota"): 20 lines first win, or more lines after 3:00 (`ACE_VS_*`); its level clock is off.
+  Heboris agrees: goal level 200 (or 20 lines), the higher level (or more lines) at time up, the same is a draw.
 - Garbage: a clear of 2+ lines sends its rows with the clearing piece's blocks taken out, upside down (`garbageFrom()`:
   the cleared rows from `clearedRows`, the piece's cells from `beforeLock()`), in their own colours; a perfect clear sends
-  them twice; singles and clears that set an item off send nothing. At most 8 rows wait (`TGM_VS_GARBAGE_MAX`); nothing
-  cancels them.
-- Items (the Items card, Off at first; TAP, TGM3 and ACE: TGM1 has none): every 8 lines cleared (`VS_ITEM_LINES`, an
-  assumption: the sources say a meter fills with lines) the next piece carries an item (`nextItem`, `pieceItem`, kept
-  through the hold, `heldItem`); its blocks keep it (`itemCells`) and the clear that takes one sets it off
-  (`collectItems()`, `fireItems()`, `useItem()`; RuleGame's, which TAP Normal's two items use too). For the side setting it
-  off: Free Fall, Del Even, Upper / Lower Del Field; for the other side, after its next lock (`takeItems()`): Mirror Block,
-  Shotgun!, Laser, Nega Field, 180° Field. Items that change only what a player sees (X-Ray, Dark Block, Color Block), the
-  piece in play (Roll Roll, Death Block, Hard Block, Transform) or swap fields aren't there. Item draws come from the
-  match seed (`seedVersus()`, `random()`).
-- Stats: LEVEL (/ 200; TGM1's plain), TIME, SENT, SCORE; ACE: LINES (/ 20), TIME, SENT, LEVEL.
+  them twice; singles and clears that set an item off send nothing. At most 8 rows wait (`TGM_VS_GARBAGE_MAX`, the guide;
+  Heboris keeps 21); nothing cancels them (Heboris neither). It rises once the receiving side's piece has locked and its
+  clear is done, before the next piece, whatever the lock cleared (`garbageEveryLock`: `riseAfterLock()` after a lock
+  that clears nothing, `afterClear()` after one that does; Heboris at the end of the ARE after every lock, "like the
+  original"). Rows it pushes out of the top are lost, not a top out (the guide: "forgotten"; Heboris wipes the top row).
+- TGM3's styles (the Style card, `options.style`, `TGM3_VS_STYLES`; tetris.wiki's TGM3 page): Attack sends extra copies of
+  the top garbage row (one for a double or triple, two for a Tetris) and gets an item every 40 pieces; Defence sends one
+  row less and deletes as many rows from the bottom of its own stack (`defenceRows`, after the clear), an item every 20;
+  Item an item every 10. Heboris has the same three (and a NORMAL of its own).
+- Items (the Items card, Off at first; TGM1, TAP, TGM3, ACE): every piece fills the gauge, and after `VS_ITEM_PIECES`
+  (20) the next carries an item (the guide: the 21st piece; Heboris: `item_interval` 20; `itemGauge`, `nextItem`,
+  `pieceItem`, kept through the hold, `heldItem`). They come from a bag per round with one of each, drawn by TAP's weights
+  without replacement (`VS_ITEM_WEIGHTS`, the guide's table; `drawItem()`, refilled when empty). A clear that takes item
+  blocks sets off the highest (the rightmost in its row) and turns the field's other item blocks normal (the guide;
+  `collectItems()`, `fireItems()`, `useItem()`, RuleGame's, which TAP Normal's two items use too). For the side setting it
+  off: Free Fall (its rows clear and 2+ of them go to the other side as garbage with one hole, the guide and Heboris), Del
+  Even, ↑ / ↓ Del Field, ← / → Mov Field; for the other side, at once (`receiveItem()`), knocking its piece in play out (a
+  snipe; the next comes `VS_SNIPE_DELAY` frames later, Heboris's wait), or after the clear it is in: Mirror Block (the
+  field turned left to right now and after each of its next two pieces, `mirrorPieces`, as Heboris), Shotgun!, Laser,
+  Nega Field, 180° Field. TGM1's set has no Mirror Block (TAP added it, tetris.wiki). Items that change only what a player
+  sees (X-Ray, Dark Block, Color Block), the piece in play (Roll Roll, Death Block, Hard Block, Transform) or swap fields
+  (Exchg Field) aren't there. Item draws come from the match seed (`seedVersus()`, `random()`).
+- Stats: LEVEL (/ 200; TGM1's plain), TIME, SENT, SCORE; ACE: LINES (/ 20), TIME, SENT, LEVEL; TGM3's mode line names the
+  style.
 
 ### GB versus
-- Sources: tetris.wiki *Tetris (Game Boy)*, StrategyWiki (the two-player game over the link cable). A-Type from one start
-  level (the Level card) over the same garbage (the Height card, B-Type's rows), the same pieces (`GbRandomizer` from the
-  match seed). A double sends 1 line, a triple 2, a Tetris 4 (`GB_VS_LINES`), all with their hole in one column both sides
-  share for the round (`vsHole`, from the seed). 30 lines first (`GB_VS_GOAL`) or the other side topping out win a round,
-  four rounds (`GB_VS_WINS`) the match. Garbage rises when a piece locks without clearing, as in the other rule sets here
-  (the sources don't say when); blocks pushed above the 18-row well top out. Stats: LINES (/ 30), LEVEL, SENT, SCORE.
+- Sources: tetris.wiki *Tetris (Game Boy)*, StrategyWiki, and the disassembly (above). The same pieces (`GbRandomizer`
+  from the match seed) over the same garbage (the Height card, B-Type's rows), at level 1's speed without level-ups
+  (`GB_VS_LEVEL`; the Heart card adds 10 levels, as the GB's hard mode does). A double sends 1 line, a triple 2, a Tetris 4
+  (`GB_VS_LINES`), grey rows with their hole in one column both sides share for the round (`vsHole`): the GB takes it from
+  a piece (L or Z: column 6, J or T 4, I 8, O 2, S 10, counted from 1; `GB_VS_HOLES`), so it is always an even one. It rises
+  when the receiving side's next piece comes, whatever its lock cleared (`garbageEveryLock`), and nothing cancels it. 30
+  lines first (`GB_VS_GOAL`) or the other side topping out win a round (both at once: a draw), four rounds (`GB_VS_WINS`)
+  the match. Stats: LINES (/ 30), LEVEL, SENT, SCORE.
 
 ### NES versus
 - No NES Tetris has a two-player mode; this is how Classic Tetris World Championship plays a match (Wikipedia and its
   sources): A-Type from one start level for both (the Level card, 18 at first), the same pieces (`NesRandomizer` from the
   match seed), no garbage. A side that tops out ends with TOPPED OUT and its score to beat; the other wins as soon as
-  its score passes it, or loses topping out below it (the same score: a draw). Scores go past 999,999 (CTWC's
-  cartridges since 2016). Stats: A-Type's, then AHEAD / BEHIND by the score difference (LEAD EVEN when tied).
+  its score passes it, or loses topping out below it (the same score: a draw). Best of five (`NES_VS_WINS`, CTWC since
+  2022). Scores go past 999,999 (CTWC's cartridges since 2016). Stats: A-Type's, then AHEAD / BEHIND by the score
+  difference (LEAD EVEN when tied).
 
 ### TGM3 Classic (Master mode, Classic rule)
 - Same timing, levels, randomizer and scoring as TGM3 World, but:
@@ -816,11 +841,18 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   2 minutes.
 - Guideline versus: the speed-up's pace (level 2 at 1:00, then one every 30 s) is this game's; no Guideline source gives
   versus gravity (Tetris 99 speeds up over time to 1G, TETR.IO's rooms set a start, a margin time and a rise per second).
-- TGM3 versus: garbage rises when a piece locks without clearing (as in the Guideline here; the guide excerpts don't
-  say when); copied rows keep their colours; a level 200 reached by both sides on one frame, or the same level at time
+- TGM versus: garbage rises after the receiver's every lock, as Heboris has it (the guide excerpts don't say when);
+  copied rows keep their colours; a level 200 reached by both sides on one frame, or the same level at time
   up, is a draw (the guide gives the defending side the first; this match has none); the 8-row cap takes the first rows
   that arrive. The Clear Rule, handicaps and the service menu's other limits aren't there. The same goes for TGM1, TAP
   and ACE versus; ACE's two rounds are TAP's.
+- Versus, not settled by the sources: TGM1's goal (tetris.wiki names none; a forum post remembers a level limit of 100
+  by default in the series); the item gauge's 20 pieces taken for TGM1 too (its page says both "every 20 blocks" and that
+  clears fill it), TGM3 and ACE; TGM3's default style (Attack first here: the arcade lets each player choose); Defence's
+  deleted rows taken from the bottom of the stack after the clear; TGM3's items going off with the clear's end like TAP's
+  (the wiki: at once in TGM3); the GB hole's piece drawn from the match seed (the GB takes the last of its 256-piece list);
+  GB garbage pushed out of the top lost, as in TAP; one Height card for both GB sides (each player sets their own on the
+  GB); the Guideline's perfect clear +10 (tetris.wiki *Garbage*; NullpoMino gives +6).
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's. TGM3's DAS
   freezes are taken as TAP's (the wiki doesn't know them).
@@ -876,8 +908,8 @@ export names explicitly at the top; add new globals there, and new rule files to
   the rule set and mode lists use tighter cards). Guideline's
   modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master"
   (Versus against the bot is Multiplayer → Versus Bot: Rules card (Guideline, TGM1, TAP, TGM3, ACE, NES, GB; the user's
-  request), under it the rule set's own cards (TGM1's and TAP's Speed, TGM3's Rule, ACE's Rule and Speed, Items for TAP,
-  TGM3 and ACE, NES's Level, GB's Level and Height), then the Bot card Level 0 … Level 10, 6 at first; Versus Player
+  request), under it the rule set's own cards (TGM1's and TAP's Speed, TGM3's Rule and Style, ACE's Rule and Speed, Items
+  for TGM1, TAP, TGM3 and ACE, NES's Level, GB's Height and Heart), then the Bot card Level 0 … Level 10, 6 at first; Versus Player
   has the same cards but the Bot's);
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,
   Mono and Ghost cards), TGM3's are

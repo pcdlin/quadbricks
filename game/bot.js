@@ -206,31 +206,39 @@ function botLock(src, dst, cells, row, col) {
 }
 
 // Versus garbage the bot is told is waiting (the meter beside the well) rises when it locks a
-// piece without clearing. Where its holes will be isn't shown, so the bot counts the rows as solid
+// piece (without clearing, in the Guideline). Where its holes will be isn't shown, so the bot counts the rows as solid
 // ones that never clear: a bit beside the well (BOT_GARBAGE_BIT) keeps them from ever being full.
 const BOT_GARBAGE_BIT = 1 << WIDTH;
 
 // Rows of garbage rise under the board; returns false when blocks are pushed above the highest row
-// a block may be in
+// a block may be in (lost there, where that doesn't top out)
 function botRise(game, rows, n) {
     const top = Math.max(game.pieceTop, game.bufferTop ?? FIELD_TOP) - FIELD_TOP; // as the game's riseGarbage()
     let fits = true;
     for (let i = 0; i < n && top + i < BOT_ROWS; i++) if (rows[top + i]) fits = false;
     rows.copyWithin(0, n);
     rows.fill(BOT_FULL | BOT_GARBAGE_BIT, BOT_ROWS - n);
+    if (!fits && !game.garbageTopsOut) rows.fill(0, 0, top);
     return fits;
 }
 
-// Guideline versus: a clear's attack cancels the garbage waiting (TGM3's never does)
+// Guideline versus: a clear's attack cancels the garbage waiting (the others' never does)
 function botCancels(game) {
     return game.versus && game.gamemode === guideline;
+}
+
+// The garbage waiting rises after this lock: one that clears nothing, or any (TGM, GB); it ends the
+// game where blocks pushed out of the top top a side out (the Guideline: botRise), else they are lost
+function botRiseDead(game, rows, pending, cleared) {
+    if (!pending || (cleared && !game.garbageEveryLock)) return false;
+    return !botRise(game, rows, pending) && game.garbageTopsOut;
 }
 
 // Garbage still waiting after a lock that cleared `cleared` rows: the lines the clear sends cancel
 // it (botClear.attack, from the botStepScore() just made; none outside the Guideline), a lock
 // without one lets it all rise
-function botPendingAfter(pending, cleared) {
-    if (!pending || !cleared) return 0;
+function botPendingAfter(game, pending, cleared) {
+    if (!pending || !cleared || game.garbageEveryLock) return 0;
     return Math.max(0, pending - botClear.attack);
 }
 
@@ -865,8 +873,8 @@ class Bot {
             pl.step = botStepScore(game, buf, w, cleared, b2b, combo, pl.spin);
             pl.b2b = botClear.b2b;
             pl.combo = botClear.combo;
-            pl.pending = botPendingAfter(pending, cleared);
-            const dead = botDead(game, buf, seq[0] || tetT) || (pending && !cleared && !botRise(game, buf, pending));
+            pl.pending = botPendingAfter(game, pending, cleared);
+            const dead = botDead(game, buf, seq[0] || tetT) || botRiseDead(game, buf, pending, cleared);
             pl.board = Int32Array.from(buf);
             pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
         }
@@ -908,9 +916,9 @@ class Bot {
                     const cleared = botLock(st.rows, buf, shape.cells, row, col);
                     if (cleared < 0) return;
                     const acc = st.acc + botStepScore(game, buf, w, cleared, st.b2b, st.combo);
-                    const pending = botPendingAfter(st.pending, cleared);
+                    const pending = botPendingAfter(game, st.pending, cleared);
                     const b2b = botClear.b2b, combo = botClear.combo;
-                    const dead = botDead(game, buf, next) || (st.pending && !cleared && !botRise(game, buf, st.pending));
+                    const dead = botDead(game, buf, next) || botRiseDead(game, buf, st.pending, cleared);
                     const score = acc + botBoardScore(buf, w) + (dead || botBlocked(game, buf, next) ? BOT_DANGER : 0);
                     if (last) { if (score > best) best = score; return; }
                     if (kept.length === beam && score <= kept[beam - 1].score) return;

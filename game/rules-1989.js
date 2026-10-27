@@ -8,12 +8,16 @@
 // Neither has a hard drop, hold or lock delay; one next piece; btype: 25 lines over garbage.
 // NES "versus": one side of a match as Classic Tetris World Championship plays it (the NES itself
 // has no two-player mode): A-Type from one start level, both sides dealt the same pieces, no
-// garbage; the higher score once a side tops out wins.
-// GB "versus": one side of a two-player match over the link cable (tetris.wiki, StrategyWiki): A-Type
-// from one start level over the same garbage (the height), both sides dealt the same pieces; a
-// double sends 1 line, a triple 2, a Tetris 4, all with their hole in one column both sides share;
-// 30 lines or the other side topping out win a round, four rounds the match. The garbage rises when
-// a piece locks without clearing, as in the other rule sets here (the sources don't say when).
+// garbage; the higher score once a side tops out wins; best of five (CTWC since 2022).
+// GB "versus": one side of a two-player match over the link cable (tetris.wiki, StrategyWiki, and the
+// disassembly, vinheim3/tetris-gb-disasm: multiplayer.s, inGameFlow.s): both sides dealt the same
+// pieces over the same garbage (the height), at level 1's speed without level-ups (+10 levels in heart
+// mode); a double sends 1 line, a triple 2, a Tetris 4, grey rows with their hole in one column both
+// sides share for the round, which the game takes from a piece (L or Z: column 6, J or T 4, I 8, O 2,
+// S 10: always an even one counted from 1); it rises when the receiving side's next piece comes,
+// whatever its lock cleared, and nothing cancels it. Clearing 30 lines or the other side topping out
+// wins a round (both at once: a draw), four rounds the match. Rows pushed out of the top are lost (an
+// assumption: the sources don't say).
 
 // ----------------------------------------------------------
 // NES (1989)
@@ -82,6 +86,9 @@ const GB_GARBAGE_FILL = 0.5; // chance of a block in each garbage cell
 const GB_HEART_LEVELS = 10;
 // Versus: lines sent by lines cleared, the lines that win a round, rounds that win the match
 const GB_VS_LINES = [0, 0, 1, 2, 4], GB_VS_GOAL = 30, GB_VS_WINS = 4;
+const GB_VS_LEVEL = 1; // the two-player game's speed: level 1's
+const GB_VS_HOLES = [0, 7, 3, 5, 3, 9, 5, 1]; // by piece type (I T L J S Z O): the garbage hole's column
+const NES_VS_WINS = 3; // CTWC: best of five
 
 // ----------------------------------------------------------
 // What NES and GB share: no hard drop, no hold, no kicks, no IRS, no lock delay (a piece that
@@ -259,7 +266,10 @@ class NesGame extends Game1989 {
         this.randomizer = new NesRandomizer(Date.now());
         this.setStart(startLevel, NES_START_LEVELS, height);
         // versus: scores past 999,999 count (CTWC's cartridges show them since 2016)
-        if (this.versus) this.maxScore = Infinity;
+        if (this.versus) {
+            this.maxScore = Infinity;
+            this.versusWins = NES_VS_WINS;
+        }
     }
 
     // Versus: both sides deal the same pieces (options.seed)
@@ -366,9 +376,11 @@ class GbGame extends Game1989 {
         this.randomizer = new GbRandomizer(seed);
         this.seedVersus(seed);
         this.sendsGarbage = true;
+        this.garbageEveryLock = true;
         this.versusWins = GB_VS_WINS;
         this.goalReached = false;
-        this.vsHole = Math.floor(this.random() * WIDTH);
+        this.vsHole = GB_VS_HOLES[1 + Math.floor(this.random() * 7)];
+        this.startLevel = this.level = GB_VS_LEVEL;
     }
 
     record() { return this.versus ? null : super.record(); }
@@ -389,10 +401,6 @@ class GbGame extends Game1989 {
             this.collapse(rows);
             this.endGame(`${GB_VS_GOAL} LINES`, `SCORE ${this.scoreText()}`);
         }
-    }
-
-    riseAfterLock(n) {
-        return this.versus && n === 0 ? this.riseGarbage() : 0;
     }
 
     // 30 lines first; else topping out loses
@@ -421,8 +429,9 @@ class GbGame extends Game1989 {
         return [GB_SPAWN_ROW, 3];
     }
 
-    // A level every 10 lines up to 20, the first after (start level + 1) x 10 lines
+    // A level every 10 lines up to 20, the first after (start level + 1) x 10 lines; none in versus
     levelForLines() {
+        if (this.versus) return this.level;
         return Math.min(GB_MAX_LEVEL, Math.max(this.startLevel, Math.floor(this.lines / GB_LINES_PER_LEVEL)));
     }
 }

@@ -250,11 +250,12 @@ for (const [mode, name] of [[arika, "TGM3 World"], [tgmClassic, "TGM3 Classic"]]
 }
 
 for (const [name, mode, options, startLevel, height] of [
-    ["TGM1 Master", tgmOriginal, {}], ["TGM1 20G", tgmOriginal, { speed: "20g" }],
+    ["TGM1 Master with items", tgmOriginal, { items: true }], ["TGM1 20G", tgmOriginal, { speed: "20g" }],
+    ["TGM3 Classic, Defence", tgmClassic, { style: "defence" }],
     ["TAP Master with items", tgmTap, { items: true }], ["TAP Death", tgmTap, { speed: "death" }],
     ["TGM3 World with items", arika, { items: true }],
     ["ACE ARS2 Normal with items", aceArs2, { speed: "normal", items: true }], ["ACE SRS Another", tgmAce, { speed: "another" }],
-    ["GB level 5, height 2", gbTetris, {}, 5, 2],
+    ["GB height 2", gbTetris, {}, 0, 2], ["GB heart", gbTetris, { heart: true }],
 ]) {
     // the other rule sets: a round goes to the stronger side, through garbage (and items) both ways
     seeded(24);

@@ -90,6 +90,7 @@ class GuidelineGame extends RuleGame {
         this.ultraFrames = GUIDELINE_ULTRA_FRAMES[variant] || 0; // ultra: its length
         this.pieces = 0; // pieces locked (versus: pieces per second)
         this.sendsGarbage = this.versus; // all of each attack's lines with their hole in one column
+        this.garbageTopsOut = true; // blocks pushed out of the 20-row buffer zone top out (tetris.wiki, Top out)
         this.attackTotal = 0; // lines of attack made, cancelled ones included (APM)
         // level 1 + startLevel: Master M1-M30, the marathons 1-15
         this.startLevel = this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1)

@@ -54,16 +54,24 @@ const LINE_DROP_PAUSE = 12;
 // Clear messages by number of lines
 const CLEAR_NAMES = ["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"];
 
-// Versus items (TAP, TGM3 and ACE with the Items card; TAP Normal's two use the same code): a piece
-// carrying one sets it off when a line clear takes any of its blocks, and that clear sends no
-// garbage (tetris.wiki, TGM Versus Mode Guide). Clearing VS_ITEM_LINES lines brings the next one (the
-// sources say a meter fills with lines, not how many: an assumption). VS_OWN_ITEMS act on the side
-// that clears them, VS_ATTACK_ITEMS on the other side after its next lock. Items that only change
-// what a player sees (X-Ray, Dark Block, Color Block), the piece in play (Roll Roll, Death Block,
-// Hard Block, Transform) or swap the fields aren't here.
-const VS_ITEM_LINES = 8;
-const VS_OWN_ITEMS = ["FREE FALL", "DEL EVEN", "UPPER DEL FIELD", "LOWER DEL FIELD"];
+// Versus items (TGM1, TAP, TGM3 and ACE with the Items card; TAP Normal's two use the same code), as
+// tetris.wiki's TGM Versus Mode Guide gives TAP's and Heboris (a TGM clone) plays them: every piece
+// fills the item gauge, and after VS_ITEM_PIECES the next carries an item (all its blocks). A line
+// clear that takes an item block sets off the highest such item (the rightmost of a row), turns the
+// field's other item blocks into normal ones and sends no garbage. Items come from a bag per round
+// with one of each, drawn by TAP's weights without replacement (VS_ITEM_WEIGHTS, refilled when
+// empty). VS_OWN_ITEMS act on the side setting them off, after the clear; VS_ATTACK_ITEMS on the
+// other side at once, knocking its piece in play out (a "snipe": the next comes VS_SNIPE_DELAY frames
+// later, Heboris's wait), or after its line clear. Items that change only what a player sees (X-Ray,
+// Dark Block, Color Block), the piece in play (Roll Roll, Death Block, Hard Block, Transform) or swap
+// the fields aren't here.
+const VS_ITEM_PIECES = 20;
+const VS_ITEM_WEIGHTS = { "LASER": 250, "↑ DEL FIELD": 250, "↓ DEL FIELD": 100, "180° FIELD": 100, "MIRROR BLOCK": 150,
+    "DEL EVEN": 150, "→ MOV FIELD": 50, "SHOTGUN!": 5, "FREE FALL": 3, "← MOV FIELD": 3, "NEGA FIELD": 1 };
+const VS_OWN_ITEMS = ["FREE FALL", "DEL EVEN", "↑ DEL FIELD", "↓ DEL FIELD", "← MOV FIELD", "→ MOV FIELD"];
 const VS_ATTACK_ITEMS = ["MIRROR BLOCK", "SHOTGUN!", "LASER", "NEGA FIELD", "180° FIELD"];
+const VS_SNIPE_DELAY = 60;
+const VS_MIRROR_PIECES = 3; // Mirror Block turns the field after each of the next 3 pieces (Heboris)
 
 // Handling without the player's options (only the Guideline has them): no DAS cut, ghost shown
 // where the rule set has one, no hard drop guard
@@ -294,7 +302,13 @@ class RuleGame {
         this.itemCells = null; // per cell, the item its block carries (where there are items)
         this.firingItems = []; // items a clear set off, used after it (afterClear)
         this.itemsOn = false; // versus: items are dealt (the Items card, useItems())
-        this.itemLines = 0; // lines cleared towards the next item
+        this.itemGauge = 0; // pieces towards the next item
+        this.itemInterval = VS_ITEM_PIECES; // pieces that fill the gauge (TGM3's styles change it)
+        this.itemSet = Object.keys(VS_ITEM_WEIGHTS); // the items the game has (TGM1: no Mirror Block)
+        this.itemBag = []; // the items left in this round's bag
+        this.mirrorPieces = 0; // Mirror Block: locks left that turn the field
+        this.garbageEveryLock = false; // versus garbage rises after every lock (TGM, GB), else the rule set's riseAfterLock()
+        this.garbageTopsOut = false; // blocks garbage pushes out of the top top this side out (Guideline), else they are lost
         this.incomingItems = []; // the other side's items, taking effect after this side's next lock
         this.rng = null; // garbage and items draw from it when set (versus: from the match's seed), else Math.random
         this.queue = [];
@@ -828,9 +842,13 @@ class RuleGame {
         this.tFloorKicks = 0;
         this.floorKicked = false;
         this.lockDelayZeroed = false;
-        if (newPiece) { // the item waiting comes with the piece entering
+        if (newPiece) { // the item waiting comes with the piece entering; a full gauge brings the next
             this.pieceItem = this.nextItem;
             this.nextItem = null;
+            if (this.itemsOn && ++this.itemGauge >= this.itemInterval) {
+                this.itemGauge = 0;
+                this.nextItem = this.drawItem();
+            }
         }
         this.onNewPiece();
 
@@ -1121,8 +1139,7 @@ class RuleGame {
         this.collectItems(rows);
         this.scoreClear(n, rows);
         if (this.gameover) return;
-        if (n > 0) this.countItemLines(n);
-        else this.takeItems(); // the other side's items (after a clear: afterClear)
+        if (n === 0) this.takeItems(); // the other side's items (after a clear: afterClear)
         if (this.gameover) return;
         const risen = this.riseAfterLock(n); // versus garbage pushes the stack up
         if (this.gameover) return;
@@ -1151,7 +1168,8 @@ class RuleGame {
     beforeLock() {} // the piece is about to lock (still where it is)
     onBlockLocked(cell) {} // one of its blocks was set in the field
     scoreClear(n, rows) {} // a piece locked, clearing n lines (rows): score, levels, the end
-    riseAfterLock(n) { return 0; } // after scoreClear: rows of garbage that rose (versus)
+    // After scoreClear: rows of versus garbage that rose (after a clear: afterClear)
+    riseAfterLock(n) { return this.garbageEveryLock && n === 0 ? this.riseGarbage() : 0; }
 
     // Timed phases (are, lineclear, rollstart) count phaseCounter up to phaseLength
     setPhase(phase, length) {
@@ -1177,10 +1195,12 @@ class RuleGame {
 
     onCollapse(rows) {} // per-row data the rule set keeps falls with the field
 
-    // After a line clear: the items it set off and those the other side sent, then the next piece
+    // After a line clear: the items it set off and those the other side sent, versus garbage (where
+    // it rises after every lock), then the next piece
     afterClear() {
         this.fireItems();
         this.takeItems();
+        if (this.garbageEveryLock) this.riseGarbage();
         if (this.gameover) return;
         this.startAre(this.lineAre);
     }
@@ -1200,11 +1220,10 @@ class RuleGame {
 
     // The other side's attack: lines of garbage, either all with their hole in column `hole`
     // (Guideline) or the rows given, top first (TGM3). It waits for the rule set's moment to rise
-    // (riseAfterLock), at most maxIncoming() rows of it. Or an item, which takes effect after this
-    // side's next lock (takeItems)
+    // (riseAfterLock), at most maxIncoming() rows of it. Or an item (receiveItem)
     receiveGarbage(attack) {
         if (attack.item) {
-            if (this.itemsOn && !this.gameover) this.incomingItems.push(attack.item);
+            if (this.itemsOn && !this.gameover) this.receiveItem(attack.item);
             return;
         }
         if (!this.sendsGarbage || this.gameover || attack.lines <= 0) return;
@@ -1240,7 +1259,8 @@ class RuleGame {
 
     // All the garbage waiting rises from the bottom, oldest highest, pushing the stack up; blocks
     // pushed above the highest row the field keeps blocks in (TGM: the buffer row; GB: the well's
-    // top) top this side out. Returns the number of rows.
+    // top) top this side out (garbageTopsOut: the Guideline), else they are lost (tetris.wiki on TAP:
+    // what "would otherwise have occupied rows 22+ is forgotten"; Heboris). Returns the number of rows.
     riseGarbage() {
         const top = Math.max(this.pieceTop, this.bufferTop ?? FIELD_TOP);
         let rows = 0, toppedOut = false;
@@ -1261,44 +1281,64 @@ class RuleGame {
         if (!rows) return 0;
         this.risen.push(rows);
         this.sounds.push("garbage");
-        if (toppedOut) this.endGame("GAME OVER", "TOP OUT — ESC FOR MENU");
+        if (toppedOut && this.garbageTopsOut) this.endGame("GAME OVER", "TOP OUT — ESC FOR MENU");
+        else if (toppedOut) for (let r = 0; r < top - FIELD_TOP; r++) this.field[r].fill(0);
         return rows;
     }
 
     // ----------------------------------------------------------
     // Items
 
-    // Every VS_ITEM_LINES lines cleared bring an item, on the next piece to enter
-    countItemLines(n) {
-        if (!this.itemsOn) return;
-        this.itemLines += n;
-        if (this.itemLines < VS_ITEM_LINES || this.nextItem) return;
-        this.itemLines -= VS_ITEM_LINES;
-        const items = [...VS_OWN_ITEMS, ...VS_ATTACK_ITEMS];
-        this.nextItem = items[Math.floor(this.random() * items.length)];
+    // The next item from the round's bag, by weight without replacement (refilled when empty)
+    drawItem() {
+        if (!this.itemBag.length) this.itemBag = [...this.itemSet];
+        let x = this.random() * this.itemBag.reduce((sum, item) => sum + VS_ITEM_WEIGHTS[item], 0), k = 0;
+        while (k < this.itemBag.length - 1 && (x -= VS_ITEM_WEIGHTS[this.itemBag[k]]) >= 0) k++;
+        return this.itemBag.splice(k, 1)[0];
     }
 
-    // A line clear that takes any block of an item piece sets its item off (after the clear,
-    // fireItems); the piece's other blocks then carry it no more
+    // A line clear that takes item blocks sets off the highest (the rightmost in its row) after the
+    // clear (fireItems); every other item block in the field becomes a normal one
     collectItems(rows) {
         if (!this.itemCells) return;
+        let item = null;
         for (const r of rows) {
-            for (const item of this.itemCells[r - FIELD_TOP]) {
-                if (item && !this.firingItems.includes(item)) this.firingItems.push(item);
-            }
+            for (let c = WIDTH - 1; c >= 0 && !item; c--) item = this.itemCells[r - FIELD_TOP][c];
+            if (item) break;
         }
-        for (const marks of this.itemCells) {
-            for (let c = 0; c < WIDTH; c++) if (this.firingItems.includes(marks[c])) marks[c] = null;
-        }
+        if (!item) return;
+        this.firingItems.push(item);
+        for (const marks of this.itemCells) marks.fill(null);
     }
 
     fireItems() {
         for (const item of this.firingItems.splice(0)) this.useItem(item);
     }
 
-    // The other side's items take effect, after a lock (a clear's: once it has collapsed)
+    // An item from the other side: at once, knocking the piece in play out (a snipe), or after the
+    // line clear running (takeItems)
+    receiveItem(item) {
+        if (this.phase === "lineclear" || this.phase === "rollstart") {
+            this.incomingItems.push(item);
+            return;
+        }
+        if (this.phase === "active" && this.curPiece_type) {
+            this.curPiece_type = 0;
+            this.shadowRow = -100;
+            this.pieceItem = null;
+            this.setPhase("are", VS_SNIPE_DELAY);
+        }
+        this.useItem(item, true);
+    }
+
+    // After a lock (a clear's: once it has collapsed): the items the other side sent during the
+    // clear, and Mirror Block turning the field
     takeItems() {
         for (const item of this.incomingItems.splice(0)) this.useItem(item, true);
+        if (this.mirrorPieces > 0) {
+            this.mirrorPieces--;
+            this.remapField(grid => grid.map(row => row.reverse()));
+        }
     }
 
     // Items in a match (the Items card): dealt every VS_ITEM_LINES lines, their blocks marked
@@ -1318,13 +1358,15 @@ class RuleGame {
     }
 
     // An item takes effect. Set off here, one for the other side goes to it (sent with the attacks);
-    // received: from the other side. Free Fall drops every block down its column, Del Even deletes
-    // every other row from the bottom (the second, fourth, ...), the Del Fields the upper or lower half
-    // of the stack; Mirror Block turns the other side's field left to right, Shotgun! shoots a hole in
-    // each of its rows, Laser deletes a column, Nega Field turns the stack's blocks to holes and its
-    // holes to blocks, 180° Field turns the stack upside down. Blocks of another item piece keep their
-    // item as they move; those an item removes take it with them. Rows an item fills clear at once,
-    // without score or lines (only the player's clears set items off).
+    // received: from the other side. Free Fall drops every block down its column (the rows it fills
+    // clear, and in versus 2 or more of them go to the other side as garbage with one hole, tetris.wiki
+    // and Heboris), Del Even deletes every other row from the bottom (the second, fourth, ...), the Del
+    // Fields the upper or lower half of the stack, the Mov Fields push every row's blocks to a wall;
+    // Mirror Block turns the other side's field left to right now and after each of its next pieces,
+    // Shotgun! shoots a hole in each of its rows, Laser deletes a column, Nega Field turns the stack's
+    // blocks to holes and its holes to blocks, 180° Field turns the stack upside down. Blocks of
+    // another item piece keep their item as they move; those an item removes take it with them. Rows
+    // an item fills clear at once, without score or lines (only the player's clears set items off).
     useItem(item, received = false) {
         this.addAction(item, "grade");
         if (!received && VS_ATTACK_ITEMS.includes(item)) {
@@ -1334,7 +1376,7 @@ class RuleGame {
         const top = this.stackTop() - FIELD_TOP; // the stack's rows: top to the end of the field
         const empty = [0, null];
         switch (item) {
-            case "FREE FALL":
+            case "FREE FALL": {
                 this.remapField(grid => {
                     for (let c = 0; c < WIDTH; c++) {
                         const blocks = grid.map(row => row[c]).filter(([type]) => type);
@@ -1342,23 +1384,38 @@ class RuleGame {
                     }
                     return grid;
                 });
-                this.clearFullRows();
+                const n = this.clearFullRows();
+                if (this.versus && n >= 2 && !received) { // garbage in random colours, one hole
+                    const hole = Math.floor(this.random() * WIDTH);
+                    const row = () => Array.from({ length: WIDTH }, (_, c) => c === hole ? 0 : 1 + Math.floor(this.random() * 7));
+                    this.sendAttack({ lines: n, rows: Array.from({ length: n }, row) });
+                }
                 break;
+            }
+            case "← MOV FIELD": case "→ MOV FIELD": {
+                const left = item === "← MOV FIELD";
+                this.remapField(grid => grid.map(row => {
+                    const blocks = row.filter(([type]) => type), gap = Array.from({ length: WIDTH - blocks.length }, () => empty);
+                    return left ? [...blocks, ...gap] : [...gap, ...blocks];
+                }));
+                break;
+            }
             case "DEL EVEN": {
                 const rows = [];
                 for (let r = HEIGHT - 2; r >= FIELD_TOP; r -= 2) rows.push(r);
                 this.deleteRows(rows.reverse());
                 break;
             }
-            case "UPPER DEL FIELD": case "LOWER DEL FIELD": {
+            case "↑ DEL FIELD": case "↓ DEL FIELD": {
                 const h = this.field.length - top, rows = [];
-                const [from, to] = item === "UPPER DEL FIELD" ? [top, top + Math.ceil(h / 2)] : [this.field.length - Math.floor(h / 2), this.field.length];
+                const [from, to] = item === "↑ DEL FIELD" ? [top, top + Math.ceil(h / 2)] : [this.field.length - Math.floor(h / 2), this.field.length];
                 for (let r = from; r < to; r++) rows.push(r + FIELD_TOP);
                 this.deleteRows(rows);
                 break;
             }
             case "MIRROR BLOCK":
                 this.remapField(grid => grid.map(row => row.reverse()));
+                this.mirrorPieces = VS_MIRROR_PIECES - 1;
                 break;
             case "SHOTGUN!":
                 this.remapField(grid => grid.map(row => {
@@ -1410,11 +1467,12 @@ class RuleGame {
         this.collapse(rows);
     }
 
-    // Rows an item filled clear at once
+    // Rows an item filled clear at once; returns how many
     clearFullRows() {
         const full = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) if (this.field[r - FIELD_TOP].every(v => v !== 0)) full.push(r);
         this.deleteRows(full);
+        return full.length;
     }
 
     // Hidden test setups (the engine's Ctrl+Shift+digit keys); TGM only. Returns whether one applied.

@@ -56,8 +56,8 @@ const ULTRA_SETUP = { name: "Time", accent: tetZ, arg: "variant", labels: ["1:00
 const ACE_RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["SRS", "ARS", "ARS2"], values: [tgmAce, aceArs, aceArs2] };
 const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", "Classic"], values: [arika, tgmClassic] };
 // createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams, GB's heart mode,
-// versus's speed (the mode a TGM1, TAP or ACE side plays) and items (and the versus match's bot level, the label's index)
-const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart", "speed", "items", "bot"];
+// versus's speed (the mode a TGM1, TAP or ACE side plays), style (TGM3's) and items (and the versus match's bot level, the label's index)
+const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart", "speed", "style", "items", "bot"];
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
 const REV_SETUP = { name: "Reverse", accent: tetZ, arg: "rev", labels: ["Off", "On"], values: [false, true] }; // the well upside down
 const MONO_SETUP = { name: "Mono", accent: tetS, arg: "mono", labels: ["Off", "On"], values: [false, true] }; // one colour
@@ -71,8 +71,8 @@ const BOT_VERSUS_LEVEL = 6;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
 // Versus: the rule set each side plays ("versus" in each: rules-guideline.js, rules-tgm.js, rules-ace.js,
 // rules-1989.js), then its own settings, both sides the same: TGM1's, TAP's and ACE's speed (the mode
-// they play), TGM3's and ACE's rule (which set the mode again), items (TAP, TGM3, ACE), NES's and GB's
-// start level, GB's garbage height. A card with `modes` is shown and used only when the cards before
+// they play), TGM3's and ACE's rule (which set the mode again), TGM3's style, items (TGM1, TAP, TGM3,
+// ACE), NES's start level, GB's garbage height and heart mode. A card with `modes` is shown and used only when the cards before
 // it that set the mode chose one of them
 const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM1", "TAP", "TGM3", "ACE", "NES", "GB"],
     values: [guideline, tgmOriginal, tgmTap, arika, tgmAce, nesTetris, gbTetris] };
@@ -81,13 +81,14 @@ const VERSUS_SUB_SETUP = [
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "Death"], values: ["master", "death"], modes: [tgmTap] },
     { ...RULE_SETUP, modes: [arika, tgmClassic] },
+    { name: "Style", accent: tetJ, arg: "style", labels: ["Attack", "Defence", "Item"], values: ["attack", "defence", "item"], modes: [arika, tgmClassic] },
     { ...ACE_RULE_SETUP, modes: VERSUS_ACE_MODES },
     { name: "Speed", accent: tetO, arg: "speed", labels: ["Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2"],
       values: ["normal", "hispeed1", "hispeed2", "another", "another2"], modes: VERSUS_ACE_MODES },
-    { name: "Items", accent: tetS, arg: "items", labels: ["Off", "On"], values: [false, true], modes: [tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] },
+    { name: "Items", accent: tetS, arg: "items", labels: ["Off", "On"], values: [false, true], modes: [tgmOriginal, tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] },
     { ...levelSetup(NES_START_LEVELS), initial: NES_VERSUS_LEVEL, modes: [nesTetris] },
-    { ...levelSetup(GB_START_LEVELS), modes: [gbTetris] },
     { ...HEIGHT_SETUP, modes: [gbTetris] },
+    { ...HEART_SETUP, modes: [gbTetris] },
 ];
 // The versus rule set's name for a mode (the join screen's heading)
 const VERSUS_RULE_NAMES = { [guideline]: "Guideline", [tgmOriginal]: "TGM1", [tgmTap]: "TAP", [arika]: "TGM3 World", [tgmClassic]: "TGM3 Classic",
