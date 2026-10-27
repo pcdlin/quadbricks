@@ -18,7 +18,12 @@
 // beforeSpawn / onNewPiece / afterSpawn / onBlockOut, onClock, onActiveFrame, dasCharges, canShift,
 // onShiftBlocked, rotate, onMoveReset, advanceDrop / upKey / onGround / onHardDrop, beforeLock,
 // scoreClear, riseAfterLock, onCollapse, afterClear, ghostVisible, getStats, record, setupField, setHandling,
-// testSetup.
+// testSetup, versusOutcome.
+//
+// Versus (the variant "versus": Guideline, TGM3, NES): each side of a match is its own game, which
+// the engine pairs (rival) and passes the attacks between (takeAttacks -> receiveGarbage). What
+// garbage a clear sends, when it rises and who wins (versusOutcome) are the rule set's own; the
+// waiting garbage, its rising and the event queues are shared here.
 //
 // Variants shared by several rule sets (the menu offers each family's own, see VARIANT_NAMES):
 //  - standard: the rule set as specified
@@ -212,6 +217,17 @@ class RuleGame {
         this.gameover = false;
         this.endTitle = null;
         this.endSub = null;
+        this.clearedRows = []; // the last lock's full rows as they were (versus: TGM3's garbage)
+
+        // Versus: one side of a match (the engine sets rival, the other side's game)
+        this.versus = variant === "versus";
+        this.rival = null;
+        this.sendsGarbage = false; // clears send garbage (Guideline, TGM3; not NES)
+        this.versusWins = 1; // rounds a side must win to take the match (TGM3: 2)
+        this.incoming = []; // attacks received and not yet risen, oldest first: { lines, hole } or { lines, rows }
+        this.attacks = []; // attacks since the last takeAttacks(): { lines } or { lines, rows }
+        this.risen = []; // garbage rows that rose, per lock, since the last takeRisenGarbage()
+        this.linesSent = 0; // lines that went to the other side
 
         this.startdelayMax = COUNTDOWN_STEPS * COUNTDOWN_STEP_FRAMES; // 3, 2, 1
         this.startdelayCounter = 0; // countdown frames run so far
@@ -1055,9 +1071,11 @@ class RuleGame {
 
         // Find and empty full rows
         const rows = [];
+        this.clearedRows = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) {
             if (this.field[r - FIELD_TOP].every(v => v !== 0)) {
                 rows.push(r);
+                this.clearedRows.push(this.field[r - FIELD_TOP].slice());
                 for (let c = 0; c < WIDTH; c++) {
                     this.clearedCells.push({ row: r, col: c, type: this.field[r - FIELD_TOP][c] });
                     this.field[r - FIELD_TOP][c] = 0;
@@ -1097,7 +1115,7 @@ class RuleGame {
     beforeLock() {} // the piece is about to lock (still where it is)
     onBlockLocked(cell) {} // one of its blocks was set in the field
     scoreClear(n, rows) {} // a piece locked, clearing n lines (rows): score, levels, the end
-    riseAfterLock(n) { return 0; } // after scoreClear: rows of garbage that rose (Guideline versus)
+    riseAfterLock(n) { return 0; } // after scoreClear: rows of garbage that rose (versus)
 
     // Timed phases (are, lineclear, rollstart) count phaseCounter up to phaseLength
     setPhase(phase, length) {
@@ -1125,6 +1143,86 @@ class RuleGame {
     // After a line clear: the next piece
     afterClear() {
         this.startAre(this.lineAre);
+    }
+
+    // ----------------------------------------------------------
+    // Versus
+
+    // How the match stands for this side: "win", "lose", "draw", or null while it goes on. By
+    // default the first side to top out loses (both on one frame: a draw)
+    versusOutcome() {
+        const other = this.rival;
+        if (this.gameover && other.gameover) return "draw";
+        if (this.gameover) return "lose";
+        if (other.gameover) return "win";
+        return null;
+    }
+
+    // The other side's attack: lines of garbage, either all with their hole in column `hole`
+    // (Guideline) or the rows given, top first (TGM3). It waits for the rule set's moment to rise
+    // (riseAfterLock), at most maxIncoming() rows of it
+    receiveGarbage(attack) {
+        if (!this.sendsGarbage || this.gameover || attack.lines <= 0) return;
+        const room = this.maxIncoming() - this.pendingGarbage();
+        if (room <= 0) return;
+        if (attack.lines > room) {
+            attack = attack.rows ? { lines: room, rows: attack.rows.slice(0, room) } : { ...attack, lines: room };
+        }
+        this.incoming.push(attack);
+    }
+
+    maxIncoming() { return Infinity; } // rows of garbage that may wait
+
+    pendingGarbage() {
+        return this.incoming.reduce((sum, g) => sum + g.lines, 0);
+    }
+
+    // Lines sent since the last call, one entry per clear
+    takeAttacks() {
+        return this.drain("attacks");
+    }
+
+    // Garbage rows that rose since the last call, one entry per lock
+    takeRisenGarbage() {
+        return this.drain("risen");
+    }
+
+    // An attack for the other side
+    sendAttack(attack) {
+        this.attacks.push(attack);
+        this.linesSent += attack.lines;
+    }
+
+    // All the garbage waiting rises from the bottom, oldest highest, pushing the stack up; blocks
+    // pushed above the highest row the field keeps blocks in (TGM: the buffer row) top this side
+    // out. Returns the number of rows.
+    riseGarbage() {
+        const top = this.bufferTop ?? FIELD_TOP;
+        let rows = 0, toppedOut = false;
+        for (const g of this.incoming) {
+            for (let k = 0; k < g.lines; k++) {
+                if (this.field[top - FIELD_TOP].some(v => v !== 0)) toppedOut = true;
+                let row;
+                if (g.rows) row = g.rows[k].slice();
+                else {
+                    row = new Array(WIDTH).fill(tetGARBAGE);
+                    row[g.hole] = 0;
+                }
+                this.raiseRow(row);
+                rows++;
+            }
+        }
+        this.incoming = [];
+        if (!rows) return 0;
+        this.risen.push(rows);
+        this.sounds.push("garbage");
+        if (toppedOut) this.endGame("GAME OVER", "TOP OUT — ESC FOR MENU");
+        return rows;
+    }
+
+    // One line about this side for the engine to show over the bot's well
+    versusNote() {
+        return `SENT ${this.linesSent}`;
     }
 
     // Hidden test setups (the engine's Ctrl+Shift+digit keys); TGM only. Returns whether one applied.

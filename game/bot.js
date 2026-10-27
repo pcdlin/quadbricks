@@ -10,7 +10,7 @@
 //    only slides along the stack surface, and at low gravity it hovers.
 //  - Brain: Thiery and Scherrer's evaluator (landing height, eroded cells, transitions, holes, wells,
 //    ...) over bit-row boards, with a beam search over the visible next pieces and the hold; in
-//    Guideline versus it also reckons with the garbage waiting to rise. Where Tetrises pay it keeps
+//    versus (Guideline, TGM3) it also reckons with the garbage waiting to rise. Where Tetrises pay it keeps
 //    a well open; in the Guideline the upper levels play as players do there: T-spins (the explorer
 //    finds the turns into a slot, the evaluator credits slots it builds), back-to-backs, combos.
 //  - Hands: turns the chosen route into one input bitmap per frame, closed loop (the route is found
@@ -118,7 +118,8 @@ function botProfile(game, hands) {
         if (!hands.spins || game.variant === "master" || game.big) return "tetris";
         return game.versus ? "versus" : "attack";
     }
-    if ((game.gamemode === arika || game.gamemode === tgmClassic) && game.variant === "standard") return "tetris";
+    // TGM3 versus too: a Tetris sends four rows and is worth six levels in the race to 200
+    if ((game.gamemode === arika || game.gamemode === tgmClassic) && (game.variant === "standard" || game.versus)) return "tetris";
     return "survival";
 }
 
@@ -217,8 +218,14 @@ function botRise(rows, n) {
     return fits;
 }
 
+// Guideline versus: a clear's attack cancels the garbage waiting (TGM3's never does)
+function botCancels(game) {
+    return game.versus && game.gamemode === guideline;
+}
+
 // Garbage still waiting after a lock that cleared `cleared` rows: the lines the clear sends cancel
-// it (botClear.attack, from the botStepScore() just made), a lock without one lets it all rise
+// it (botClear.attack, from the botStepScore() just made; none outside the Guideline), a lock
+// without one lets it all rise
 function botPendingAfter(pending, cleared) {
     if (!pending || !cleared) return 0;
     return Math.max(0, pending - botClear.attack);
@@ -339,7 +346,7 @@ function botShapeScore(rows, w) {
 const BOT_SCORE_BASE = [0, 100, 300, 500, 800], BOT_SPIN_BASE = [400, 800, 1200, 1600], BOT_MINI_BASE = [100, 200, 400];
 const BOT_PC_BASE = [0, 800, 1200, 1800, 2000];
 function botClearValue(game, n, tspin, b2b, combo, pc) {
-    if (game.versus) return versusAttack({ n, tspin, b2b, combo, pc });
+    if (botCancels(game)) return versusAttack({ n, tspin, b2b, combo, pc });
     const base = (tspin === "full" ? BOT_SPIN_BASE : tspin === "mini" ? BOT_MINI_BASE : BOT_SCORE_BASE)[n] || 0;
     const bonus = pc ? (n === 4 && b2b ? 3200 : BOT_PC_BASE[n]) : 0;
     return (base * (b2b ? 1.5 : 1) + 50 * combo + bonus) / 200;
@@ -362,9 +369,9 @@ function botStepScore(game, rows, w, cleared, b2b = false, combo = -1, tspin = n
         const difficult = lines === 4 || tspin !== null;
         botClear.b2b = difficult;
         botClear.combo = combo + 1;
-        if (game.versus || w.attack) {
+        if (botCancels(game) || w.attack) {
             const value = botClearValue(game, Math.min(lines, 4), tspin, b2b && difficult, combo + 1, top === BOT_ROWS);
-            if (game.versus) botClear.attack = value;
+            if (botCancels(game)) botClear.attack = value;
             if (w.attack) {
                 s += w.attack * value;
                 if (tspin === "full") s += w.spin[Math.min(lines, 3)];
@@ -846,7 +853,7 @@ class Bot {
         // one move ahead for all, then the deeper search for the best few
         botBoardFrom(game, this.board);
         const buf = new Int32Array(BOT_ROWS);
-        const pending = game.versus ? game.pendingGarbage() : 0;
+        const pending = game.sendsGarbage ? game.pendingGarbage() : 0;
         const b2b = !!game.b2b, combo = game.gamemode === guideline ? game.combo : -1; // the Guideline's chains
         for (const pl of roots) {
             const seq = pl.hold ? holdSeq : visible;

@@ -6,6 +6,9 @@
 //    (tetris.wiki: Tetris_(Game_Boy), Nintendo_Rotation_System; randomizer from TASVideos
 //    submission 4536 and the disassembly)
 // Neither has a hard drop, hold or lock delay; one next piece; btype: 25 lines over garbage.
+// NES "versus": one side of a match as Classic Tetris World Championship plays it (the NES itself
+// has no two-player mode): A-Type from one start level, both sides dealt the same pieces, no
+// garbage; the higher score once a side tops out wins.
 
 // ----------------------------------------------------------
 // NES (1989)
@@ -36,6 +39,7 @@ const NES_ARE = 10, NES_ARE_STEP = 2, NES_ARE_MAX = 18;
 const NES_LINE_CLEAR = 17; // plus 0-3 frames: the animation steps on frames that are multiples of 4
 const NES_B_ROWS = [0, 3, 5, 8, 10, 12]; // B-Type: rows of garbage by height 0-5
 const NES_LINES_PER_LEVEL = 10;
+const NES_VERSUS_LEVEL = 18; // versus: the start level at first (CTWC's)
 
 // ----------------------------------------------------------
 // GB (1989)
@@ -86,6 +90,7 @@ class Game1989 extends RuleGame {
         this.nextCount = GB_NEXT;
         this.irs = false;
         this.btype = variant === "btype";
+        this.maxScore = GB_MAX_SCORE;
     }
 
     // The chosen start level (0 to levels - 1) and B-Type height
@@ -216,7 +221,7 @@ class Game1989 extends RuleGame {
             this.score += GB_LINE_SCORES[n] * ((this.nes ? this.level : levelBefore) + 1);
             this.addAction(CLEAR_NAMES[n], "clear", n);
         }
-        this.score = Math.min(this.score, GB_MAX_SCORE);
+        this.score = Math.min(this.score, this.maxScore);
         if (n > 0 && this.btype && this.lines >= GB_B_LINES) {
             this.endGame("COMPLETE", `${GB_B_LINES} LINES — SCORE ${this.scoreText()}`);
         }
@@ -246,6 +251,47 @@ class NesGame extends Game1989 {
         this.pieceTop = NES_PIECE_TOP;
         this.randomizer = new NesRandomizer(Date.now());
         this.setStart(startLevel, NES_START_LEVELS, height);
+        // versus: scores past 999,999 count (CTWC's cartridges show them since 2016)
+        if (this.versus) this.maxScore = Infinity;
+    }
+
+    // Versus: both sides deal the same pieces (options.seed)
+    setOptions(options = {}) {
+        super.setOptions(options);
+        if (this.versus) this.randomizer = new NesRandomizer(options.seed ?? Date.now());
+    }
+
+    // Versus: the score against the other side's
+    getStats() {
+        const stats = super.getStats();
+        if (this.versus && this.rival) {
+            const diff = this.score - this.rival.score;
+            stats.push(diff ? [diff < 0 ? "BEHIND" : "AHEAD", Math.abs(diff).toLocaleString("en-US")] : ["LEAD", "EVEN"]);
+        }
+        return stats;
+    }
+
+    record() { return this.versus ? null : super.record(); }
+
+    // A side that tops out has its score to beat; the other wins by passing it, or loses by topping
+    // out below it (the same score: a draw)
+    versusOutcome() {
+        const other = this.rival;
+        const compare = () => this.score === other.score ? "draw" : this.score > other.score ? "win" : "lose";
+        if (this.gameover && other.gameover) return compare();
+        if (other.gameover && this.score > other.score) return "win";
+        if (this.gameover && other.score > this.score) return "lose";
+        return null;
+    }
+
+    versusNote() {
+        return `SCORE ${this.scoreText()}`;
+    }
+
+    // Versus: topped out, the score is there for the other side to beat
+    onBlockOut() {
+        if (this.versus) this.endGame("TOPPED OUT", `SCORE ${this.scoreText()} TO BEAT`);
+        else super.onBlockOut();
     }
 
     garbageRows() { return NES_B_ROWS[this.height]; }

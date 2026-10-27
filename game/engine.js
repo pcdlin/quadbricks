@@ -66,15 +66,23 @@ const TGM1_SETUP = [BIG_SETUP, REV_SETUP, MONO_SETUP, TLS_SETUP]; // TGM1's code
 // TGM3 Master: the qualified grade and its exams (Exams, tgm3ExamFor); none with Big
 const EXAMS_SETUP = { name: "Exams", accent: tetJ, arg: "exams", labels: ["On", "Off"], values: [true, false] };
 const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off", "On"], values: [false, true] }; // GB: gravity 10 levels on
-// Guideline versus: the bot's level (bot.js, 0-10), 6 at first
+// Versus: the bot's level (bot.js, 0-10), 6 at first
 const BOT_VERSUS_LEVEL = 6;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
-// Multiplayer: Guideline versus against the bot (its setup cards like a Custom Game mode's), or two
-// players on one screen, each on the input device they pick on the join screen (MENU_JOIN)
+// Versus: the rule set each side plays ("versus" in each: rules-guideline.js, rules-tgm.js, rules-1989.js),
+// and NES's start level, both sides the same. A card with `modes` is shown and used only when the
+// card before it that sets the mode chose one of them
+const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM3 World", "TGM3 Classic", "NES"],
+    values: [guideline, arika, tgmClassic, nesTetris] };
+const VERSUS_NES_LEVEL_SETUP = { ...levelSetup(NES_START_LEVELS), initial: NES_VERSUS_LEVEL, modes: [nesTetris] };
+// Multiplayer: versus against the bot, or two players on one screen, each on the input device they
+// pick on the join screen (MENU_JOIN, after the setup cards: `join`); the setup cards as a Custom
+// Game mode's
 const MULTI_ITEMS = [
-    { name: "Versus Bot", desc: "Clears send the bot garbage, the first to top out loses", accent: tetI,
-      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [BOT_SETUP] } },
-    { name: "Versus Player", desc: "Two players side by side, garbage both ways", accent: tetT, screen: MENU_JOIN },
+    { name: "Versus Bot", desc: "Against the bot: Guideline, TGM3 or NES rules", accent: tetI,
+      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, BOT_SETUP, VERSUS_NES_LEVEL_SETUP] } },
+    { name: "Versus Player", desc: "Two players side by side, on their own keys or gamepads", accent: tetT,
+      modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, VERSUS_NES_LEVEL_SETUP], join: true } },
 ];
 // Input devices of a two-player game: "keys1" (player 1's keys, and the touch controls), "keys2"
 // (player 2's keys) or "pad:N" (the gamepad at index N)
@@ -685,11 +693,12 @@ class Engine {
         this.sound.play("rotate");
     }
 
-    // The two players' game, on the devices picked on the join screen
+    // The two players' game, on the devices picked on the join screen, with Versus Player's setup
     startDuo() {
         this.duoDevices = this.joined;
         this.joined = [];
-        this.initGame(guideline, "versus", 0, 0, { duo: true });
+        const [mode, variant, startLevel, height, options] = this.chosenArgs();
+        this.initGame(mode, variant, startLevel, height, { ...options, duo: true });
         this.GAMESTATE = STATE_GAME;
     }
 
@@ -794,47 +803,66 @@ class Engine {
     }
 
     // -----------------------------------
-    // VERSUS: a Guideline match against the bot, or between two players
+    // VERSUS: a match against the bot, or between two players, in the Guideline, TGM3 or NES
 
     // A match against the bot at BOT_LEVELS[level]: its game is dealt from the player's seed, so both
     // sides get the same pieces. view: the other side's board (here the bot's)
-    newMatch(seed, level) {
-        const game = createGame(guideline, "versus", 0, 0, {}, { seed });
+    newMatch(mode, startLevel, seed, level) {
+        const game = createGame(mode, "versus", startLevel, 0, {}, { seed });
         return {
             bot: new Bot(level, seed), level, view: new BoardView(game),
             popups: [[], []], // lines each side sent: "+4" rising over its well (only the player's are shown against the bot)
-            result: null,     // "win" or "lose" (for player 1) once a side tops out
+            result: null,     // "win", "lose" or "draw" (for player 1) once the round is decided (versusOutcome)
+            wins: [0, 0],     // rounds each side has won (TGM3: the first to two takes the match)
+            round: 1,
         };
     }
 
     // A match between two players (duo), each on their own input device (duoDevices): player 2's
     // game, with the player's handling, is dealt from the same seed; view is player 2's board
-    newDuo(seed) {
-        const game = createGame(guideline, "versus", 0, 0, this.options.handling, { seed });
-        return { duo: true, devices: this.duoDevices, view: new BoardView(game), popups: [[], []], result: null };
+    newDuo(mode, startLevel, seed) {
+        const game = createGame(mode, "versus", startLevel, 0, this.options.handling, { seed });
+        return { duo: true, devices: this.duoDevices, view: new BoardView(game), popups: [[], []], result: null, wins: [0, 0], round: 1 };
+    }
+
+    // The match is over once a side has won the rounds the rule set asks for (game.versusWins)
+    matchOver() {
+        return this.match.wins.some(w => w >= this.game.versusWins);
+    }
+
+    // Enter after a decided round: the next round, the rounds won kept, or once the match is over a
+    // new match
+    nextRound() {
+        const m = this.match, carry = this.matchOver() ? null : { wins: m.wins, round: m.round + 1 };
+        this.initGame(...this.lastGameArgs);
+        if (carry) Object.assign(this.match, carry);
     }
 
     // One frame of the match, after player 1's: the other side plays its frame (the bot's input,
-    // or player 2's), each side's attacks go to the other (all the lines of one attack with their
-    // hole in one random column), and the first side to top out loses; the other's game ends there too
+    // or player 2's), each side's attacks go to the other (Guideline: all the lines of one attack
+    // with their hole in one random column; TGM3's come as rows), and once the rule set decides the
+    // round (versusOutcome) both stand still: the games still going end there too
     matchFrame() {
         const m = this.match, games = [this.game, m.view.game];
         const hole = () => Math.floor(Math.random() * WIDTH);
         if (!m.result) {
-            games[1].advanceFrame(m.duo ? this.inputs[1] : m.bot.input(games[1]));
+            if (!games[1].isGameOver()) games[1].advanceFrame(m.duo ? this.inputs[1] : m.bot.input(games[1]));
             games.forEach((game, side) => {
-                for (const lines of game.takeAttacks()) {
-                    games[1 - side].receiveGarbage({ lines, hole: hole() });
-                    m.popups[side].push({ lines, life: ATTACK_LIFE });
+                for (const attack of game.takeAttacks()) {
+                    games[1 - side].receiveGarbage({ ...attack, hole: hole() });
+                    m.popups[side].push({ lines: attack.lines, life: ATTACK_LIFE });
                     if (side === 0 || m.duo) this.sound.play("attack");
                 }
             });
-            const over = games.map(g => g.isGameOver());
-            if (over[0] || over[1]) {
-                m.result = over[0] ? "lose" : "win";
-                const winner = games[over[0] ? 1 : 0];
-                if (!winner.isGameOver()) winner.endGame(m.duo || winner === this.game ? "VICTORY" : "WINNER", null);
-                if (m.duo || !over[0]) this.sound.play("ko");
+            const result = games[0].versusOutcome();
+            if (result) {
+                m.result = result;
+                if (result !== "draw") m.wins[result === "win" ? 0 : 1]++;
+                games.forEach((game, side) => {
+                    const won = (result === "win") === (side === 0) && result !== "draw";
+                    if (!game.isGameOver()) game.endGame(result === "draw" ? "DRAW" : won ? (m.duo || side === 0 ? "VICTORY" : "WINNER") : "DEFEAT", null);
+                });
+                if (m.duo || result === "win") this.sound.play("ko");
             }
         }
         // garbage rising pushes a player's field up
@@ -951,7 +979,13 @@ class Engine {
     // (no Continue once it is over)
     mainItems() {
         if (this.game === null) return MAIN_ITEMS;
-        return this.game.isGameOver() ? [RESTART_ITEM, ...MAIN_ITEMS] : [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS];
+        return this.gameGoesOn() ? [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS] : [RESTART_ITEM, ...MAIN_ITEMS];
+    }
+
+    // The game can be resumed: it isn't over, or it is a match not yet decided (NES: the other side
+    // plays on after one tops out)
+    gameGoesOn() {
+        return !this.game.isGameOver() || (!!this.match && !this.match.result);
     }
 
     // options: the hidden modes' (createGame)
@@ -968,13 +1002,15 @@ class Engine {
             const state = this.exams.get(this.examRule);
             Object.assign(gameOptions, { qualified: state.qualified, exam: tgm3ExamFor(state) });
         }
-        // Guideline versus: a match against the bot (options.bot: its level) or between two players
-        // (options.duo, on duoDevices), both sides dealt from one seed
-        const versus = mode === guideline && variant === "versus";
+        // Versus: a match against the bot (options.bot: its level) or between two players (options.duo,
+        // on duoDevices), both sides of the mode's rule set and dealt from one seed
+        const versus = variant === "versus";
         if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
         const hadKind = this.match ? (this.match.duo ? "duo" : "bot") : null;
-        this.match = !versus ? null : options.duo ? this.newDuo(gameOptions.seed) : this.newMatch(gameOptions.seed, options.bot ?? BOT_VERSUS_LEVEL);
+        this.match = !versus ? null : options.duo ? this.newDuo(mode, startLevel, gameOptions.seed)
+            : this.newMatch(mode, startLevel, gameOptions.seed, options.bot ?? BOT_VERSUS_LEVEL);
+        if (this.match) [this.game.rival, this.match.view.game.rival] = [this.match.view.game, this.game];
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
@@ -1165,8 +1201,8 @@ class Engine {
                     this.menuShown = null;      // no slide when the menu opens
                     return;
                 }
-                if (code === "Enter" && this.match && this.match.result) { // a decided versus match: rematch
-                    this.initGame(...this.lastGameArgs);
+                if (code === "Enter" && this.match && this.match.result) { // a decided round: the next, or a rematch
+                    this.nextRound();
                     this.syncKeys = true;
                     return;
                 }
@@ -1208,7 +1244,7 @@ class Engine {
     }
 
     // Single Player -> Quick Play -> game, or Custom Game -> rule set -> sub-mode -> game; Multiplayer
-    // -> Versus Bot -> its setup -> game, or Versus Player -> join screen -> game; or Options ->
+    // -> Versus Bot -> its setup -> game, or Versus Player -> its setup -> join screen -> game; or Options ->
     // Keybinds (each player's), Gamepad, Visuals or Guideline handling.
     // Esc goes back a screen, and on the first one resumes a paused game.
     handleMenuInput() {
@@ -1217,7 +1253,7 @@ class Engine {
             [MENU_MAIN]: { pos: "mainpos", count: () => this.mainItems().length, back: null },
             [MENU_SINGLE]: { pos: "singlepos", count: () => SINGLE_ITEMS.length, back: MENU_MAIN },
             [MENU_MULTI]: { pos: "multipos", count: () => MULTI_ITEMS.length, back: MENU_MAIN },
-            [MENU_JOIN]: { pos: "multipos", count: () => 1, back: MENU_MULTI },
+            [MENU_JOIN]: { pos: "multipos", count: () => 1, back: MENU_SETUP },
             [MENU_QUICK]: { pos: "quickpos", count: () => QUICK_PLAY.length, back: MENU_SINGLE },
             [MENU_RULES]: { pos: "rulesetpos", count: () => RULESETS.length, back: MENU_SINGLE },
             [MENU_MODES]: { pos: "menupos", count: () => RULESETS[this.rulesetpos].modes.length, back: MENU_RULES },
@@ -1252,7 +1288,7 @@ class Engine {
             const count = screen.count();
             if (code === "Escape") {
                 if (screen.back !== null) this.menuStep = screen.back;
-                else if (this.game !== null && !this.game.isGameOver()) { this.GAMESTATE = STATE_GAME; this.syncKeys = true; return; }
+                else if (this.game !== null && this.gameGoesOn()) { this.GAMESTATE = STATE_GAME; this.syncKeys = true; return; }
             } else if (code === "ArrowUp") {
                 this[screen.pos] = repeat ? Math.max(0, pos - 1) : (pos + count - 1) % count;
             } else if (code === "ArrowDown") {
@@ -1276,9 +1312,6 @@ class Engine {
                     this.setupFrom = MENU_MULTI;
                     this.menuStep = MENU_SETUP;
                     this.setuppos = 0;
-                } else if (this.menuStep === MENU_MULTI) { // the join screen: devices picked afresh
-                    this.joined = [];
-                    this.menuStep = MENU_JOIN;
                 } else if (this.menuStep === MENU_MAIN || this.menuStep === MENU_OPTIONS || this.menuStep === MENU_SINGLE) {
                     const items = this.menuStep === MENU_MAIN ? this.mainItems() : this.menuStep === MENU_SINGLE ? SINGLE_ITEMS : OPTIONS_ITEMS;
                     const next = items[pos].screen;
@@ -1299,6 +1332,9 @@ class Engine {
                 } else if (this.menuStep === MENU_MODES && this.chosenMode().setup) {
                     this.menuStep = MENU_SETUP;
                     this.setuppos = 0;
+                } else if (this.menuStep === MENU_SETUP && this.chosenMode().join) { // the join screen: devices picked afresh
+                    this.joined = [];
+                    this.menuStep = MENU_JOIN;
                 } else if (this.menuStep === MENU_MODES || this.menuStep === MENU_SETUP) {
                     this.menuAction();
                     return;
@@ -1401,9 +1437,12 @@ class Engine {
         return this.setupFrom === MENU_MULTI ? `multi.${this.multipos}` : `${this.rulesetpos}.${this.menupos}`;
     }
 
-    // The setup screen's cards for the chosen mode (ids "setup0", "setup1", ...)
+    // The setup screen's cards for the chosen mode (ids "setup0", "setup1", ...), but those for
+    // other modes than the one chosen (`modes`)
     setupItems() {
-        return (this.chosenMode().setup || []).map(({ name, accent }, n) => ({ id: "setup" + n, name, accent }));
+        const [mode] = this.chosenArgs();
+        return (this.chosenMode().setup || []).map(({ name, accent, modes }, n) => ({ id: "setup" + n, name, accent, modes }))
+            .filter(item => !item.modes || item.modes.includes(mode)).map(({ modes, ...item }) => item);
     }
 
     // A setup card's descriptor, its number and its key in setupChoices; null for other ids
@@ -1432,6 +1471,7 @@ class Engine {
     modeArgs({ mode, variant, setup = [] }, indexOf = n => setup[n].initial || 0) {
         const args = { mode, variant, startLevel: 0, height: 0 }, options = {};
         setup.forEach((item, n) => {
+            if (item.modes && !item.modes.includes(args.mode)) return; // a card for other modes
             const i = indexOf(n);
             const value = item.values ? item.values[i] : i;
             if (OPTION_ARGS.includes(item.arg)) options[item.arg] = value;
@@ -2455,7 +2495,7 @@ class Engine {
                 const bottom = listTop + menuListHeight(items, 64, 10);
                 this.drawBest(bottom + 22);
                 hintY = Math.max(hintY, bottom + 46);
-                hint = "← →  CHANGE      ENTER  START      ESC  BACK";
+                hint = `← →  CHANGE      ENTER  ${this.chosenMode().join ? "SELECT" : "START"}      ESC  BACK`;
                 break;
             }
             case MENU_OPTIONS:
@@ -2549,7 +2589,7 @@ class Engine {
     // one, how to start. Returns the hint (Start, not B, goes back on a pad: B rotates)
     drawJoin(top, heading) {
         const cx = VIEW_W / 2, o = this.options, ready = this.joined.length === 2;
-        heading("MULTIPLAYER  ·  VERSUS PLAYER");
+        heading(`MULTIPLAYER  ·  VERSUS PLAYER  ·  ${VERSUS_RULES_SETUP.labels[this.setupIndex(0)]}`.toUpperCase());
         const cards = [0, 1].map(p => ({
             name: "Player " + (p + 1), accent: p ? tetZ : tetT, noArrow: true,
             value: this.joined[p] ? deviceName(this.joined[p]) : p === this.joined.length ? "PRESS ROTATE" : "WAITING",
@@ -2719,16 +2759,18 @@ class Engine {
         if (this.layout.compact) this.drawCompactPanels();
         else this.drawSidePanels();
         if (match) {
-            this.drawGarbageMeter(game);
+            if (game.sendsGarbage) this.drawGarbageMeter(game);
             this.drawAttackPopups(match.popups[side]);
             if (match.duo) this.drawPlayerTag(side, match.devices[side]);
         }
 
         // Overlays
         if (match && match.result) {
-            const won = (match.result === "win") === (side === 0);
-            const sub = this.gamepad.active ? "START FOR MENU" : this.touch.enabled ? "TAP MENU" : "ENTER  REMATCH  ·  ESC  MENU";
-            this.boardBanner(won ? "VICTORY" : "DEFEAT", sub, 1, PIECE_COLORS[won ? tetO : tetZ].base);
+            const draw = match.result === "draw", won = !draw && (match.result === "win") === (side === 0);
+            const next = this.matchOver() ? "REMATCH" : "NEXT ROUND";
+            const sub = this.gamepad.active ? "START FOR MENU" : this.touch.enabled ? "TAP MENU" : `ENTER  ${next}  ·  ESC  MENU`;
+            this.boardBanner(draw ? "DRAW" : won ? "VICTORY" : "DEFEAT", sub, 1, draw ? INK : PIECE_COLORS[won ? tetO : tetZ].base,
+                null, false, this.matchNotes(game, side));
         } else if (game.isGameOver()) {
             const title = game.endTitle || "GAME OVER";
             const accent = title === "GRAND MASTER" ? PIECE_COLORS[tetO].base
@@ -2738,6 +2780,18 @@ class Engine {
         }
         r.restore();
         this.board = this.ownBoard;
+    }
+
+    // Under a decided round's banner: how this side's game ended (TIME UP, LEVEL 200, ...), and in a
+    // match of rounds the rounds won, this side's first
+    matchNotes(game, side) {
+        const m = this.match, notes = [];
+        if (game.endTitle && !["VICTORY", "WINNER", "DEFEAT", "DRAW"].includes(game.endTitle)) notes.push(game.endTitle);
+        if (game.versusWins > 1) {
+            const score = `${m.wins[side]} – ${m.wins[1 - side]}`;
+            notes.push(this.matchOver() ? `MATCH  ${score}` : `ROUND ${m.round}  ·  ${score}`);
+        }
+        return notes;
     }
 
     // Two players: above the well, which player's board it is and the device they play with
@@ -2782,12 +2836,13 @@ class Engine {
         this.board = m.view;
         this.drawBoard();
         this.drawParticles();
-        this.drawGarbageMeter(game);
+        if (game.sendsGarbage) this.drawGarbageMeter(game);
         this.text("BOT  ·  LV " + m.level, BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
-        this.text("SENT " + game.linesSent, BOARD_X + BOARD_W, this.boardY - 25, { size: 13, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
+        this.text(game.versusNote(), BOARD_X + BOARD_W, this.boardY - 25, { size: 13, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
         if (m.result) {
-            const won = m.result === "lose"; // the bot won
-            this.boardBanner(won ? "WINNER" : "KNOCKED OUT", null, 1, PIECE_COLORS[won ? tetO : tetZ].base);
+            const won = m.result === "lose", draw = m.result === "draw"; // the bot won, or neither
+            const out = ["GAME OVER", "TOPPED OUT"].includes(game.endTitle); // topped out, not beaten on level or time
+            this.boardBanner(draw ? "DRAW" : won ? "WINNER" : out ? "KNOCKED OUT" : "BEATEN", null, 1, draw ? INK : PIECE_COLORS[won ? tetO : tetZ].base);
         }
         r.restore();
         this.board = this.ownBoard;

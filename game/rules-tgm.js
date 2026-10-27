@@ -18,6 +18,9 @@
 //    GradeMania3Mode). "easy": to level 200, scored in fireworks (the community analysis "TGM3 Easy
 //    mode hanabi" that tetris.wiki links to). "shirase": 20G to level 1300, rising garbage,
 //    monochrome blocks, a staff roll with big pieces (roll length from NullpoMino's SpeedMania2Mode).
+//    "versus" (TiVersusGame): one side of a VS Rule match without items (tetris.wiki:
+//    TGM_Versus_Mode_Guide): a race to level 200 in 2:40, first to two rounds, garbage copied
+//    from the rows a clear removes.
 //    (tetris.wiki: Tetris_The_Grand_Master_3_Terror-Instinct, Heboris_Unofficial_Expansion)
 
 const TGM_BUFFER_TOP = 1; // one buffer row: blocks locking above it are deleted
@@ -52,6 +55,11 @@ const TGM_DELAYS = [
 
 const TGM_LEVEL_FOR_LINES = [0, 1, 2, 4, 6]; // Master: triple +4, tetris +6
 const TGM_MAX_LEVEL = 999;
+// TGM3 versus (tetris.wiki, TGM Versus Mode Guide: the arcade's default settings)
+const TGM_VS_LEVEL_GOAL = 200; // the first to reach it wins the round
+const TGM_VS_FRAMES = (2 * 60 + 40) * 60; // a round's time limit, 2:40: then the higher level wins
+const TGM_VS_WINS = 2; // rounds to win the match ("first to 2", up to 3 rounds)
+const TGM_VS_GARBAGE_MAX = 8; // rows of garbage that may wait ("capped at the first 8 lines")
 const TGM_TORIKAN_LEVEL = 500, TGM_TORIKAN_FRAMES = 7 * 60 * 60; // ends at 500 if slower than 7:00
 const TGM_GHOST_UNTIL = 100; // ghost piece shown below level 100
 const TGM_ROTATION_RESETS = 8, TGM_MOVE_RESETS = 10; // World rule move reset limits
@@ -1626,6 +1634,101 @@ class TiShiraseGame extends TiGame {
     }
 }
 
+// ----------------------------------------------------------
+// TGM3 versus (World or Classic rule): one side of a VS Rule match as the arcade sets it by default
+// (tetris.wiki, TGM Versus Mode Guide), without the items. Master's levels and speed (no COOLs or
+// REGRETs, so the speed level is the level), no grade, roll or 15-minute speed-up; both sides deal
+// the same pieces (options.seed). A round is won by reaching level 200 first, by the other side
+// topping out, or with the higher level when 2:40 runs out (ties are draws: the guide gives the
+// defending side a goal reached on the same frame, a role this match has no use for). A clear
+// of two lines or more sends the rows it removed, the clearing piece's blocks taken out, upside
+// down ("take the line clear, erase the clearing piece, and send it vertically flipped"); singles
+// send nothing. As in the Guideline here, the garbage rises when this side locks a piece that
+// clears nothing, at most 8 rows of it (the guide's cap); nothing cancels it.
+
+class TiVersusGame extends TiGame {
+    constructor(mode, variant) {
+        super(mode, variant);
+        this.internalGrading = false;
+        this.hasKill = false;
+        this.maxLevel = TGM_VS_LEVEL_GOAL;
+        this.sendsGarbage = true;
+        this.versusWins = TGM_VS_WINS;
+        this.goalReached = false;
+        this.timeUp = false;
+        this.lockCells = []; // the locking piece's cells (beforeLock), taken out of the garbage it sends
+    }
+
+    setOptions(options = {}) {
+        super.setOptions(options);
+        this.randomizer = new TiRandomizer(options.seed ?? Date.now());
+    }
+
+    getStats() {
+        return [this.statsName(), ["LEVEL", `${this.level} / ${this.maxLevel}`],
+            ["TIME", this.formatTime(Math.max(0, TGM_VS_FRAMES - this.frames))], ["SENT", String(this.linesSent)], ["SCORE", this.scoreText()]];
+    }
+
+    versusNote() {
+        return `LEVEL ${this.level}`;
+    }
+
+    record() { return null; }
+    secretGradeLabels() { return null; }
+    testSetup() { return false; }
+    updateSection() {} // no COOLs or REGRETs
+    checkLevelStop() {}
+
+    onClock() {
+        if (this.frames >= TGM_VS_FRAMES) {
+            this.timeUp = true;
+            this.endGame("TIME UP", `LEVEL ${this.level}`);
+            return false;
+        }
+        return super.onClock();
+    }
+
+    beforeLock() {
+        this.lockCells = this.curPieceCells();
+    }
+
+    // Levels and score as in Master; 2+ lines send their garbage; level 200 ends the round (the
+    // rows collapse first, as the round stops here)
+    scoreLines(n, rows) {
+        if (n >= 2) this.sendAttack({ lines: n, rows: this.garbageFrom(rows) });
+        super.scoreLines(n, rows);
+        if (this.level >= this.maxLevel) {
+            this.goalReached = true;
+            this.collapse(rows);
+            this.endGame(`LEVEL ${this.maxLevel}`, this.formatTime());
+        }
+    }
+
+    // The rows a clear removed (rows; clearedRows holds them as they were), without the locking
+    // piece's blocks, upside down: top first, as they rise on the other side
+    garbageFrom(rows) {
+        return this.clearedRows.map((cells, i) => cells.map((v, c) =>
+            this.lockCells.some(cell => cell.row === rows[i] && cell.col === c) ? 0 : v)).reverse();
+    }
+
+    maxIncoming() { return TGM_VS_GARBAGE_MAX; }
+
+    riseAfterLock(n) {
+        return n === 0 ? this.riseGarbage() : 0;
+    }
+
+    // Level 200 first; else topping out loses; else, when time is up, the higher level
+    versusOutcome() {
+        const other = this.rival;
+        if (this.goalReached || other.goalReached) return this.goalReached === other.goalReached ? "draw" : this.goalReached ? "win" : "lose";
+        const out = g => g.gameover && !g.timeUp;
+        if (out(this) || out(other)) return out(this) === out(other) ? "draw" : out(this) ? "lose" : "win";
+        if (!this.timeUp || !other.timeUp) return null;
+        return this.level === other.level ? "draw" : this.level > other.level ? "win" : "lose";
+    }
+}
+
 registerRules([tgmOriginal], () => Tgm1Game);
 registerRules([tgmTap], () => TapGame);
-registerRules([arika, tgmClassic], variant => variant === "easy" ? TiEasyGame : variant === "shirase" ? TiShiraseGame : TiGame);
+registerRules([arika, tgmClassic], variant => variant === "easy" ? TiEasyGame : variant === "shirase" ? TiShiraseGame
+    : variant === "versus" ? TiVersusGame : TiGame);

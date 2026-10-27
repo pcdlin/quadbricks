@@ -83,14 +83,9 @@ class GuidelineGame extends RuleGame {
         this.dig = variant === "dig";
         this.sprint = GUIDELINE_SPRINTS.includes(variant);
         this.ultraFrames = GUIDELINE_ULTRA_FRAMES[variant] || 0; // ultra: its length
-        this.versus = variant === "versus";
         this.pieces = 0; // pieces locked (versus: pieces per second)
-        // Versus garbage
-        this.incoming = []; // attacks received and not yet risen, oldest first: { lines, hole }
-        this.attacks = []; // lines sent since the last takeAttacks(), after cancelling
-        this.risen = []; // garbage rows that rose, per lock, since the last takeRisenGarbage()
+        this.sendsGarbage = this.versus; // all of each attack's lines with their hole in one column
         this.attackTotal = 0; // lines of attack made, cancelled ones included (APM)
-        this.linesSent = 0; // lines that went to the other side
         // level 1 + startLevel: Master M1-M30, the marathons 1-15
         this.startLevel = this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1)
             : GUIDELINE_MARATHONS.includes(variant) ? clamp(startLevel, 0, GUIDELINE_MAX_LEVEL - 1) : 0;
@@ -331,56 +326,12 @@ class GuidelineGame extends RuleGame {
             lines -= k;
             if (!g.lines) this.incoming.shift();
         }
-        if (lines > 0) {
-            this.attacks.push(lines);
-            this.linesSent += lines;
-        }
+        if (lines > 0) this.sendAttack({ lines });
     }
 
-    // An attack from the other side: lines of garbage, all with their hole in column `hole`. It
-    // waits until this side locks a piece that clears nothing.
-    receiveGarbage({ lines, hole }) {
-        if (!this.versus || this.gameover || lines <= 0) return;
-        this.incoming.push({ lines, hole });
-    }
-
-    pendingGarbage() {
-        return this.incoming.reduce((sum, g) => sum + g.lines, 0);
-    }
-
-    // Lines sent since the last call, one entry per clear
-    takeAttacks() {
-        return this.drain("attacks");
-    }
-
-    // Garbage rows that rose since the last call, one entry per lock
-    takeRisenGarbage() {
-        return this.drain("risen");
-    }
-
+    // The garbage waiting rises when this side locks a piece that clears nothing (tetris.wiki)
     riseAfterLock(n) {
         return this.versus && n === 0 ? this.riseGarbage() : 0;
-    }
-
-    // All the garbage waiting rises from the bottom, pushing the stack up; blocks pushed out of the
-    // top of the buffer zone top this side out. Returns the number of rows.
-    riseGarbage() {
-        let rows = 0, toppedOut = false;
-        for (const g of this.incoming) {
-            for (let k = 0; k < g.lines; k++) {
-                if (this.field[0].some(v => v !== 0)) toppedOut = true;
-                const row = new Array(WIDTH).fill(tetGARBAGE);
-                row[g.hole] = 0;
-                this.raiseRow(row);
-                rows++;
-            }
-        }
-        this.incoming = [];
-        if (!rows) return 0;
-        this.risen.push(rows);
-        this.sounds.push("garbage");
-        if (toppedOut) this.endGame("GAME OVER", "TOP OUT — ESC FOR MENU");
-        return rows;
     }
 
     // Variable goal: the level goes up once its goal is met (the rest is lost), and meeting

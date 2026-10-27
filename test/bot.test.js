@@ -207,25 +207,46 @@ for (const [name, mode, variant] of MODES) {
 }
 
 // ---------------------------------------------------------------- versus
-{
-    // two bots in a Guideline versus match, attacks going both ways as the engine routes them:
-    // the stronger one wins, and neither gets stuck under the garbage
-    seeded(21);
-    const games = [createGame(guideline, "versus", 0, 0, {}, { seed: 99 }), createGame(guideline, "versus", 0, 0, {}, { seed: 99 })];
-    const bots = [new Bot(10, 1), new Bot(0, 2)];
-    let frames = 0, stuck = false, risen = 0;
-    while (!games.some(g => g.isGameOver()) && frames < 60 * 60 * 10) {
-        games.forEach((g, i) => g.advanceFrame(bots[i].input(g)));
+// Two bots in a versus match, attacks going both ways as the engine routes them, until the rule set
+// decides it (versusOutcome); returns who won (for the first side) and what happened
+function versusMatch(mode, levels, seed, startLevel = 0) {
+    const games = [0, 1].map(() => createGame(mode, "versus", startLevel, 0, {}, { seed }));
+    [games[0].rival, games[1].rival] = [games[1], games[0]];
+    const bots = levels.map((level, i) => new Bot(level, i + 1));
+    let frames = 0, stuck = false, risen = 0, result = null;
+    while (!result && frames < 60 * 60 * 10) {
+        games.forEach((g, i) => { if (!g.isGameOver()) g.advanceFrame(bots[i].input(g)); });
         games.forEach((g, i) => {
-            for (const lines of g.takeAttacks()) games[1 - i].receiveGarbage({ lines, hole: Math.floor(Math.random() * WIDTH) });
+            for (const a of g.takeAttacks()) games[1 - i].receiveGarbage({ ...a, hole: Math.floor(Math.random() * WIDTH) });
             risen += g.takeRisenGarbage().reduce((a, b) => a + b, 0);
             if (g.curPiece_type && g.activeTime > 600) stuck = true;
         });
         if (stuck) break;
+        result = games[0].versusOutcome();
         frames++;
     }
+    return { result, frames, stuck, risen, games };
+}
+{
+    // Guideline: the stronger one wins, and neither gets stuck under the garbage
+    seeded(21);
+    const { result, frames, stuck, risen, games } = versusMatch(guideline, [10, 0], 99);
     check(`versus: level 10 beats level 0 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} lines sent, ${risen} garbage rows risen in all)`,
-        !stuck && games[1].isGameOver() && !games[0].isGameOver() && games[0].linesSent > 0, JSON.stringify({ frames, stuck, over: games.map(g => g.isGameOver()) }));
+        !stuck && result === "win" && games[1].isGameOver() && !games[0].isGameOver() && games[0].linesSent > 0, JSON.stringify({ frames, stuck, result }));
+}
+for (const [mode, name] of [[arika, "TGM3 World"], [tgmClassic, "TGM3 Classic"]]) {
+    // TGM3: garbage copied from the clears goes both ways, and the round ends (level 200, a top out or time)
+    seeded(22);
+    const { result, frames, stuck, risen, games } = versusMatch(mode, [10, 2], 31);
+    check(`${name} versus: level 10 beats level 2 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} rows sent, ${risen} risen, levels ${games.map(g => g.level).join(" / ")})`,
+        !stuck && result === "win" && games[0].linesSent > 0, JSON.stringify({ frames, stuck, result }));
+}
+{
+    // NES: no garbage, the higher score once a side tops out
+    seeded(23);
+    const { result, frames, stuck, games } = versusMatch(nesTetris, [10, 0], 41, 9);
+    check(`NES versus at level 9: level 10 beats level 0 (${(frames / 60).toFixed(0)} s, scores ${games.map(g => g.score).join(" / ")})`,
+        !stuck && result === "win" && games[0].score > games[1].score, JSON.stringify({ frames, stuck, result }));
 }
 
 // ---------------------------------------------------------------- levels

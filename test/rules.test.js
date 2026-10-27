@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY, TGM_VS_FRAMES, TGM_VS_GARBAGE_MAX});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -2710,7 +2710,7 @@ function secretAt(g, rows, cover = true) {
     check("  ...stats: sent, attack per minute, pieces per second, lines", g.getStats().map(s => s[0]), ["GUIDELINE", "SENT", "APM", "PPS", "LINES"]);
     g.receiveGarbage({ lines: 3, hole: 4 });
     g.attack({ n: 4, tspin: null, b2b: false, combo: 0, pc: false });
-    check("  ...an attack cancels the garbage waiting first and sends the rest", [g.pendingGarbage(), g.takeAttacks(), g.linesSent, g.attackTotal], [0, [1], 1, 4]);
+    check("  ...an attack cancels the garbage waiting first and sends the rest", [g.pendingGarbage(), g.takeAttacks(), g.linesSent, g.attackTotal], [0, [{ lines: 1 }], 1, 4]);
 
     clearField(g);
     fill(g, ["#.........", "###....###"]); // the block left over: not a perfect clear
@@ -2744,6 +2744,98 @@ function secretAt(g, rows, cover = true) {
     g.advanceFrame(HARD_PUSH);
     check("  ...garbage pushing blocks out of the top tops the player out", [g.isGameOver(), g.endTitle, g.endSub], [true, "GAME OVER", "TOP OUT — ESC FOR MENU"]);
     check("  ...versus games keep no record", startedGuideline("versus").record(), null);
+}
+
+// ---------------------------------------------------------------- TGM3 and NES versus
+// A match's two sides (rival), dealt from one seed, run to their first piece
+function versusPair(mode, seed = 5, startLevel = 0) {
+    const games = [0, 1].map(() => createGame(mode, "versus", startLevel, 0, {}, { seed }));
+    [games[0].rival, games[1].rival] = [games[1], games[0]];
+    for (const g of games) for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return games;
+}
+const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c));
+{
+    const [a, b] = versusPair(arika, 7), [c] = versusPair(arika, 8);
+    const deal = g => [g.curPiece_type, ...piecesOf(g)].join("");
+    check("TGM3 versus: both sides deal the same pieces, another seed others; no grade, no record, stats LEVEL / 200, TIME, SENT",
+        [deal(a) === deal(b), deal(a) === deal(c), a.record(), a.getStats().map(s => s[0])],
+        [true, false, null, ["TGM3 TI", "LEVEL", "TIME", "SENT", "SCORE"]]);
+    check("  ...the time counts down from 2:40", a.getStats()[2][1], a.formatTime(TGM_VS_FRAMES - a.frames));
+
+    clearField(a);
+    fill(a, ["##.......#", "#########.", "#########."]);
+    a.setCell(21, 0, tetZ); a.setCell(20, 0, tetS); // tell the two rows apart
+    place(a, tetI, 1, 18, 7); // vertical in column 9: rows 18-21, clears 20 and 21
+    a.advanceFrame(HARD_PUSH);
+    const attacks = a.takeAttacks();
+    const sent21 = [tetZ, 1, 1, 1, 1, 1, 1, 1, 1, 0], sent20 = [tetS, 1, 1, 1, 1, 1, 1, 1, 1, 0];
+    check("  ...a double sends its two rows without the clearing piece's blocks, upside down (the bottom row on top)",
+        [attacks.length, attacks[0].lines, attacks[0].rows, a.linesSent], [1, 2, [sent21, sent20], 2]);
+
+    b.receiveGarbage({ ...attacks[0], hole: 3 });
+    clearField(b);
+    fill(b, ["########.."]);
+    place(b, tetO, 0, 19, 7); // fills columns 8-9: a single, which sends nothing and lets nothing rise
+    b.advanceFrame(HARD_PUSH);
+    for (let f = 0; f < 100 && b.phase !== "active"; f++) b.advanceFrame(0);
+    check("  ...a single sends nothing; garbage waits while pieces clear lines", [b.takeAttacks(), b.pendingGarbage(), rowOf(b, 21)],
+        [[], 2, [0, 0, 0, 0, 0, 0, 0, 0, tetO, tetO]]);
+    place(b, tetO, 0, 19, 0);
+    b.advanceFrame(HARD_PUSH);
+    check("  ...then rises under the stack as sent: the attacker's bottom row on top, the piece pushed up",
+        [b.pendingGarbage(), b.takeRisenGarbage(), rowOf(b, 20), rowOf(b, 21), b.getCell(18, 1), b.getCell(19, 8)],
+        [0, [2], sent21, sent20, tetO, tetO]);
+
+    const [d] = versusPair(arika);
+    for (let k = 0; k < 4; k++) d.receiveGarbage({ lines: 3, rows: [sent21, sent20, sent21] });
+    check("  ...at most 8 rows wait (the guide's cap)", [TGM_VS_GARBAGE_MAX, d.pendingGarbage(), d.incoming.map(g => g.lines)], [8, 8, [3, 3, 2]]);
+}
+{
+    const [a, b] = versusPair(tgmClassic);
+    a.level = 199;
+    clearField(a);
+    fill(a, ["#########.", "#########."]);
+    place(a, tetI, 1, 18, 7); // vertical in column 9; Classic: a soft drop locks it on the ground
+    a.advanceFrame(SOFT_PUSH);
+    for (let f = 0; f < 5 && !a.isGameOver(); f++) a.advanceFrame(SOFT_PUSH);
+    check("TGM3 versus: level 200 ends the round, the side reaching it wins (the field collapsed)",
+        [a.level, a.isGameOver(), a.endTitle, a.goalReached, a.versusOutcome(), b.versusOutcome(), a.getCell(21, 9)],
+        [200, true, "LEVEL 200", true, "win", "lose", tetI]);
+}
+{
+    const [a, b] = versusPair(arika);
+    a.frames = b.frames = TGM_VS_FRAMES - 1;
+    a.level = 120; b.level = 80;
+    check("  ...before time runs out nothing is decided", a.versusOutcome(), null);
+    a.advanceFrame(0); b.advanceFrame(0);
+    check("  ...at 2:40 time is up: the higher level wins", [a.endTitle, b.endTitle, a.versusOutcome(), b.versusOutcome()], ["TIME UP", "TIME UP", "win", "lose"]);
+    b.level = 120;
+    check("  ...the same level is a draw", a.versusOutcome(), "draw");
+    const [c, d] = versusPair(arika);
+    d.endGame("GAME OVER", "");
+    check("  ...topping out loses; a match is won with two rounds", [c.versusOutcome(), d.versusOutcome(), c.versusWins], ["win", "lose", 2]);
+}
+{
+    const [a, b] = versusPair(nesTetris, 9, 18);
+    const [c] = versusPair(nesTetris, 10, 18);
+    const deal = g => [g.curPiece_type, ...piecesOf(g)].join("");
+    check("NES versus: A-Type from the chosen level, both sides deal the same pieces, no garbage, no record",
+        [a.level, deal(a) === deal(b), deal(a) === deal(c), a.sendsGarbage, a.record(), a.getStats().map(s => s[0])],
+        [18, true, false, false, null, ["NES", "LEVEL", "LINES", "SCORE", "LEAD"]]);
+    a.score = 999000;
+    a.scoreGb(4);
+    check("  ...scores go past 999,999 (CTWC); the stats show the lead", [a.score, a.getStats()[4], b.getStats()[4]],
+        [999000 + 1200 * 19, ["AHEAD", (999000 + 1200 * 19).toLocaleString("en-US")], ["BEHIND", (999000 + 1200 * 19).toLocaleString("en-US")]]);
+    a.score = 5000; b.score = 3000;
+    a.onBlockOut();
+    check("  ...a side that tops out sets the score to beat: undecided while the other is behind",
+        [a.endTitle, a.endSub, a.versusOutcome(), b.versusOutcome()], ["TOPPED OUT", "SCORE 5,000 TO BEAT", null, null]);
+    b.score = 5100;
+    check("  ...passing it wins at once", [a.versusOutcome(), b.versusOutcome()], ["lose", "win"]);
+    b.score = 4000;
+    b.onBlockOut();
+    check("  ...topping out behind it loses; the same score is a draw", [a.versusOutcome(), b.versusOutcome(), (b.score = 5000, b.versusOutcome())], ["win", "lose", "draw"]);
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
