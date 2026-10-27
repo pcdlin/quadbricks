@@ -3125,9 +3125,11 @@ class Engine {
             y += step;
         });
 
-        // Wordmark
-        this.colorStripe(LEFT_X, this.boardY + this.boardH - 26, 70, 3);
-        this.text("QUADBRICKS", LEFT_X,this.boardY + this.boardH - 6, { size: 18, weight: 900, color: INK_DIM, spacing: 5 });
+        // Wordmark (not in a match: versus stats take its room)
+        if (!this.match) {
+            this.colorStripe(LEFT_X, this.boardY + this.boardH - 26, 70, 3);
+            this.text("QUADBRICKS", LEFT_X, this.boardY + this.boardH - 6, { size: 18, weight: 900, color: INK_DIM, spacing: 5 });
+        }
 
         // NEXT (none with the Guideline's previews off)
         if (game.nextCount > 0) {
