@@ -462,7 +462,7 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (`options.seed`, `BagRandomizer`). The speed rises with the match's time, the same for both sides, not with a side's
   own lines (the user's choice; Tetris 99's and TETR.IO's gravity rises with time too): Guideline level 1 for the first
   minute, then a level every 30 s up to 15 at 7:30 (`GUIDELINE_VS_MARGIN`, `GUIDELINE_VS_LEVEL_FRAMES`, in `onClock()`),
-  its gravity by the usual formula. No record. Stats: LEVEL, SENT, APM (attack per minute, cancelled lines included), PPS, LINES.
+  its gravity by the usual formula. No record. Stats: LEVEL, SENT, APM (attack per minute, cancelled lines included), PPS (LINES no longer fits).
   Checked against tetris.wiki (*Garbage*, *Combo*, *Top out*, *Tetris Guideline*) and the wiki's pages on other clients:
   - Agree everywhere: the base table (Tetris 99, Puyo Puyo Tetris, Jstris give the same); cancelling, the rest sent back
     (*Garbage*); garbage entering on the next lock that clears nothing (*Garbage*, Puyo Puyo Tetris, Tetris Effect:

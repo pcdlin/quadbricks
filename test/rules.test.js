@@ -2707,7 +2707,7 @@ function secretAt(g, rows, cover = true) {
 }
 {
     const g = startedGuideline("versus");
-    check("  ...stats: level, sent, attack per minute, pieces per second, lines", g.getStats().map(s => s[0]), ["GUIDELINE", "LEVEL", "SENT", "APM", "PPS", "LINES"]);
+    check("  ...stats: level, sent, attack per minute, pieces per second", g.getStats().map(s => s[0]), ["GUIDELINE", "LEVEL", "SENT", "APM", "PPS"]);
     g.receiveGarbage({ lines: 3, hole: 4 });
     g.attack({ n: 4, tspin: null, b2b: false, combo: 0, pc: false });
     check("  ...an attack cancels the garbage waiting first and sends the rest", [g.pendingGarbage(), g.takeAttacks(), g.linesSent, g.attackTotal], [0, [{ lines: 1 }], 1, 4]);

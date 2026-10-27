@@ -147,10 +147,10 @@ class GuidelineGame extends RuleGame {
             return [mode, ["LEVEL", String(this.level)], ["GOAL", `${this.goalPoints} / ${GUIDELINE_VARIABLE_GOAL * this.level}`], lines, ["SCORE", score]];
         }
         if (this.dig) return [mode, ["TIME", this.formatTime()], ["GARBAGE", `${this.digCleared} / ${this.digRows}`], lines, ["SCORE", score]];
-        if (this.versus) { // attack per minute (cancelled lines too) and pieces per second
+        if (this.versus) { // attack per minute (cancelled lines too) and pieces per second; no room for the lines
             const seconds = this.frames / 60;
             const apm = seconds ? this.attackTotal * 60 / seconds : 0, pps = seconds ? this.pieces / seconds : 0;
-            return [mode, ["LEVEL", String(this.level)], ["SENT", String(this.linesSent)], ["APM", apm.toFixed(1)], ["PPS", pps.toFixed(2)], lines];
+            return [mode, ["LEVEL", String(this.level)], ["SENT", String(this.linesSent)], ["APM", apm.toFixed(1)], ["PPS", pps.toFixed(2)]];
         }
         if (this.master) return [mode, ["LEVEL", `M${this.level}`], lines, ["TIME", this.formatTime()], ["SCORE", score]];
         return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
