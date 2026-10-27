@@ -276,22 +276,19 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   after the player's frame: the other side plays a frame (unless its game is over: NES goes on after one side tops out),
   each side's attacks (`takeAttacks()`: `{ lines }`, or TGM3's `{ lines, rows }`) go to the other with a random hole
   column (`receiveGarbage()`), garbage rising shakes the player's field up (`riseShake()`); once the rule set decides the
-  round (player 1's `game.versusOutcome()`), the games still going end (VICTORY / WINNER / DEFEAT / DRAW) and both stand
+  round (player 1's `game.versusOutcome()`), the games still going end (VICTORY / DEFEAT / DRAW) and both stand
   still. A side that wins `game.versusWins` rounds (TGM3: 2) takes the match (`matchOver()`): until then Enter starts the
   next round with the wins kept, then a rematch (`nextRound()`; Restart in the menu starts a new match). The banners show
-  how the side's game ended and the rounds (`matchNotes()`); the bot's well shows `versusNote()` (Guideline SENT, TGM3 the
-  level, NES the score) and, where the rule set `sendsGarbage`, the meter. The match pauses with the menu like any game.
+  how the side's game ended and the rounds (`matchNotes()`). The match pauses with the menu like any game.
 - Each board on screen is a `BoardView` (game, confetti, flashes, the held piece's glow, clear message texture);
   `this.board` is the one being updated (`takeGameEvents(view, own)`) or drawn, `ownBoard` the player's. Drawing code
-  reads `this.board.game`; menus and records keep `this.game`. Only the player's board plays sounds, moves the field and
-  sends clear bursts and backdrop hue (`own`).
-- Layout: `LAYOUT_VERSUS_FULL` / `LAYOUT_VERSUS_COMPACT` (`versusLayout()`) widen the view about its centre, so themes stay
-  centred: the player's board and panels are drawn translated by `groupX` (the backdrop's board glow and the clear
-  bursts follow it), the bot's board group (`OPP_GROUP`: garbage meter, well, its level and SENT) at `versus.opp`,
-  scaled 0.85 (compact 0.5), flat and without side panels (`drawOpponent()`). Garbage meters beside the wells
+  reads `this.board.game`; menus and records keep `this.game`. Against the bot only the player's board plays sounds,
+  shakes and sends clear bursts and backdrop hue (`own`).
+- Layout: the bot's match is laid out as two players' (below, `duoFitted()`; the user's request): both board groups whole
+  and the same size, the player's at `groupX`, the bot's tagged BOT and its level (`drawPlayerTag()`). Garbage meters beside the wells
   (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" for each attack sent (`drawAttackPopups()`): in the full
   layout in the right column under the clear message that sent it (`drawClearMessage()` returns its bottom,
-  `BoardView.popupTop`; the user's request), in the compact one over the player's well; sounds
+  `BoardView.popupTop`; the user's request), in the compact one over the well; sounds
   `"garbage"`, `"attack"`, `"ko"`.
 - Two players (Multiplayer → Versus Player): the join screen (`MENU_JOIN`, `drawJoin()`) takes a rotate press (`JOIN_ACTIONS`)
   on an input device for player 1, then another device for player 2 (`joinDevice()`, `joined`): `"keys1"` (player 1's
@@ -304,14 +301,14 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   one player alone takes player 1's keys and every pad), releasing an action only when the player's device holds it no
   more (`actionHeld()`); `matchFrame()` plays player 2's frame with `inputs[1]`. Handling changed while paused applies to
   both games (`applyHandling()`). Esc or Start pauses both. Both boards
-  are drawn whole by `drawSide()` (panels, meter, "+lines", `drawPlayerTag()`: PLAYER n and the device), side by side at
+  are drawn whole by `drawSide()` (panels, meter, "+lines", `drawPlayerTag()`: PLAYER n and the device; against the bot PLAYER and BOT with its level), side by side at
   `duo.gx` (`duoFitted()`, `placeBoards()`, `BoardView.gx`): each field the size and height one player's would have in
   that window (the single-player layout's scale; the user's request), with the full panels when both groups fit on screen
   at the size drawn (the Options scale, which shrinks games, counts: in 16:9 they fit from 80%), else the compact ones
   (shrinking only when even those don't, 4:3 and narrower), and the width left over between the groups (`DUO_MIN_GAP` to
   `DUO_MAX_GAP`, the rest equal margins, at least `DUO_MARGIN`); both are `own`
   (sounds, shake, bursts), each with its own shake (`BoardView.shake`; the drift is shared, player 2's mirrored,
-  `boardMotion(view)`), board glow (the backdrop takes up to two, `glows`) and clear bursts (`ring.gx`). VICTORY and
+  `boardMotion(view)`), board glow (the backdrop takes up to two, `glows`; the bot's board has one too) and clear bursts (`ring.gx`). VICTORY and
   DEFEAT bannered on each side; Enter rematches.
 
 ### Rendering (`engine.js`, `renderer.js`, `backdrop.js`, `tiles.js`)

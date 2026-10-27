@@ -279,7 +279,7 @@ function versusLayout(base, s, gap) {
 }
 const LAYOUT_VERSUS_FULL = versusLayout(LAYOUT_FULL, 0.85, 40);
 const LAYOUT_VERSUS_COMPACT = versusLayout(LAYOUT_COMPACT, 0.5, 16);
-// Two players: both board groups (well, panels, meter) whole and the same size, side by side about
+// Versus (two players, or a player and the bot): both board groups (well, panels, meter) whole and the same size, side by side about
 // the view's centre; duo.gx: where each player's group is drawn (translated in x). Each field is the
 // size one player's would be in the window (the single-player layout single: its scale and height),
 // with the full panels when both groups fit on screen at the size drawn (the Options scale, which
@@ -578,13 +578,12 @@ class Engine {
         const winW = Math.max(1, window.innerWidth), winH = Math.max(1, window.innerHeight);
         const fitIn = ([, , w, h], availW, availH) => Math.min(availW / w, availH / h);
         // touch devices always take the compact layout; elsewhere a narrow window does
-        // (a versus match: the same, widened for the bot's board; two players: duoFitted())
+        // (a versus match: duoFitted())
         const pick = (full, compact) => this.touch.enabled || fitIn(compact.view, winW, winH) >= COMPACT_GAIN * fitIn(full.view, winW, winH)
             ? compact : full;
-        if (this.match && this.match.duo) {
-            const single = pick(LAYOUT_FULL, LAYOUT_COMPACT);
-            this.layout = duoFitted(single, winW / fitIn(single.view, winW, winH), this._state === STATE_GAME ? this.options.scale : 1);
-        } else this.layout = this.match ? pick(LAYOUT_VERSUS_FULL, LAYOUT_VERSUS_COMPACT) : pick(LAYOUT_FULL, LAYOUT_COMPACT);
+        const single = pick(LAYOUT_FULL, LAYOUT_COMPACT);
+        this.layout = this.match ? duoFitted(single, winW / fitIn(single.view, winW, winH), this._state === STATE_GAME ? this.options.scale : 1)
+            : single;
         this.placeBoards();
         const [vx, vy, vw, vh] = this.layout.view;
         const inset = this.touch.place(winW, winH, this.layout.view);
@@ -615,11 +614,11 @@ class Engine {
         this.backdrop.setBackground(this.renderBackground());
     }
 
-    // Where the player's board group is drawn in the layout (groupX), and the second player's
+    // Where the player's board group is drawn in the layout (groupX), and the other side's
     placeBoards() {
-        this.groupX = this.layout.versus ? this.layout.versus.groupX : this.layout.duo ? this.layout.duo.gx[0] : 0;
+        this.groupX = this.layout.duo ? this.layout.duo.gx[0] : 0;
         if (this.ownBoard) this.ownBoard.gx = this.groupX;
-        if (this.match && this.match.duo && this.layout.duo) this.match.view.gx = this.layout.duo.gx[1];
+        if (this.match && this.layout.duo) this.match.view.gx = this.layout.duo.gx[1];
     }
 
     // The theme chosen in Options → Visuals (themes.js)
@@ -817,7 +816,7 @@ class Engine {
         const game = createGame(mode, "versus", startLevel, 0, {}, { seed });
         return {
             bot: new Bot(level, seed), level, view: new BoardView(game),
-            popups: [[], []], // lines each side sent: "+4" rising over its well (only the player's are shown against the bot)
+            popups: [[], []], // lines each side sent: "+4" beside or over its well
             result: null,     // "win", "lose" or "draw" (for player 1) once the round is decided (versusOutcome)
             wins: [0, 0],     // rounds each side has won (TGM3: the first to two takes the match)
             round: 1,
@@ -866,7 +865,7 @@ class Engine {
                 if (result !== "draw") m.wins[result === "win" ? 0 : 1]++;
                 games.forEach((game, side) => {
                     const won = (result === "win") === (side === 0) && result !== "draw";
-                    if (!game.isGameOver()) game.endGame(result === "draw" ? "DRAW" : won ? (m.duo || side === 0 ? "VICTORY" : "WINNER") : "DEFEAT", null);
+                    if (!game.isGameOver()) game.endGame(result === "draw" ? "DRAW" : won ? "VICTORY" : "DEFEAT", null);
                 });
                 if (m.duo || result === "win") this.sound.play("ko");
             }
@@ -940,8 +939,8 @@ class Engine {
         const color = (s) => ({ ...s, rgb: hslToRgb(s.h, s.s, s.l) });
         const ps = this.pixelScale;
         const glowRgb = this.theme.glowRgb ? this.theme.glowRgb(this) : hslToRgb(this.hue, 90, 62);
-        // a glow round each player's board (not the bot's, drawn flat and smaller)
-        const glows = !inGame || !glowRgb ? [] : [this.ownBoard, this.match && this.match.duo && this.match.view].filter(Boolean).map(view => {
+        // a glow round each side's board
+        const glows = !inGame || !glowRgb ? [] : this.boards().map(view => {
             const m = view === this.ownBoard ? this.motion : this.boardMotion(view);
             const gx = this.offX + (view.gx + m.dx) * ps, gy = this.offY + m.dy * ps; // follows the shake
             // and the fly-in: scaled about the board's centre
@@ -1013,7 +1012,7 @@ class Engine {
         const versus = variant === "versus";
         if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
-        const hadKind = this.match ? (this.match.duo ? "duo" : "bot") : null;
+        const hadMatch = !!this.match;
         this.match = !versus ? null : options.duo ? this.newDuo(mode, startLevel, gameOptions.seed)
             : this.newMatch(mode, startLevel, gameOptions.seed, options.bot ?? BOT_VERSUS_LEVEL);
         if (this.match) [this.game.rival, this.match.view.game.rival] = [this.match.view.game, this.game];
@@ -1021,7 +1020,7 @@ class Engine {
         this.layoutBoard(this.game.wellTop);
         this.clearEffects();
         // the view widens for the other board, or back; the boards take their places
-        if (hadKind !== (this.match ? (this.match.duo ? "duo" : "bot") : null)) this.resize();
+        if (hadMatch !== !!this.match) this.resize();
         else this.placeBoards();
         this.newTiltWaves();
         this.flySide = Math.random() < 0.5 ? -1 : 1; // which way the field comes in turned
@@ -2746,8 +2745,7 @@ class Engine {
 
     drawGame() {
         this.drawSide(this.ownBoard, this.motion, 0);
-        if (this.match && this.match.duo) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
-        else if (this.match) this.drawOpponent();
+        if (this.match) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
     }
 
     // A player's board group where its view is placed (view.gx): the field in its motion m, the
@@ -2767,7 +2765,8 @@ class Engine {
         if (match) {
             if (game.sendsGarbage) this.drawGarbageMeter(game);
             this.drawAttackPopups(match.popups[side]);
-            if (match.duo) this.drawPlayerTag(side, match.devices[side]);
+            if (match.duo) this.drawPlayerTag("PLAYER " + (side + 1), deviceName(match.devices[side]));
+            else this.drawPlayerTag(side ? "BOT" : "PLAYER", side ? "LV " + match.level : "");
         }
 
         // Overlays
@@ -2792,7 +2791,7 @@ class Engine {
     // match of rounds the rounds won, this side's first
     matchNotes(game, side) {
         const m = this.match, notes = [];
-        if (game.endTitle && !["VICTORY", "WINNER", "DEFEAT", "DRAW"].includes(game.endTitle)) notes.push(game.endTitle);
+        if (game.endTitle && !["VICTORY", "DEFEAT", "DRAW"].includes(game.endTitle)) notes.push(game.endTitle);
         if (game.versusWins > 1) {
             const score = `${m.wins[side]} – ${m.wins[1 - side]}`;
             notes.push(this.matchOver() ? `MATCH  ${score}` : `ROUND ${m.round}  ·  ${score}`);
@@ -2800,10 +2799,11 @@ class Engine {
         return notes;
     }
 
-    // Two players: above the well, which player's board it is and the device they play with
-    drawPlayerTag(side, device) {
-        this.text("PLAYER " + (side + 1), BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
-        this.text(deviceName(device), BOARD_X + BOARD_W, this.boardY - 25, { size: 11, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
+    // Above the well, whose board it is (PLAYER n, or the bot) and a note: the device they play
+    // with, or the bot's level
+    drawPlayerTag(name, note) {
+        this.text(name, BOARD_X, this.boardY - 26, { size: 18, weight: 800, color: INK, spacing: 3 });
+        if (note) this.text(note, BOARD_X + BOARD_W, this.boardY - 25, { size: 11, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
     }
 
     // Garbage waiting for a board, beside its well: a bar per attack, rising from the bottom
