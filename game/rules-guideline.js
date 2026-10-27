@@ -8,6 +8,7 @@
 //  - master: 20G, shorter lock and line clear delays by level M1-M30, 300 lines
 //  - versus: one side of a match (against the bot): clears send garbage to the other side, which
 //    rises when it locks a piece without clearing; both sides deal the same pieces (options.seed)
+//    and speed up together with the match's time, not their own lines
 // (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin; Master's delays
 //  from the Tetris_Effect page; Dig as NullpoMino's DigRaceMode; versus from Garbage and Combo)
 
@@ -26,6 +27,10 @@ const GUIDELINE_ULTRA_FRAMES = { ultra: 2 * 60 * 60, ultra1: 1 * 60 * 60, ultra3
 const GUIDELINE_SPRINTS = ["sprint", "sprint20", "sprint100"];
 const GUIDELINE_MARATHONS = ["standard", "marathon", "variable"]; // the ones that take a start level
 const GUIDELINE_FIXED_LEVEL = [...GUIDELINE_SPRINTS, ...Object.keys(GUIDELINE_ULTRA_FRAMES), "dig"]; // variants that stay at level 1
+// Versus: the level (and speed) comes from the match's time, the same for both sides, as Tetris 99's
+// and TETR.IO's gravity rises with time: level 1 for the first minute, then a level every 30 s, up to
+// level 15 at 7:30 (this game's pace: no Guideline source gives one)
+const GUIDELINE_VS_MARGIN = 60 * 60, GUIDELINE_VS_LEVEL_FRAMES = 30 * 60;
 // Variable goal: each level needs 5 x level goal points; a clear (or T-spin) earns its base score / 100,
 // rounded down (back-to-back included), and points beyond the goal are lost. Levels 1-15.
 const GUIDELINE_VARIABLE_GOAL = 5;
@@ -145,7 +150,7 @@ class GuidelineGame extends RuleGame {
         if (this.versus) { // attack per minute (cancelled lines too) and pieces per second
             const seconds = this.frames / 60;
             const apm = seconds ? this.attackTotal * 60 / seconds : 0, pps = seconds ? this.pieces / seconds : 0;
-            return [mode, ["SENT", String(this.linesSent)], ["APM", apm.toFixed(1)], ["PPS", pps.toFixed(2)], lines];
+            return [mode, ["LEVEL", String(this.level)], ["SENT", String(this.linesSent)], ["APM", apm.toFixed(1)], ["PPS", pps.toFixed(2)], lines];
         }
         if (this.master) return [mode, ["LEVEL", `M${this.level}`], lines, ["TIME", this.formatTime()], ["SCORE", score]];
         return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
@@ -207,6 +212,14 @@ class GuidelineGame extends RuleGame {
         if (this.ultraFrames && this.frames >= this.ultraFrames) {
             this.endGame("TIME UP", `SCORE ${this.scoreText()}`);
             return false;
+        }
+        if (this.versus) {
+            const level = this.frames < GUIDELINE_VS_MARGIN ? 1
+                : Math.min(GUIDELINE_MAX_LEVEL, 2 + Math.floor((this.frames - GUIDELINE_VS_MARGIN) / GUIDELINE_VS_LEVEL_FRAMES));
+            if (level !== this.level) {
+                this.level = level;
+                this.updateTimings();
+            }
         }
         return true;
     }
@@ -290,7 +303,7 @@ class GuidelineGame extends RuleGame {
             // a level every 10 lines; a marathon started later needs the lines it would have from
             // level 1 (tetris.wiki: from level 5, level 6 at 50 lines), Master counts from its start
             const fromLines = 1 + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL);
-            const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) || this.variant === "variable" ? this.level
+            const level = GUIDELINE_FIXED_LEVEL.includes(this.variant) || this.variant === "variable" || this.versus ? this.level
                 : this.master ? Math.min(GUIDELINE_MASTER_DELAYS.length, this.startLevel + fromLines)
                 : Math.min(GUIDELINE_MAX_LEVEL, Math.max(1 + this.startLevel, fromLines));
             if (level !== this.level) {

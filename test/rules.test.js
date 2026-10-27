@@ -2707,7 +2707,7 @@ function secretAt(g, rows, cover = true) {
 }
 {
     const g = startedGuideline("versus");
-    check("  ...stats: sent, attack per minute, pieces per second, lines", g.getStats().map(s => s[0]), ["GUIDELINE", "SENT", "APM", "PPS", "LINES"]);
+    check("  ...stats: level, sent, attack per minute, pieces per second, lines", g.getStats().map(s => s[0]), ["GUIDELINE", "LEVEL", "SENT", "APM", "PPS", "LINES"]);
     g.receiveGarbage({ lines: 3, hole: 4 });
     g.attack({ n: 4, tspin: null, b2b: false, combo: 0, pc: false });
     check("  ...an attack cancels the garbage waiting first and sends the rest", [g.pendingGarbage(), g.takeAttacks(), g.linesSent, g.attackTotal], [0, [{ lines: 1 }], 1, 4]);
@@ -2744,6 +2744,20 @@ function secretAt(g, rows, cover = true) {
     g.advanceFrame(HARD_PUSH);
     check("  ...garbage pushing blocks out of the top tops the player out", [g.isGameOver(), g.endTitle, g.endSub], [true, "GAME OVER", "TOP OUT — ESC FOR MENU"]);
     check("  ...versus games keep no record", startedGuideline("versus").record(), null);
+}
+{
+    // the speed comes from the match's time, not the lines: level 1 for a minute, then one every 30 s, to 15 at 7:30
+    const levelAt = seconds => { const g = startedGuideline("versus"); g.frames = seconds * 60 - 1; g.advanceFrame(0); return g.level; };
+    check("Versus speed: level 1 to 0:59, 2 at 1:00, 3 at 1:30, 14 at 7:00, 15 at 7:30 and after",
+        [levelAt(59), levelAt(60), levelAt(90), levelAt(420), levelAt(450), levelAt(900)], [1, 2, 3, 14, 15, 15]);
+    const g = startedGuideline("versus");
+    g.frames = 90 * 60 - 1;
+    g.advanceFrame(0);
+    const gravity = g.gravity;
+    g.lines = 39;
+    g.scoreGuideline(1, null, []);
+    check("  ...the gravity is the Guideline's at that level, and 40 lines don't raise it",
+        [g.level, gravity === guidelineGravity(3), g.gravity === gravity], [3, true, true]);
 }
 
 // ---------------------------------------------------------------- TGM3 and NES versus

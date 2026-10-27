@@ -459,8 +459,10 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   attack first cancels the garbage waiting, oldest first; the rest goes to the other side. Garbage waits until a piece
   locks without clearing, then all of it rises (`riseAfterLock()`, a hook of the base `lock()`; grey `tetGARBAGE` rows, one
   hole column per attack); blocks pushed out of the buffer zone top out ("TOP OUT"). Both sides are dealt from one seed
-  (`options.seed`, `BagRandomizer`). Levels and speed follow the lines as in Marathon. No record. Stats: SENT, APM (attack
-  per minute, cancelled lines included), PPS, LINES.
+  (`options.seed`, `BagRandomizer`). The speed rises with the match's time, the same for both sides, not with a side's
+  own lines (the user's choice; Tetris 99's and TETR.IO's gravity rises with time too): Guideline level 1 for the first
+  minute, then a level every 30 s up to 15 at 7:30 (`GUIDELINE_VS_MARGIN`, `GUIDELINE_VS_LEVEL_FRAMES`, in `onClock()`),
+  its gravity by the usual formula. No record. Stats: LEVEL, SENT, APM (attack per minute, cancelled lines included), PPS, LINES.
   Checked against tetris.wiki (*Garbage*, *Combo*, *Top out*, *Tetris Guideline*) and the wiki's pages on other clients:
   - Agree everywhere: the base table (Tetris 99, Puyo Puyo Tetris, Jstris give the same); cancelling, the rest sent back
     (*Garbage*); garbage entering on the next lock that clears nothing (*Garbage*, Puyo Puyo Tetris, Tetris Effect:
@@ -789,6 +791,8 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   "zangi-moves impossible" (and ARS2's re-enabled ones) aren't modelled: both play the same in that
   respect. The Guideline's extra goals and times are this game's choice; the sources name 40 lines and
   2 minutes.
+- Guideline versus: the speed-up's pace (level 2 at 1:00, then one every 30 s) is this game's; no Guideline source gives
+  versus gravity (Tetris 99 speeds up over time to 1G, TETR.IO's rooms set a start, a margin time and a rise per second).
 - TGM3 versus: garbage rises when a piece locks without clearing (as in the Guideline here; the guide excerpts don't
   say when); copied rows keep their colours; a level 200 reached by both sides on one frame, or the same level at time
   up, is a draw (the guide gives the defending side the first; this match has none); the 8-row cap takes the first rows
