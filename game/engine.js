@@ -70,19 +70,24 @@ const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off",
 const BOT_VERSUS_LEVEL = 6;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
 // Versus: the rule set each side plays ("versus" in each: rules-guideline.js, rules-tgm.js, rules-1989.js),
-// and NES's start level, both sides the same. A card with `modes` is shown and used only when the
-// card before it that sets the mode chose one of them
-const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM3 World", "TGM3 Classic", "NES"],
-    values: [guideline, arika, tgmClassic, nesTetris] };
+// then its own setting, both sides the same: TGM3's rule (World or Classic, which sets the mode again)
+// or NES's start level. A card with `modes` is shown and used only when the cards before it that set
+// the mode chose one of them
+const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM3", "NES"],
+    values: [guideline, arika, nesTetris] };
+const VERSUS_TGM3_RULE_SETUP = { ...RULE_SETUP, modes: [arika, tgmClassic] };
 const VERSUS_NES_LEVEL_SETUP = { ...levelSetup(NES_START_LEVELS), initial: NES_VERSUS_LEVEL, modes: [nesTetris] };
+const VERSUS_SUB_SETUP = [VERSUS_TGM3_RULE_SETUP, VERSUS_NES_LEVEL_SETUP];
+// The versus rule set's name for a mode (the join screen's heading)
+const VERSUS_RULE_NAMES = { [guideline]: "Guideline", [arika]: "TGM3 World", [tgmClassic]: "TGM3 Classic", [nesTetris]: "NES" };
 // Multiplayer: versus against the bot, or two players on one screen, each on the input device they
 // pick on the join screen (MENU_JOIN, after the setup cards: `join`); the setup cards as a Custom
 // Game mode's
 const MULTI_ITEMS = [
     { name: "Versus Bot", desc: "Against the bot: Guideline, TGM3 or NES rules", accent: tetI,
-      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, BOT_SETUP, VERSUS_NES_LEVEL_SETUP] } },
+      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...VERSUS_SUB_SETUP, BOT_SETUP] } },
     { name: "Versus Player", desc: "Two players side by side, on their own keys or gamepads", accent: tetT,
-      modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, VERSUS_NES_LEVEL_SETUP], join: true } },
+      modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...VERSUS_SUB_SETUP], join: true } },
 ];
 // Input devices of a two-player game: "keys1" (player 1's keys, and the touch controls), "keys2"
 // (player 2's keys) or "pad:N" (the gamepad at index N)
@@ -1438,7 +1443,7 @@ class Engine {
     }
 
     // The setup screen's cards for the chosen mode (ids "setup0", "setup1", ...), but those for
-    // other modes than the one chosen (`modes`)
+    // other modes than the one chosen (`modes`; TGM3's Rule card shows for World and Classic both)
     setupItems() {
         const [mode] = this.chosenArgs();
         return (this.chosenMode().setup || []).map(({ name, accent, modes }, n) => ({ id: "setup" + n, name, accent, modes }))
@@ -2589,7 +2594,7 @@ class Engine {
     // one, how to start. Returns the hint (Start, not B, goes back on a pad: B rotates)
     drawJoin(top, heading) {
         const cx = VIEW_W / 2, o = this.options, ready = this.joined.length === 2;
-        heading(`MULTIPLAYER  ·  VERSUS PLAYER  ·  ${VERSUS_RULES_SETUP.labels[this.setupIndex(0)]}`.toUpperCase());
+        heading(`MULTIPLAYER  ·  VERSUS PLAYER  ·  ${VERSUS_RULE_NAMES[this.chosenArgs()[0]]}`.toUpperCase());
         const cards = [0, 1].map(p => ({
             name: "Player " + (p + 1), accent: p ? tetZ : tetT, noArrow: true,
             value: this.joined[p] ? deviceName(this.joined[p]) : p === this.joined.length ? "PRESS ROTATE" : "WAITING",
