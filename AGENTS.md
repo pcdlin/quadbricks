@@ -560,8 +560,9 @@ settles is listed as an assumption below.
   the same; Heboris for what the guide doesn't say. `tgmVersus(Base)` (rules-tgm.js) makes the versus side of a game:
   `TiVersusGame`, `TapVersusGame`, `Tgm1VersusGame`, and in rules-ace.js `AceVersusGame`.
 - Each side at its mode's speed with its levels and score (TGM3: Master's tables without COOLs or REGRETs; TAP: Master,
-  Death or TGM+ (with its rising pattern, as in single play), the Speed card, `options.speed`; every TAP mode can be
-  played in versus, Normal as Master; TGM1: Master or 20G; ACE: one of its five modes, and its Rule card), no grade, roll, exams, 15-minute speed-up or level stop. Both sides deal the same
+  Normal, Death or TGM+ (with its rising pattern, as in single play), the Speed card, `options.speed`, Master at first; every
+  TAP mode can be played in versus (tetris.wiki), each "using their respective speed curves" (harddrop.com): Normal's gravity
+  table and delays (`normalSpeed`) with Master's levels, without Normal's items, score or end at 300; TGM1: Master or 20G; ACE: one of its five modes, and its Rule card), no grade, roll, exams, 15-minute speed-up or level stop. Both sides deal the same
   pieces (the rule set's randomizer from the match seed; ACE's `BagRandomizer` never starts with S, Z or O).
 - A round: reaching the goal first wins (`TGM_VS_LEVEL_GOAL`, level 200; the rows collapse and the game ends with LEVEL
   200), topping out loses, and when 2:40 runs out (`TGM_VS_FRAMES`, TIME counts down; TIME UP) the higher level wins.

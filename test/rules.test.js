@@ -3113,6 +3113,16 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     for (let k = 0; k < 13; k++) { place(plus, tetO, 0, 19, 4); plus.lock(); plus.curPiece_type = 0; clearField(plus); }
     check("TAP versus TGM+: TGM+'s delays and its rising pattern (tetris.wiki: all four modes play in versus)",
         [plus.are, plus.getStats()[0][1], plus.garbagePos], [27, "TGM+ VERSUS", 1]);
+    const tapSpeed = (speed, level) => {
+        const [v] = versusPair(tgmTap, 5, 0, { speed });
+        v.level = level;
+        v.updateTimings();
+        return [v.gravity, v.are, v.das, v.lineClearDelay];
+    };
+    const [normal] = versusPair(tgmTap, 5, 0, { speed: "normal" });
+    check("TAP versus Normal: Normal's gravity and delays (harddrop.com: \"their respective speed curves\"), not its items",
+        [tapSpeed("normal", 100), tapSpeed("normal", 300), tapSpeed("master", 100), normal.getStats()[0][1], normal.maxLevel, normal.itemsOn],
+        [[4 / 256, 27, 16, 40], [20, 27, 16, 40], [20480 / 65536, 27, 16, 40], "NORMAL VERSUS", 200, false]);
     const [c, d] = versusPair(tgmOriginal);
     c.level = 300; d.level = 100;
     c.frames = d.frames = TGM1_VS_FRAMES - 1;

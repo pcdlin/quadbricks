@@ -1771,26 +1771,38 @@ class TiVersusGame extends tgmVersus(TiGame) {
     checkLevelStop() {}
 }
 
-// TAP: each of its modes can be played in versus (tetris.wiki): Master's speed, Death's or TGM+'s
-// (options.speed: "death", "plus"; Normal's is played as Master's), Master's levels and score, no
-// grades; TGM+ keeps its rising garbage
+// TAP: each of its modes can be played in versus (tetris.wiki), "using their respective speed curves"
+// (harddrop.com): Master's speed, Normal's, Death's or TGM+'s (options.speed: "normal", "death",
+// "plus"), Master's levels and score, no grades; TGM+ keeps its rising garbage
 class TapVersusGame extends tgmVersus(TapGame) {
     constructor(mode, variant) {
         super(mode, variant);
         this.internalGrading = false;
         this.maxLevel = TGM_VS_LEVEL_GOAL;
+        this.normalSpeed = false; // Normal's gravity and delays (not its items, score or end)
     }
 
     setOptions(options = {}) {
         this.death = options.speed === "death";
         this.tapPlus = options.speed === "plus";
+        this.normalSpeed = options.speed === "normal";
         this.sonicTrail = !this.death;
         super.setOptions(options);
         this.setGoal(options.goal);
     }
 
     statsName() {
-        return ["TGM2 TAP", this.death ? "DEATH VERSUS" : this.tapPlus ? "TGM+ VERSUS" : "MASTER VERSUS"];
+        const speed = this.death ? "DEATH" : this.tapPlus ? "TGM+" : this.normalSpeed ? "NORMAL" : "MASTER";
+        return ["TGM2 TAP", speed + " VERSUS"];
+    }
+
+    // Normal: its gravity table (20G from 300) and its fixed delays
+    delayRow(speedLevel) {
+        return this.normalSpeed ? [0, ...TAP_NORMAL_DELAYS] : super.delayRow(speedLevel);
+    }
+
+    gravityAt(speedLevel) {
+        return this.normalSpeed ? tableLookup(TAP_NORMAL_GRAVITY, this.level)[1] / 256 : super.gravityAt(speedLevel);
     }
 
     // Death: 20G (its delays come from TapGame's delayRow) and no ghost

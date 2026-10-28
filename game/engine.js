@@ -86,7 +86,7 @@ OPTION_ARGS.push("rounds");
 // they play), TGM3's and ACE's rule (which set the mode again), TGM3's style, items (TGM1, TAP, TGM3,
 // ACE), NES's start level, GB's garbage height and heart mode. A card with `modes` is shown and used only when the cards before
 // it that set the mode chose one of them. TAP's speeds are its modes' (tetris.wiki: all four can be played in
-// versus, Normal as Master), GB's heights each side's own
+// versus; harddrop.com: with "their respective speed curves"), GB's heights each side's own
 const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM1", "TAP", "TGM3", "ACE", "NES", "GB"],
     values: [guideline, tgmOriginal, tgmTap, arika, tgmAce, nesTetris, gbTetris] };
 const VERSUS_ACE_MODES = [tgmAce, aceArs, aceArs2];
@@ -109,7 +109,8 @@ OPTION_ARGS.push("garbage");
 // GB: each side its own height (heights: the two cards' names)
 const versusSubSetup = (heights, sides) => [
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
-    { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "Death", "TGM+"], values: ["master", "death", "plus"], modes: [tgmTap] },
+    { name: "Speed", accent: tetZ, arg: "speed", labels: ["Normal", "Master", "Death", "TGM+"], values: ["normal", "master", "death", "plus"],
+      initial: 1, modes: [tgmTap] },
     { ...RULE_SETUP, modes: [arika, tgmClassic] },
     CLEAR_RULE_SETUP,
     { name: "Style", accent: tetJ, arg: "style", labels: ["Attack", "Defence", "Item"], values: ["attack", "defence", "item"], modes: [arika, tgmClassic] },
