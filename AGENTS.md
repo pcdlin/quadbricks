@@ -6,7 +6,7 @@ Guide for agents working on **Quadbricks**, a falling-block puzzle game.
 
 ```bash
 # Run the web game (also configured in .claude/launch.json as "web")
-python -m http.server 8123 --directory game    # then open http://localhost:8123
+npm run serve    # runs `npx serve game` on port 8123; then open http://localhost:8123
 
 # Rule-set spec tests (plain Node, no dependencies)
 node test/rules.test.js                    # must end with "All checks passed"
@@ -20,7 +20,7 @@ esbuild-minified `game.<hash>.js`, minifies the inline CSS and copies `favicon.s
 esbuild comes from `npx` (pinned in `build.js`, needs network the first time); top-level names are
 kept because the scripts share globals. A new script in `index.html` is picked up automatically.
 
-There is no build step, bundler or package.json. Scripts are classic `<script>` tags that
+There is no bundler, and package.json only holds the serve script. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
 `game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js →
 sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
@@ -767,7 +767,7 @@ export names explicitly at the top; add new globals there, and new rule files to
   explaining what and why. When the user asks for changes to be easy to revert, split them
   and put shared prerequisites in their own commit first.
 - **Verify in a browser**, not just in Node. Practical techniques:
-  - The Python server lets the browser cache scripts. After editing, refresh them with
+  - The static server may let the browser cache scripts. After editing, refresh them with
     `await Promise.all(['engine.js', …].map(f => fetch(f, {cache: 'reload'})))` and then
     `location.reload()`, or you will test stale code.
   - Wait for `engine.init()` (fonts and tile images) before sending keys; earlier key
