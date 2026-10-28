@@ -84,6 +84,10 @@ const VERSUS_ACE_MODES = [tgmAce, aceArs, aceArs2];
 const VERSUS_GOAL_SETUP = { name: "Goal", accent: tetL, arg: "goal", modes: [tgmTap, arika, tgmClassic], initial: 1,
     labels: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `Level ${k * 100}  ·  ${Math.floor(k * 80 / 60)}:${String(k * 80 % 60).padStart(2, "0")}`),
     values: [100, 200, 300, 400, 500, 600, 700, 800, 900] };
+// The TGM games: garbage on, or off (TAP's Cement Mode, tetris.wiki: both players hold A+B as versus begins)
+const VERSUS_GARBAGE_SETUP = { name: "Garbage", accent: tetZ, arg: "garbage", labels: ["On", "Off (Cement)"], values: [true, false],
+    modes: [tgmOriginal, tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] };
+OPTION_ARGS.push("garbage");
 // GB: each side its own height (heights: the two cards' names)
 const versusSubSetup = heights => [
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
@@ -95,6 +99,7 @@ const versusSubSetup = heights => [
     { name: "Speed", accent: tetO, arg: "speed", labels: ["Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2"],
       values: ["normal", "hispeed1", "hispeed2", "another", "another2"], modes: VERSUS_ACE_MODES },
     { name: "Items", accent: tetS, arg: "items", labels: ["Off", "On"], values: [false, true], modes: [tgmOriginal, tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] },
+    VERSUS_GARBAGE_SETUP,
     { ...levelSetup(NES_START_LEVELS), initial: NES_VERSUS_LEVEL, modes: [nesTetris] },
     { ...HEIGHT_SETUP, name: heights[0], modes: [gbTetris] },
     { ...HEIGHT_SETUP, name: heights[1], arg: "height2", modes: [gbTetris] },

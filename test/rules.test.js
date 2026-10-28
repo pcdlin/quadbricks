@@ -2989,6 +2989,17 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     check("  ...a perfect clear sends its rows twice", pc.takeAttacks().map(at => [at.lines, at.rows.length]), [[8, 8]]);
 }
 {
+    // the Garbage card Off: TAP's Cement Mode, no garbage either way (tetris.wiki)
+    const [a, b] = versusPair(tgmTap, 5, 0, { garbage: false });
+    clearField(a);
+    fill(a, ["#######..#", "########.#"]);
+    a.setCell(10, 0, 1);
+    place(a, tetS, 1, 19, 7);
+    a.advanceFrame(SOFT_PUSH);
+    b.receiveGarbage({ lines: 2, rows: [rowOf(b, 21), rowOf(b, 21)] });
+    check("Cement Mode (the Garbage card Off): a double sends nothing, and no garbage is taken", [a.takeAttacks(), a.linesSent, b.pendingGarbage(), a.sendsGarbage], [[], 0, 0, false]);
+}
+{
     const [a, b] = versusPair(tgmTap, 5, 0, { speed: "death" });
     a.level = 199;
     clearField(a);

@@ -1604,6 +1604,7 @@ function tgmVersus(Base) {
             this.randomizer = this.randomizer ? new this.randomizer.constructor(seed) : new BagRandomizer(seed, this.bagNoSzoFirst);
             this.seedVersus(seed);
             if (options.items) this.useItems();
+            if (options.garbage === false) this.sendsGarbage = false; // TAP's Cement Mode: no garbage either way
         }
 
         getStats() {
@@ -1651,7 +1652,7 @@ function tgmVersus(Base) {
         // stops here)
         scoreClear(n, rows) {
             const solid = this.big ? rows.length >> 1 : rows.length; // rows that broke Hard Block's shells send nothing (the guide)
-            if (solid >= 2 && !this.firingItems.length) {
+            if (solid >= 2 && !this.firingItems.length && this.sendsGarbage) {
                 const cleared = this.garbageFrom(rows);
                 const garbage = this.styleGarbage(this.fieldEmpty() ? [...cleared, ...cleared] : cleared, solid);
                 if (garbage.length) this.sendAttack({ lines: garbage.length, rows: garbage });

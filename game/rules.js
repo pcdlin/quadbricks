@@ -1571,7 +1571,7 @@ class RuleGame {
                     return grid;
                 });
                 const n = this.clearFullRows();
-                if (this.versus && n >= 2 && !received) { // garbage in random colours, one hole
+                if (this.versus && this.sendsGarbage && n >= 2 && !received) { // garbage in random colours, one hole
                     const hole = Math.floor(this.random() * WIDTH);
                     const row = () => Array.from({ length: WIDTH }, (_, c) => c === hole ? 0 : 1 + Math.floor(this.random() * 7));
                     this.sendAttack({ lines: n, rows: Array.from({ length: n }, row) });
