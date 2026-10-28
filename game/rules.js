@@ -276,6 +276,7 @@ class RuleGame {
         this.sendsGarbage = false; // clears send garbage (Guideline, TGM3; not NES)
         this.versusWins = 1; // rounds a side must win to take the match (TGM3: 2)
         this.incoming = []; // attacks received and not yet risen, oldest first: { lines, hole } or { lines, rows }
+        this.garbageCap = Infinity; // rows of it that may rise on one lock (the Guideline's Garbage cap card)
         this.attacks = []; // attacks since the last takeAttacks(): { lines } or { lines, rows }
         this.risen = []; // garbage rows that rose, per lock, since the last takeRisenGarbage()
         this.linesSent = 0; // lines that went to the other side
@@ -1379,6 +1380,18 @@ class RuleGame {
         return [...this.incoming, ...this.mirrorGarbage].reduce((sum, g) => sum + g.lines, 0);
     }
 
+    garbageReady(g) { return true; } // an attack waiting may rise (the Guideline's Garbage delay card)
+
+    // Rows of the garbage waiting that may rise now: the ready attacks from the oldest
+    readyGarbage() {
+        let rows = 0;
+        for (const g of this.incoming) {
+            if (!this.garbageReady(g)) break;
+            rows += g.lines;
+        }
+        return rows;
+    }
+
     // Lines sent since the last call, one entry per clear
     takeAttacks() {
         return this.drain("attacks");
@@ -1398,11 +1411,12 @@ class RuleGame {
     // All the garbage waiting rises from the bottom, oldest highest, pushing the stack up; blocks
     // pushed above the highest row the field keeps blocks in (TGM: the buffer row; GB: the well's
     // top) top this side out (garbageTopsOut: the Guideline), else they are lost (tetris.wiki on TAP:
-    // what "would otherwise have occupied rows 22+ is forgotten"; Heboris). Returns the number of rows.
-    riseGarbage() {
+    // what "would otherwise have occupied rows 22+ is forgotten"; Heboris). entries: the attacks that rise (by
+    // default all of them, taken from incoming). Returns the number of rows.
+    riseGarbage(entries = this.incoming.splice(0)) {
         const top = Math.max(this.pieceTop, this.bufferTop ?? FIELD_TOP);
         let rows = 0, toppedOut = false;
-        for (const g of this.incoming) {
+        for (const g of entries) {
             for (let k = 0; k < g.lines; k++) {
                 if (this.field[top - FIELD_TOP].some(v => v !== 0)) toppedOut = true;
                 let row;
@@ -1415,7 +1429,6 @@ class RuleGame {
                 rows++;
             }
         }
-        this.incoming = [];
         if (!rows) return 0;
         this.risen.push(rows);
         this.sounds.push("garbage");

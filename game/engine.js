@@ -109,8 +109,22 @@ OPTION_ARGS.push("garbage");
 // The TGM games: items off or on. On at first in TAP, whose players turn them off by holding Start as versus
 // begins (harddrop.com); Off at first in the others, whose sources don't say
 const VERSUS_ITEMS_SETUP = { name: "Items", accent: tetS, arg: "items", labels: ["Off", "On"], values: [false, true] };
+// The Guideline: the speed (rising with the match's time, one level, or 20G) and the garbage: the rows that may rise on one
+// lock, how long an attack waits before it may, and how its holes line up (GUIDELINE_VS_SPEEDS; TETR.IO's room settings)
+const GUIDELINE_VS_SETUP = [
+    { name: "Speed", accent: tetZ, arg: "speed", values: GUIDELINE_VS_SPEEDS, modes: [guideline],
+      labels: GUIDELINE_VS_SPEEDS.map(s => s === "rising" ? "Rising with time" : s === "20g" ? "20G" : `Level ${s}`) },
+    { name: "Garbage cap", accent: tetJ, arg: "garbageCap", labels: ["Off", "4 rows a piece", "8 rows a piece", "12 rows a piece"],
+      values: [0, 4, 8, 12], modes: [guideline] },
+    { name: "Garbage delay", accent: tetL, arg: "garbageDelay", labels: ["Off", "0.33 s", "0.5 s", "1 s", "2 s"],
+      values: [0, 20, 30, 60, 120], modes: [guideline] },
+    { name: "Holes", accent: tetS, arg: "messiness", labels: ["One column per attack", "Sometimes moved", "Every row its own"],
+      values: [0, 0.3, 1], modes: [guideline] },
+];
+OPTION_ARGS.push("garbageCap", "garbageDelay", "messiness");
 // GB: each side its own height (heights: the two cards' names)
 const versusSubSetup = (heights, sides) => [
+    ...GUIDELINE_VS_SETUP,
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Normal", "Master", "Death", "TGM+"], values: ["normal", "master", "death", "plus"],
       initial: 1, modes: [tgmTap] },
@@ -478,6 +492,7 @@ const GOLD_RGB = parseColor(MESSAGE_GOLD);
 const goldAlpha = (a) => [GOLD_RGB[0], GOLD_RGB[1], GOLD_RGB[2], a]; // pulsing gold, as inkAlpha
 const COMBO_COLORS = [INK, INK, "#fff1a8", MESSAGE_GOLD, "#ffb35c", "#ff8a4c", "#ff5f4a"]; // by chain length
 const GARBAGE_METER = "#ff4f5e"; // versus: the garbage waiting beside a well
+const GARBAGE_METER_WAIT = "rgba(244,236,220,0.6)"; // and the garbage that may not rise yet
 const ATTACK_LIFE = 50; // frames a "+lines" sent pop-up shows
 // Versus items (items.js): an item block a clear takes bursts in rings of its kind's colour for
 // ITEM_BURST_LIFE frames, out to ITEM_BURST_RADIUS, with ITEM_BURST_SPARKS motes (Heboris's 30-frame
@@ -2987,7 +3002,8 @@ class Engine {
         if (note) this.text(note, BOARD_X + BOARD_W, this.boardY - 25, { size: 11, weight: 700, color: INK_DIM, align: "right", spacing: 2 });
     }
 
-    // Garbage waiting for a board, beside its well: a bar per attack, rising from the bottom
+    // Garbage waiting for a board, beside its well: a bar per attack, rising from the bottom, grey
+    // while it may not rise yet (the Guideline's Garbage delay card)
     drawGarbageMeter(game) {
         const r = this.r, x = BOARD_X - 8 - METER_GAP - METER_W;
         r.shape(x, this.boardY, METER_W, this.boardH, { radius: 3, fill: "rgba(244,236,220,0.06)" });
@@ -2995,7 +3011,7 @@ class Engine {
         for (const g of [...game.incoming, ...game.mirrorGarbage]) {
             const h = Math.min(g.lines * CELL, y - this.boardY);
             if (h <= 2) break;
-            r.shape(x, y - h + 1, METER_W, h - 2, { radius: 3, fill: GARBAGE_METER });
+            r.shape(x, y - h + 1, METER_W, h - 2, { radius: 3, fill: game.garbageReady(g) ? GARBAGE_METER : GARBAGE_METER_WAIT });
             y -= h;
         }
     }

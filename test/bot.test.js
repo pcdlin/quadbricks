@@ -279,6 +279,8 @@ for (const [name, mode, options, startLevel, height] of [
     ["TGM3 World with items", arika, { items: true }],
     ["ACE ARS2 Normal with items", aceArs2, { speed: "normal", items: true }], ["ACE SRS Another", tgmAce, { speed: "another" }],
     ["GB heights 2 and 4", gbTetris, { height2: 4 }, 0, 2], ["GB heart", gbTetris, { heart: true }],
+    ["Guideline at level 10, garbage capped at 8, delayed 0.5 s and messy", guideline, { speed: 10, garbageCap: 8, garbageDelay: 30, messiness: 0.3 }],
+    ["Guideline 20G", guideline, { speed: "20g" }],
 ]) {
     // the other rule sets: a round goes to the stronger side, through garbage (and items) both ways
     job(() => {

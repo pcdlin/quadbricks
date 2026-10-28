@@ -231,18 +231,26 @@ function botCancels(game) {
     return game.versus && game.gamemode === guideline;
 }
 
-// The garbage waiting rises after this lock: one that clears nothing, or any (TGM, GB); it ends the
-// game where blocks pushed out of the top top a side out (the Guideline: botRise), else they are lost
-function botRiseDead(game, rows, pending, cleared) {
-    if (!pending || (cleared && !game.garbageEveryLock)) return false;
-    return !botRise(game, rows, pending) && game.garbageTopsOut;
+// Rows of the garbage waiting that rise on a lock: those that may rise (ready: the meter shows which,
+// the Guideline's Garbage delay; later moves take them all as ready), at most the rule set's cap
+// (garbageCap, the Guideline's Garbage cap)
+function botRising(game, pending, ready = pending) {
+    return Math.min(pending, ready, game.garbageCap);
+}
+
+// The garbage rising (rise rows of it) after this lock: one that clears nothing, or any (TGM, GB); it
+// ends the game where blocks pushed out of the top top a side out (the Guideline: botRise), else they are lost
+function botRiseDead(game, rows, rise, cleared) {
+    if (!rise || (cleared && !game.garbageEveryLock)) return false;
+    return !botRise(game, rows, rise) && game.garbageTopsOut;
 }
 
 // Garbage still waiting after a lock that cleared `cleared` rows: the lines the clear sends cancel
 // it (botClear.attack, from the botStepScore() just made; none outside the Guideline), a lock
-// without one lets it all rise
-function botPendingAfter(game, pending, cleared) {
-    if (!pending || !cleared || game.garbageEveryLock) return 0;
+// without one lets rise rows of it rise
+function botPendingAfter(game, pending, cleared, rise) {
+    if (!pending) return 0;
+    if (!cleared || game.garbageEveryLock) return pending - rise;
     return Math.max(0, pending - botClear.attack);
 }
 
@@ -1012,6 +1020,7 @@ class Bot {
         botBoardFrom(game, this.board);
         const buf = new Int32Array(BOT_ROWS);
         const pending = game.sendsGarbage ? game.pendingGarbage() : 0;
+        const rise = botRising(game, pending, game.readyGarbage());
         const b2b = !!game.b2b, combo = game.gamemode === guideline ? game.combo : -1; // the Guideline's chains
         for (const pl of roots) {
             const seq = pl.hold ? holdSeq : visible;
@@ -1020,8 +1029,8 @@ class Bot {
             pl.step = botStepScore(game, buf, w, cleared, b2b, combo, pl.spin);
             pl.b2b = botClear.b2b;
             pl.combo = botClear.combo;
-            pl.pending = botPendingAfter(game, pending, cleared);
-            const dead = botDead(game, buf, seq[0] || tetT) || botRiseDead(game, buf, pending, cleared);
+            pl.pending = botPendingAfter(game, pending, cleared, rise);
+            const dead = botDead(game, buf, seq[0] || tetT) || botRiseDead(game, buf, rise, cleared);
             pl.board = Int32Array.from(buf);
             pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
             if (game.variant === "sakura") { // the jewels it clears
@@ -1073,9 +1082,10 @@ class Bot {
                     const cleared = botLock(st.rows, buf, shape.cells, row, col);
                     if (cleared < 0) return;
                     const acc = st.acc + botStepScore(game, buf, w, cleared, st.b2b, st.combo);
-                    const pending = botPendingAfter(game, st.pending, cleared);
+                    const rise = botRising(game, st.pending);
+                    const pending = botPendingAfter(game, st.pending, cleared, rise);
                     const b2b = botClear.b2b, combo = botClear.combo;
-                    const dead = botDead(game, buf, next) || botRiseDead(game, buf, st.pending, cleared);
+                    const dead = botDead(game, buf, next) || botRiseDead(game, buf, rise, cleared);
                     const score = acc + botBoardScore(buf, w) + (dead || botBlocked(game, buf, next) ? BOT_DANGER : 0);
                     if (last) { if (score > best) best = score; return; }
                     if (kept.length === beam && score <= kept[beam - 1].score) return;

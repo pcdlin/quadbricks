@@ -8,7 +8,8 @@
 //  - master: 20G, shorter lock and line clear delays by level M1-M30, 300 lines
 //  - versus: one side of a match (against the bot): clears send garbage to the other side, which
 //    rises when it locks a piece without clearing; both sides deal the same pieces (options.seed)
-//    and speed up together with the match's time, not their own lines
+//    and speed up together with the match's time, not their own lines (or play one speed); the
+//    garbage may be capped per lock, delayed and messy (GUIDELINE_VS_SPEEDS)
 // (tetris.wiki: Tetris_Guideline, Super_Rotation_System, Marathon, Scoring, T-Spin; Master's delays
 //  from the Tetris_Effect page; Dig as NullpoMino's DigRaceMode; versus from Garbage and Combo)
 
@@ -31,6 +32,13 @@ const GUIDELINE_FIXED_LEVEL = [...GUIDELINE_SPRINTS, ...Object.keys(GUIDELINE_UL
 // and TETR.IO's gravity rises with time: level 1 for the first minute, then a level every 30 s, up to
 // level 15 at 7:30 (this game's pace: no Guideline source gives one)
 const GUIDELINE_VS_MARGIN = 60 * 60, GUIDELINE_VS_LEVEL_FRAMES = 30 * 60;
+// Versus setup (options; TETR.IO's room settings, where Tetris 99 and the others fix their own): speed, rising with the
+// match's time ("rising", as above), one level all match (1-15) or "20g"; garbageCap, the rows of garbage that may rise
+// on one lock, the rest waiting for the next (TETR.IO's garbage cap, 8 there by default; 0: no cap); garbageDelay, the
+// frames an attack waits before it may rise, cancelled meanwhile as before (TETR.IO's garbage speed, 20 frames there;
+// Tetris 99's meter turns from grey to red); messiness, the chance a row of an attack has its hole in another column than
+// the row above's (TETR.IO's; 0: one column per attack)
+const GUIDELINE_VS_SPEEDS = ["rising", ...Array.from({ length: GUIDELINE_MAX_LEVEL }, (_, i) => i + 1), "20g"];
 // Variable goal: each level needs 5 x level goal points; a clear (or T-spin) earns its base score / 100,
 // rounded down (back-to-back included), and points beyond the goal are lost. Levels 1-15.
 const GUIDELINE_VARIABLE_GOAL = 5;
@@ -92,6 +100,9 @@ class GuidelineGame extends RuleGame {
         this.sendsGarbage = this.versus; // all of each attack's lines with their hole in one column
         this.garbageTopsOut = true; // blocks pushed out of the 20-row buffer zone top out (tetris.wiki, Top out)
         this.attackTotal = 0; // lines of attack made, cancelled ones included (APM)
+        this.vsSpeed = "rising"; // versus: the Speed card (GUIDELINE_VS_SPEEDS)
+        this.garbageDelay = 0; // versus: frames an attack waits before it may rise
+        this.messiness = 0; // versus: the chance a garbage row's hole moves from the row above's
         // level 1 + startLevel: Master M1-M30, the marathons 1-15
         this.startLevel = this.master ? clamp(startLevel, 0, GUIDELINE_MASTER_DELAYS.length - 1)
             : GUIDELINE_MARATHONS.includes(variant) ? clamp(startLevel, 0, GUIDELINE_MAX_LEVEL - 1) : 0;
@@ -109,10 +120,17 @@ class GuidelineGame extends RuleGame {
         if (this.dig) this.fillDigGarbage(GUIDELINE_DIG_ROWS[this.height]);
     }
 
-    // Versus: both sides' bags are dealt from the match's seed (options.seed)
+    // Versus: both sides' bags are dealt from the match's seed (options.seed); the speed and garbage
+    // cards (GUIDELINE_VS_SPEEDS)
     setOptions(options = {}) {
         super.setOptions(options);
-        if (this.versus) this.randomizer = new BagRandomizer(options.seed ?? Date.now());
+        if (!this.versus) return;
+        this.randomizer = new BagRandomizer(options.seed ?? Date.now());
+        if (GUIDELINE_VS_SPEEDS.includes(options.speed)) this.vsSpeed = options.speed;
+        if (typeof this.vsSpeed === "number") this.level = this.vsSpeed;
+        if (options.garbageCap > 0) this.garbageCap = options.garbageCap;
+        this.garbageDelay = Math.max(0, options.garbageDelay || 0);
+        this.messiness = clamp(options.messiness || 0, 0, 1);
     }
 
     // Dig: full rows with one hole each, the hole never above the one in the row below; isGarbage
@@ -151,7 +169,7 @@ class GuidelineGame extends RuleGame {
         if (this.versus) { // attack per minute (cancelled lines too) and pieces per second
             const seconds = this.frames / 60;
             const apm = seconds ? this.attackTotal * 60 / seconds : 0, pps = seconds ? this.pieces / seconds : 0;
-            return [mode, ["LEVEL", String(this.level)], ["SENT", String(this.linesSent)], ["APM", apm.toFixed(1)], ["PPS", pps.toFixed(2)], lines];
+            return [mode, ["LEVEL", this.vsSpeed === "20g" ? "20G" : String(this.level)], ["SENT", String(this.linesSent)], ["APM", apm.toFixed(1)], ["PPS", pps.toFixed(2)], lines];
         }
         if (this.master) return [mode, ["LEVEL", `M${this.level}`], lines, ["TIME", this.formatTime()], ["SCORE", score]];
         return [mode, ["LEVEL", String(this.level)], lines, ["SCORE", score]];
@@ -182,6 +200,7 @@ class GuidelineGame extends RuleGame {
             this.lineClearDelay = Math.round(lineClear);
             this.gravity = this.softGravity = 20;
         }
+        if (this.vsSpeed === "20g") this.gravity = this.softGravity = 20;
     }
 
     // Handling changed in the menu during a game applies at once
@@ -214,7 +233,7 @@ class GuidelineGame extends RuleGame {
             this.endGame("TIME UP", `SCORE ${this.scoreText()}`);
             return false;
         }
-        if (this.versus) {
+        if (this.versus && this.vsSpeed === "rising") {
             const level = this.frames < GUIDELINE_VS_MARGIN ? 1
                 : Math.min(GUIDELINE_MAX_LEVEL, 2 + Math.floor((this.frames - GUIDELINE_VS_MARGIN) / GUIDELINE_VS_LEVEL_FRAMES));
             if (level !== this.level) {
@@ -337,15 +356,54 @@ class GuidelineGame extends RuleGame {
             const g = this.incoming[0];
             const k = Math.min(lines, g.lines);
             g.lines -= k;
+            if (g.rows) g.rows = g.rows.slice(k);
             lines -= k;
             if (!g.lines) this.incoming.shift();
         }
         if (lines > 0) this.sendAttack({ lines });
     }
 
-    // The garbage waiting rises when this side locks a piece that clears nothing (tetris.wiki)
+    // An attack received keeps the frame it came on (garbageDelay); with messiness its rows are made
+    // here, each row's hole moving from the one above's at that chance
+    receiveGarbage(attack) {
+        if (this.versus && !attack.item && attack.lines > 0) {
+            attack = { ...attack, at: this.frames };
+            if (this.messiness > 0 && !attack.rows) {
+                let hole = attack.hole;
+                attack.rows = Array.from({ length: attack.lines }, (_, k) => {
+                    if (k > 0 && this.random() < this.messiness) hole = (hole + 1 + Math.floor(this.random() * (WIDTH - 1))) % WIDTH;
+                    const row = new Array(WIDTH).fill(tetGARBAGE);
+                    row[hole] = 0;
+                    return row;
+                });
+            }
+        }
+        super.receiveGarbage(attack);
+    }
+
+    garbageReady(g) {
+        return this.frames - (g.at ?? 0) >= this.garbageDelay;
+    }
+
+    // The garbage waiting rises when this side locks a piece that clears nothing (tetris.wiki): the
+    // attacks ready, oldest first, at most garbageCap rows (the rest of an attack the cap cuts waits)
     riseAfterLock(n) {
-        return this.versus && n === 0 ? this.riseGarbage() : 0;
+        if (!this.versus || n !== 0) return 0;
+        const rising = [];
+        let room = this.garbageCap;
+        while (room > 0 && this.incoming.length && this.garbageReady(this.incoming[0])) {
+            const g = this.incoming[0];
+            if (g.lines <= room) {
+                rising.push(this.incoming.shift());
+                room -= g.lines;
+                continue;
+            }
+            rising.push(g.rows ? { ...g, lines: room, rows: g.rows.slice(0, room) } : { ...g, lines: room });
+            if (g.rows) g.rows = g.rows.slice(room);
+            g.lines -= room;
+            room = 0;
+        }
+        return this.riseGarbage(rising);
     }
 
     // Variable goal: the level goes up once its goal is met (the rest is lost), and meeting

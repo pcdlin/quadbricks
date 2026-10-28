@@ -2850,6 +2850,61 @@ function secretAt(g, rows, cover = true) {
     check("  ...the gravity is the Guideline's at that level, and 40 lines don't raise it",
         [g.level, gravity === guidelineGravity(3), g.gravity === gravity], [3, true, true]);
 }
+{
+    // the setup cards: the speed, and the garbage's cap, delay and holes
+    const started = options => {
+        const g = createGame(guideline, "versus", 0, 0, {}, options);
+        for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+        return g;
+    };
+    const fixed = started({ speed: 7 });
+    fixed.frames = 600 * 60;
+    fixed.advanceFrame(0);
+    const g20 = started({ speed: "20g" });
+    check("Versus Speed card: one level all match, or 20G (LEVEL shows 20G)",
+        [fixed.level, fixed.gravity === guidelineGravity(7), g20.gravity, g20.softGravity, g20.getStats()[1]],
+        [7, true, 20, 20, ["LEVEL", "20G"]]);
+
+    // a lock that clears nothing: an O on the floor's left
+    const lockO = g => {
+        for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
+        clearField(g);
+        place(g, tetO, 0, 19, 0);
+        g.advanceFrame(HARD_PUSH);
+        return g.takeRisenGarbage();
+    };
+    const capped = started({ garbageCap: 4 });
+    capped.receiveGarbage({ lines: 3, hole: 2 });
+    capped.receiveGarbage({ lines: 3, hole: 5 });
+    const first = lockO(capped);
+    const left = [capped.pendingGarbage(), capped.incoming.map(g => [g.lines, g.hole])];
+    check("Versus Garbage cap: at most 4 rows rise on a lock, the rest of an attack the cap cuts waits for the next",
+        [first, left, lockO(capped), capped.pendingGarbage()], [[4], [2, [[2, 5]]], [2], 0]);
+
+    const delayed = started({ garbageDelay: 30 });
+    delayed.receiveGarbage({ lines: 2, hole: 0 });
+    const early = [delayed.readyGarbage(), lockO(delayed), delayed.pendingGarbage()];
+    delayed.frames += 30;
+    check("Versus Garbage delay: an attack may rise only once it has waited 30 frames, and is cancelled meanwhile as before",
+        [early, delayed.readyGarbage(), lockO(delayed)], [[0, [], 2], 2, [2]]);
+    const cancel = started({ garbageDelay: 30 });
+    cancel.receiveGarbage({ lines: 3, hole: 0 });
+    cancel.attack({ n: 2, tspin: null, b2b: false, combo: 0, pc: false });
+    check("  ...an attack still waiting is cancelled by a clear", cancel.pendingGarbage(), 2);
+
+    const messy = started({ messiness: 1 });
+    messy.receiveGarbage({ lines: 6, hole: 3 });
+    lockO(messy);
+    const holes = [16, 17, 18, 19, 20, 21].map(r => Array.from({ length: WIDTH }, (_, c) => messy.getCell(r, c)).indexOf(0));
+    check("Versus Holes, every row its own: each garbage row has one hole, never in the column of the row next to it",
+        [holes.every(h => h >= 0), holes.every((h, k) => k === 0 || h !== holes[k - 1]), holes[0]],
+        [true, true, 3]);
+    const clean = started({});
+    clean.receiveGarbage({ lines: 3, hole: 6 });
+    lockO(clean);
+    check("  ...by default one column per attack",
+        [19, 20, 21].map(r => Array.from({ length: WIDTH }, (_, c) => clean.getCell(r, c)).indexOf(0)), [6, 6, 6]);
+}
 
 // ---------------------------------------------------------------- TGM3 and NES versus
 // A match's two sides (rival), dealt from one seed, run to their first piece
