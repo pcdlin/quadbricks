@@ -1105,6 +1105,8 @@ class Engine {
         if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
         const hadMatch = !!this.match;
+        // the other board's clear message goes with it (clearEffects() releases the player's)
+        if (hadMatch && this.match.view.messageCache) this.r.releaseTexture(this.match.view.messageCache.tex);
         this.match = !versus ? null : options.duo ? this.newDuo(mode, startLevel, height, gameOptions)
             : this.newMatch(mode, startLevel, height, gameOptions, options.bot ?? BOT_VERSUS_LEVEL);
         if (this.match) [this.game.rival, this.match.view.game.rival] = [this.match.view.game, this.game];
