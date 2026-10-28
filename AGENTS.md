@@ -606,6 +606,9 @@ settles is listed as an assumption below.
   - Death Block: the next piece to enter is a big one (`deathBlock()`, the Big mode's rules: two rows make a line); brief:
     the attacker's gauge fills again after the cut-in (the guide).
   - → Mov Field: every row's blocks pushed to the right wall.
+  - Hard Block: the next piece to enter locks in shells (`HARD_BIT` in its cells, drawn in `HARD_COLOR`); a full row with
+    shell blocks loses its other blocks, the shells break and the row stays (`shellRows`; Heboris), counting as a line but
+    sending no garbage (the guide); Free Fall clears such rows as any others. Brief, like Death Block.
   - Shotgun!: a random column in every row of the stack shot out, a miss on an empty cell.
   - Dark Block: the stack blinks for a second, then is hidden like in TAP's M-roll, for 8 seconds (480 frames, Heboris's).
   - Free Fall: every block drops down its column; its rows clear and 2+ of them go to the other side as garbage with one

@@ -2909,6 +2909,23 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         [2, 2, 2, 4, ["TGM1", "LEVEL", "TIME", "SENT", "SCORE"], ["TGM2 TAP", "DEATH VERSUS"], ["ACE", "LINES", "TIME", "SENT", "LEVEL"], ["GB", "LINES", "LEVEL", "SENT", "SCORE"]]);
 }
 {
+    // Hard Block: the other side's next piece locks in shells; a full row with shell blocks loses its other blocks but
+    // stays, the shells broken, and sends nothing (the guide; Heboris)
+    const [a, d] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(d);
+    fill(d, ["####.#####", "####.#####", "####.#####", "....#....."]);
+    d.receiveGarbage({ item: "HARD BLOCK" });
+    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    const colour = d.getPieceColor();
+    place(d, tetI, 1, 17, 2); // vertical I in column 5, rows 17-20: rows 18-20 full
+    d.advanceFrame(SOFT_PUSH);
+    const rows = [18, 19, 20, 21].map(r => rowText(d, r)), shell = d.getCellColor(17, 4); // the block above keeps its shell
+    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    check("Hard Block: the other side's next piece locks in shells; its full rows lose the other blocks but stay, the shells broken, and send nothing",
+        [colour, shell, rows, d.takeAttacks(), d.getCell(19, 4), d.getCellColor(19, 4) === d.palette[tetI]],
+        [10, 10, ["....#.....", "....#.....", "....#.....", "....#....."], [], tetI, true]);
+}
+{
     // TAP: the TGM garbage; a perfect clear sends it twice
     const [a, b] = versusPair(tgmTap);
     clearField(a);

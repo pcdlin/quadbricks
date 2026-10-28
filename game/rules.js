@@ -82,6 +82,7 @@ const VS_ITEMS = {
     "↓ DEL FIELD": { weight: 100 },
     "DEATH BLOCK": { weight: 50, attack: true, pieces: 1, brief: true },
     "→ MOV FIELD": { weight: 50 },
+    "HARD BLOCK": { weight: 50, attack: true, pieces: 1, brief: true },
     "SHOTGUN!": { weight: 5, attack: true },
     "DARK BLOCK": { weight: 5, attack: true, frames: 480 }, // frames: Heboris's
     "FREE FALL": { weight: 3 },
@@ -144,6 +145,9 @@ function parseShapes(pieces) {
 // Colour of each piece type, as an index into the engine's palette (cyan, purple, orange,
 // blue, green, red, yellow), and of the versus garbage cells (tetGARBAGE): GARBAGE_COLOR, a dark grey
 const GARBAGE_COLOR = 9;
+// Hard Block (a versus item): its blocks carry HARD_BIT in their cell until a line clear breaks the
+// shell, drawn in HARD_COLOR
+const HARD_BIT = 16, HARD_COLOR = 10;
 const DEFAULT_PALETTE = [0, 1, 2, 3, 4, 5, 6, 7, GARBAGE_COLOR];
 const MONO_PALETTE = [0, 8, 8, 8, 8, 8, 8, 8]; // every piece one colour (index 8, the neutral white-grey)
 
@@ -258,6 +262,7 @@ class RuleGame {
         this.endTitle = null;
         this.endSub = null;
         this.clearedRows = []; // the last lock's full rows as they were (versus: TGM3's garbage)
+        this.shellRows = []; // and those that only broke Hard Block's shells (kept)
 
         // Versus: one side of a match (the engine sets rival, the other side's game)
         this.versus = variant === "versus";
@@ -415,12 +420,13 @@ class RuleGame {
 
     // The colour index a settled block is drawn in (its piece's, through the palette)
     getCellColor(row, col) {
-        return this.palette[this.getCell(row, col)];
+        const type = this.getCell(row, col);
+        return type & HARD_BIT ? HARD_COLOR : this.palette[type];
     }
 
     // The colour index the piece in play is drawn in
     getPieceColor() {
-        return this.palette[this.curPiece_type];
+        return this.hitting("HARD BLOCK") ? HARD_COLOR : this.palette[this.curPiece_type];
     }
 
     // The item a settled block carries (item pieces), or null
@@ -1206,7 +1212,7 @@ class RuleGame {
         for (const cell of cells) {
             if (cell.row >= VISIBLE_TOP) allAbove = false;
             if (this.bufferTop !== null && cell.row < this.bufferTop) continue; // deleted above the buffer
-            this.setCell(cell.row, cell.col, type);
+            this.setCell(cell.row, cell.col, this.hitting("HARD BLOCK") ? type | HARD_BIT : type);
             if (this.itemCells) this.itemCells[cell.row - FIELD_TOP][cell.col] = this.pieceItem;
             this.onBlockLocked(cell);
         }
@@ -1221,24 +1227,37 @@ class RuleGame {
             return;
         }
 
-        // Find and empty full rows
+        // Find and empty full rows. Hard Block: a full row with shell blocks only loses its other blocks,
+        // the shells break (blocks again) and the row stays (shellRows; Heboris)
         const rows = [];
         this.clearedRows = [];
+        this.shellRows = [];
         for (let r = FIELD_TOP; r < HEIGHT; r++) {
-            if (this.field[r - FIELD_TOP].every(v => v !== 0)) {
-                rows.push(r);
-                this.clearedRows.push(this.field[r - FIELD_TOP].slice());
+            const line = this.field[r - FIELD_TOP];
+            if (line.every(v => v !== 0)) {
+                const shell = line.some(v => v & HARD_BIT);
+                if (shell) this.shellRows.push(r);
+                else {
+                    rows.push(r);
+                    this.clearedRows.push(line.slice());
+                }
                 for (let c = 0; c < WIDTH; c++) {
-                    this.clearedCells.push({ row: r, col: c, type: this.field[r - FIELD_TOP][c] });
-                    this.field[r - FIELD_TOP][c] = 0;
+                    if (line[c] & HARD_BIT) {
+                        line[c] &= ~HARD_BIT;
+                        continue;
+                    }
+                    this.clearedCells.push({ row: r, col: c, type: line[c] });
+                    line[c] = 0;
+                    if (shell && this.itemCells) this.itemCells[r - FIELD_TOP][c] = null;
                 }
             }
         }
-        const n = this.big ? rows.length >> 1 : rows.length; // big: two rows make a line (NullpoMino)
+        const full = rows.length + this.shellRows.length;
+        const n = this.big ? full >> 1 : full; // big: two rows make a line (NullpoMino)
         this.chain = n > 0 ? this.chain + 1 : -1;
         if (n > 0) this.sounds.push("clear" + n + (this.chain > 0 ? "c" + this.chain : "")); // e.g. "clear2c3"
 
-        this.collectItems(rows);
+        this.collectItems([...rows, ...this.shellRows]);
         this.scoreClear(n, rows);
         if (this.gameover) return;
         if (this.itemsAtClear) this.fireItems(true);
@@ -1247,17 +1266,17 @@ class RuleGame {
         const risen = this.riseAfterLock(n); // versus garbage pushes the stack up
         if (this.gameover) return;
 
-        const collapseNow = rows.length > 0 && this.lineClearDelay === 0;
+        const collapseNow = full > 0 && this.lineClearDelay === 0;
         if (fromHardDrop) {
             for (const cell of cells) {
                 // cleared cells keep the row they landed in, for the drop trail (there's no block to flash)
-                const cleared = rows.includes(cell.row);
+                const cleared = rows.includes(cell.row) || (this.shellRows.includes(cell.row) && !this.getCell(cell.row, cell.col));
                 const below = collapseNow && !cleared ? rows.filter(r => r > cell.row).length : 0;
                 this.hardDropCells.push({ row: cell.row + below - risen, col: cell.col, type, dist: this.hardDropDistance, cleared });
             }
         }
 
-        if (rows.length === 0) {
+        if (full === 0) {
             this.startAre(this.are);
         } else if (collapseNow) {
             this.collapse(rows);
@@ -1610,7 +1629,7 @@ class RuleGame {
     deleteRows(rows) {
         for (const r of rows) {
             for (let c = 0; c < WIDTH; c++) {
-                const type = this.getCell(r, c);
+                const type = this.getCell(r, c) & ~HARD_BIT;
                 if (type) this.clearedCells.push({ row: r, col: c, type });
             }
         }

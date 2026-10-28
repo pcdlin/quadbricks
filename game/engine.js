@@ -338,6 +338,7 @@ const PIECE_COLORS = [
     { base: "#e4cf00", light: "#fff082", dark: "#aca000" }, // O yellow
     { base: "#b9bcc6", light: "#eceef4", dark: "#80838f" }, // neutral grey-white (Mono, Shirase from 1000)
     { base: "#575b6c", light: "#83889b", dark: "#333644" }, // versus garbage grey (GARBAGE_COLOR)
+    { base: "#8e9bb3", light: "#e3e9f4", dark: "#4b5468" }, // Hard Block's steel (HARD_COLOR)
 ];
 
 const PIECE_GREY = 8; // the colour index every block of a spent held piece takes (desaturated)

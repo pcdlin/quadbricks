@@ -1650,9 +1650,10 @@ function tgmVersus(Base) {
         // 2+ lines send their garbage; the goal ends the round (the rows collapse first, as the round
         // stops here)
         scoreClear(n, rows) {
-            if (n >= 2 && !this.firingItems.length) {
+            const solid = this.big ? rows.length >> 1 : rows.length; // rows that broke Hard Block's shells send nothing (the guide)
+            if (solid >= 2 && !this.firingItems.length) {
                 const cleared = this.garbageFrom(rows);
-                const garbage = this.styleGarbage(this.fieldEmpty() ? [...cleared, ...cleared] : cleared, n);
+                const garbage = this.styleGarbage(this.fieldEmpty() ? [...cleared, ...cleared] : cleared, solid);
                 if (garbage.length) this.sendAttack({ lines: garbage.length, rows: garbage });
             }
             super.scoreClear(n, rows);
