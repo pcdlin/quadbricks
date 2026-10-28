@@ -1615,6 +1615,15 @@ function tgmVersus(Base) {
             return ["TIME", this.formatTime(Math.max(0, this.versusFrames - this.frames))];
         }
 
+        // X-Ray: the stack is dark but where a beam sweeping from left to right lights it, each column fading
+        // behind it (the guide: "illuminated one column at a time from left to right"; Heboris: every 36 frames)
+        itemAlpha(row, col) {
+            const alpha = super.itemAlpha(row, col);
+            if (!this.hitting("X-RAY")) return alpha;
+            const beam = (this.frames % 36) / 2; // columns 0 to 17: across the well in 20 frames, then dark
+            return col > beam ? 0 : alpha * Math.max(0, 1 - (beam - col) / 4);
+        }
+
         record() { return null; }
         secretGradeLabels() { return null; }
         testSetup() { return false; }

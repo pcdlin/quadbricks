@@ -3186,6 +3186,18 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         [p.nextItem, held, i.itemGauge === gauge, t.phase, t.takeAttacks()], [null, null, true, "lineclear", [{ lines: 0, item: "LASER" }]]);
 }
 {
+    // X-Ray: the other side's stack shows only where the beam sweeping across lights it, for 4 pieces (Heboris)
+    const [x] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(x);
+    fill(x, ["#########."]);
+    x.receiveGarbage({ item: "X-RAY" });
+    const seen = f => { x.frames = f; return Array.from({ length: 9 }, (_, c) => x.getCellAlpha(21, c) > 0 ? "#" : ".").join(""); };
+    const sweep = [seen(0), seen(8), seen(18), seen(35)];
+    for (let k = 0; k < 4; k++) x.takeItems();
+    check("X-Ray: the other side's stack lights up a column at a time from the left, then goes dark; back after 4 pieces",
+        [sweep, seen(35)], [["#........", ".####....", "......###", "........."], "#########"]);
+}
+{
     // TGM3's styles
     const garbage = style => {
         const [a] = versusPair(arika, 7, 0, { style });

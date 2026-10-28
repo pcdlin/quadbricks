@@ -595,6 +595,8 @@ settles is listed as an assumption below.
   - Mirror Block: the field turned left to right now and after each of the next two pieces (`mirrorPieces`); garbage sent
     meanwhile waits for its end (`mirrorGarbage`), and a perfect clear ends it (the guide).
   - 180° Field: the top row of the stack swapped with the bottom one, and so on.
+  - X-Ray: the stack dark but where a beam sweeping from left to right lights it, each column fading behind it, every
+    36 frames, for 4 pieces (Heboris's period and length; the guide: "illuminated one column at a time"; `itemAlpha()`).
   - ↓ Del Field: the stack's lower half deleted.
   - → Mov Field: every row's blocks pushed to the right wall.
   - Shotgun!: a random column in every row of the stack shot out, a miss on an empty cell.

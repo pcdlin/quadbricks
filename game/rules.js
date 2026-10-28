@@ -75,6 +75,7 @@ const VS_ITEMS = {
     "↑ DEL FIELD": { weight: 250 },
     "DEL EVEN": { weight: 150 },
     "MIRROR BLOCK": { weight: 150, attack: true },
+    "X-RAY": { weight: 150, attack: true, pieces: 4 }, // pieces: Heboris's
     "180° FIELD": { weight: 100, attack: true },
     "↓ DEL FIELD": { weight: 100 },
     "→ MOV FIELD": { weight: 50 },
