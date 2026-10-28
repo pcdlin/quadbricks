@@ -566,6 +566,109 @@ const TILESETS = {
         },
     },
 
+    // Cut gemstones: an octagonal table in a crown of facets lit from the top left
+    gem: {
+        name: "Gem",
+        face: [1, 0],
+        pad: (style) => style === "active" ? 10 : 0,
+        draw(g, col, size, style) {
+            const [inset] = this.face, a = inset, b = size - inset;
+            const t = size * 0.25, fa = a + t, fb = b - t, c = (fb - fa) * 0.28;
+            const table = [[fa + c, fa], [fb - c, fa], [fb, fa + c], [fb, fb - c], [fb - c, fb], [fa + c, fb], [fa, fb - c], [fa, fa + c]];
+            const [t1, t2, t3, t4, t5, t6, t7, t8] = table;
+            const tl = [a, a], tr = [b, a], br = [b, b], bl = [a, b];
+            const poly = (points) => {
+                g.beginPath();
+                points.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+                g.closePath();
+            };
+            if (style === "ghost") {
+                g.fillStyle = col.base + "1a";
+                g.fillRect(a, a, b - a, b - a);
+                g.strokeStyle = col.light + "99";
+                g.lineWidth = 1.2;
+                g.strokeRect(a + 0.6, a + 0.6, b - a - 1.2, b - a - 1.2);
+                poly(table);
+                g.stroke();
+                return;
+            }
+            const active = style === "active";
+            if (active) {
+                g.shadowColor = col.light;
+                g.shadowBlur = 12;
+                g.fillStyle = col.base;
+                g.fillRect(a, a, b - a, b - a);
+                g.shadowBlur = 0;
+            }
+            // facets, darkest to the bottom right
+            const facets = [
+                [[tl, t1, t8], "#ffffff", 0.55, col.light],
+                [[tl, tr, t2, t1], null, 0, col.light],
+                [[bl, tl, t8, t7], col.base, 0.35, col.light],
+                [[tr, t3, t2], null, 0, col.base],
+                [[bl, t7, t6], null, 0, col.base],
+                [[tr, br, t4, t3], null, 0, col.dark],
+                [[br, bl, t6, t5], "#000000", 0.2, col.dark],
+                [[br, t5, t4], "#000000", 0.35, col.dark],
+            ];
+            for (const [points, tint, alpha, fill] of facets) {
+                poly(points);
+                g.fillStyle = fill;
+                g.fill();
+                if (tint) {
+                    g.globalAlpha = alpha;
+                    g.fillStyle = tint;
+                    g.fill();
+                    g.globalAlpha = 1;
+                }
+            }
+            // the table, darker where it faces away, with a reflection across it
+            poly(table);
+            const face = g.createLinearGradient(fa, fa, fb, fb);
+            face.addColorStop(0, col.base);
+            face.addColorStop(1, col.dark);
+            g.fillStyle = face;
+            g.fill();
+            g.save();
+            poly(table);
+            g.clip();
+            g.beginPath();
+            g.moveTo(fa, fb - (fb - fa) * 0.2);
+            g.lineTo(fa + (fb - fa) * 0.55, fa - 1);
+            g.lineTo(fa + (fb - fa) * 0.85, fa - 1);
+            g.lineTo(fa + (fb - fa) * 0.1, fb + 1);
+            g.closePath();
+            g.fillStyle = "rgba(255,255,255,0.28)";
+            g.fill();
+            g.restore();
+            // facet edges
+            g.strokeStyle = "rgba(255,255,255,0.22)";
+            g.lineWidth = 0.75;
+            poly(table);
+            g.stroke();
+            for (const [p, q] of [[tl, t1], [tl, t8], [tr, t2], [tr, t3], [br, t4], [br, t5], [bl, t6], [bl, t7]]) {
+                g.beginPath();
+                g.moveTo(...p);
+                g.lineTo(...q);
+                g.stroke();
+            }
+            if (active) { // a sparkle on the table's corner
+                const [sx, sy] = t1, s = size * 0.16;
+                g.fillStyle = "rgba(255,255,255,0.95)";
+                g.beginPath();
+                g.moveTo(sx, sy - s); g.lineTo(sx + s * 0.18, sy - s * 0.18);
+                g.lineTo(sx + s, sy); g.lineTo(sx + s * 0.18, sy + s * 0.18);
+                g.lineTo(sx, sy + s); g.lineTo(sx - s * 0.18, sy + s * 0.18);
+                g.lineTo(sx - s, sy); g.lineTo(sx - s * 0.18, sy - s * 0.18);
+                g.closePath();
+                g.fill();
+            } else {
+                g.fillStyle = "rgba(6,8,22,0.2)";
+                g.fillRect(a, a, b - a, b - a);
+            }
+        },
+    },
+
     // Monochrome: every piece in the same warm gallery white, soft rims, no colour at all
     mono: {
         name: "Mono",
