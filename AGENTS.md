@@ -1041,6 +1041,13 @@ export names explicitly at the top; add new globals there, and new rule files to
   cell, drawn on the block's own edge (never outside the stack, continuous round inner corners);
   none along the walls and floor. Falling rows during
   a line clear are outlined on their own; staff roll blocks fade or vanish with their border.
+- Staff roll credits (the user's request; made up, credited to the game's own parts rather than names that
+  could pass for real people's, the user's choice: `STAFF_CREDITS` in `engine.js`, laid out
+  once as `CREDIT_LINES`): in every TGM staff roll (`game.roll`, any kind, invisible included) they scroll up through the
+  well behind the stack, centred (`drawCredits()`, first thing inside the well's clip in `drawBoard()`), from below it at
+  the pace that brings the QUADBRICKS title last to `CREDITS_TITLE_Y` of the well as the roll ends (`rollLength`; 38–70
+  px/s by the roll's length), fading near the well's edges (`CREDITS_EDGE`). A roll survived keeps the title; a top out
+  in it fades them (`BoardView.creditsAlpha`, `CREDITS_FADE`). Shown with effects Off too.
 - Settled blocks have a thin light rim (Glossy style).
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.

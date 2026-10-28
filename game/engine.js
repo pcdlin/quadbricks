@@ -513,6 +513,52 @@ const DROP_TRAIL_GROW = 4; // frames the hard-drop trail takes to reach down to 
 const DROP_TRAIL_FADE = 8; // frames a drop trail then takes to fade out, all at once
 const DROP_TRAIL_ALPHA = 0.38; // peak opacity of the trail
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
+
+// The staff roll's credits, made up: [role, ...names], or a heading alone. They scroll up behind
+// the stack as in the arcade (drawCredits()), the title last, stopping in the upper well as the roll ends
+const STAFF_CREDITS = [
+    ["STAFF"],
+    ["PRODUCER", "The Lock Delay"],
+    ["DIRECTOR", "A Sonic Drop"],
+    ["GAME DESIGN", "The Seven Pieces", "Gravity (20G)"],
+    ["T-SPIN COORDINATOR", "The Purple One"],
+    ["RULES RESEARCH", "A Frame Counter", "Too Many Footnotes"],
+    ["PROGRAM", "Sir Rotates-a-Lot", "The Null Pointer", "Off-By-One"],
+    ["ROTATION SYSTEMS", "A Wall Kick", "A Floor Kick"],
+    ["RANDOMIZER", "The Seven-Bag", "A History of Four"],
+    ["GRAPHIC DESIGN", "Sixty Frames", "A Holographic Sheen"],
+    ["BACKDROP", "A Ringed Planet", "The Moon (Gibbous)"],
+    ["SOUND", "A Minor Seventh"],
+    ["CONFETTI", "Ten Thousand Sparks"],
+    ["COMPUTER PLAYER", "Bot, Level 10"],
+    ["GHOST PIECE", "Itself"],
+    ["QUALITY ASSURANCE", "The Hold Box", "Topping Out"],
+    ["WAITING FOR THE I PIECE", "Everyone"],
+    ["SPECIAL THANKS", "The garbage, for rising", "The S and Z pieces", "Every game that topped out"],
+    ["AND YOU"],
+];
+const CREDITS_LINE = 24; // from a role to its first name, and between names
+const CREDITS_GROUP = 58; // from a role's last line to the next role
+const CREDITS_TITLE_GAP = 150; // from the last line to the title
+const CREDITS_TITLE_Y = 0.24; // where the title stops, in the well's height from its top
+const CREDITS_EDGE = 40; // lines fade in and out within this of the well's bottom and top
+const CREDITS_ALPHA = 0.7; // their opacity, behind the stack
+const CREDITS_FADE = 60; // frames they take to fade after a top out in the roll
+// The credits as lines, y from the first one's
+const CREDIT_LINES = (() => {
+    const heading = { size: 18, weight: 900, color: INK, spacing: 4 };
+    const role = { size: 11, weight: 700, color: INK_DIM, spacing: 2.5 };
+    const name = { size: 16, weight: 700, color: INK };
+    const lines = [];
+    let y = 0;
+    for (const [title, ...names] of STAFF_CREDITS) {
+        lines.push({ text: title, y, style: names.length ? role : heading });
+        for (const n of names) lines.push({ text: n, y: y += CREDITS_LINE, style: name });
+        y += CREDITS_GROUP;
+    }
+    lines.push({ text: "QUADBRICKS", y: y - CREDITS_GROUP + CREDITS_TITLE_GAP, style: { size: 26, weight: 900, color: INK, spacing: 5 } });
+    return lines;
+})();
 const HOLD_FLASH_LIFE = 12; // frames the newly held piece flashes in the HOLD box
 const HOLD_GLOW_BLUR = 0.7; // the held piece's flash glow: blur radius in block sizes
 const HOLD_GLOW_ALPHA = 0.7; // and its strength at the flash's start (also round the piece entering from hold)
@@ -605,6 +651,7 @@ class BoardView {
         this.dropFlashes = [];
         this.holdFlash = 0; // frames left of the held piece's flash
         this.enterGlow = 0; // and of the glow round the piece entering from hold (gone when it locks)
+        this.creditsAlpha = 0; // the staff roll's credits: 1 while they run, fading after a top out in the roll
         this.messageCache = null; // clear message texture (messageTexture())
         this.popupTop = 0; // where versus's "+lines" go in the side column: under the clear message (drawSidePanels())
         // the field's shake spring (px, py: before the last step), knocked by its own drops and clears
@@ -1992,6 +2039,9 @@ class Engine {
         view.gaugeFlash = Math.max(0, view.gaugeFlash - dt);
         const game = view.game, gauge = game.nextItem ? 1 : game.itemGauge / game.itemInterval;
         view.gaugeShown += (gauge - view.gaugeShown) * (1 - Math.pow(0.8, dt));
+        // a roll survived keeps the title in view
+        const toppedOut = game.isGameOver() && game.rollFrames < game.rollLength;
+        view.creditsAlpha = game.roll && !toppedOut ? 1 : Math.max(0, view.creditsAlpha - dt / CREDITS_FADE);
     }
 
     // Effects strength for the soft, large ones (backdrop wash, trails): never quite off, and
@@ -3459,6 +3509,8 @@ class Engine {
         r.save();
         r.clip(...frame);
 
+        this.drawCredits(this.board); // the staff roll's, behind everything in the well
+
         // Draw Shadow
         for (const [i, j] of cells) {
             const row = game.getShadowRow() + i;
@@ -3525,6 +3577,27 @@ class Engine {
         this.drawFlashes();
         if (game.inStartDelay()) this.drawCountdown(game); // part of the field: flies in with it
         if (game.cutIn > 0) this.drawCutIn(game);
+    }
+
+    // The staff roll's credits (CREDIT_LINES), centred in the well: from below it, they scroll up at
+    // the pace that brings the title to CREDITS_TITLE_Y as the roll ends, fading in and out near the
+    // well's edges (and all of them after a top out, creditsAlpha)
+    drawCredits(view) {
+        const game = view.game;
+        if (!game.roll || view.creditsAlpha <= 0) return;
+        const r = this.r, bottom = this.boardY + this.boardH;
+        const t = Math.min(game.rollLength, game.rollFrames + (game.isGameOver() ? 0 : this.tickPhase));
+        const start = bottom + CREDITS_EDGE; // the first line's y as the roll begins
+        const travel = start + CREDIT_LINES[CREDIT_LINES.length - 1].y - (this.boardY + this.boardH * CREDITS_TITLE_Y);
+        const first = start - travel * t / game.rollLength;
+        r.save();
+        for (const line of CREDIT_LINES) {
+            const y = first + line.y, edge = Math.min(y - this.boardY, bottom - y);
+            if (edge <= 0) continue;
+            r.globalAlpha = view.creditsAlpha * CREDITS_ALPHA * Math.min(1, edge / CREDITS_EDGE);
+            this.text(line.text, BOARD_X + BOARD_W / 2, y, { ...line.style, align: "center" });
+        }
+        r.restore();
     }
 
     // TGM-style border: a light line along every side of the settled stack that faces an empty
