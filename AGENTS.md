@@ -590,6 +590,9 @@ settles is listed as an assumption below.
   guide). The items, in the guide's table order:
   - Color Block: the stack shimmers through the piece colours, a band per row, for 3 pieces (Heboris's; `getCellColor()`).
   - Laser: a column deleted.
+  - Transform: for 3 pieces, a rotation in play (not IRS) first turns the piece into one of the seven picked at random, in
+    the same place and rotation state, kicked a column right or left if it doesn't fit there, unchanged if neither does,
+    and not at all if it couldn't have rotated as it was (the guide; `turn()`, `transform()`).
   - ↑ Del Field: the stack's upper half deleted (half its rows, rounded up, as ↓ Del Field).
   - Del Even: every other row from the bottom deleted (the second, fourth, ...).
   - Roll Roll: for 3 pieces, each turns counter-clockwise by itself right after it enters and every 30 frames after, in

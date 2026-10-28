@@ -2986,6 +2986,26 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     check("  ...no level clock; after 3:00 the side with more lines wins", [alive, g.endTitle, g.versusOutcome()], [[false, true], "TIME UP", "win"]);
 }
 {
+    // Transform: for 3 pieces, a rotation in play turns the piece into a random one first (the guide)
+    const [, d] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(d);
+    d.receiveGarbage({ item: "TRANSFORM" });
+    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    d.gravity = 0;
+    place(d, tetT, 0, 5, 3);
+    const types = new Set();
+    for (let k = 0; k < 40; k++) { d.advanceFrame(k % 2 ? ROTR_RELEASE : ROTR_PUSH); types.add(d.curPiece_type); }
+    // against the left wall, a vertical I can't rotate: no transformation either
+    place(d, tetI, 1, 5, -2); // ARS's vertical I is in its box's column 2
+    const stuck = [];
+    for (let k = 0; k < 10; k++) { d.advanceFrame(k % 2 ? ROTR_RELEASE : ROTR_PUSH); stuck.push(d.curPiece_type); }
+    for (let k = 0; k < 3; k++) d.takeItems();
+    place(d, tetT, 0, 5, 3);
+    d.advanceFrame(ROTR_PUSH);
+    check("Transform: a rotation in play turns the other side's piece into a random one, unless it couldn't rotate; for 3 pieces",
+        [types.size >= 5, new Set(stuck).size, stuck[0], d.curPiece_type], [true, 1, tetI, tetT]);
+}
+{
     // GB: lines by clear, one hole column both sides share, the same starting garbage
     const [a, b] = versusPair(gbTetris, 5, 0, {}, 3);
     const rows = g => Array.from({ length: 6 }, (_, k) => rowText(g, HEIGHT - 1 - k)).join("|");

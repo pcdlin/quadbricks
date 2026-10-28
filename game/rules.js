@@ -72,6 +72,7 @@ const VS_ITEM_PIECES = 20;
 const VS_ITEMS = {
     "COLOR BLOCK": { weight: 250, attack: true, pieces: 3 }, // pieces: Heboris's
     "LASER": { weight: 250, attack: true },
+    "TRANSFORM": { weight: 250, attack: true, pieces: 3 },
     "↑ DEL FIELD": { weight: 250 },
     "DEL EVEN": { weight: 150 },
     "ROLL ROLL": { weight: 150, attack: true, pieces: 3 },
@@ -749,9 +750,9 @@ class RuleGame {
         }
 
         if (!this.spawnedThisFrame) { // IRS already handled rotations held at spawn
-            if (C(ROTL_PUSH)) this.rotate(-1);
-            if (C(ROTR_PUSH)) this.rotate(1);
-            if (C(ROT180_PUSH) && this.rot180) this.rotate(2);
+            if (C(ROTL_PUSH)) this.turn(-1);
+            if (C(ROTR_PUSH)) this.turn(1);
+            if (C(ROT180_PUSH) && this.rot180) this.turn(2);
         }
         // Roll Roll: the piece turns counter-clockwise by itself right after it enters, then every 30 frames (the guide)
         if (this.hitting("ROLL ROLL") && !this.spawnedThisFrame && (this.activeTime - 2) % 30 === 0) this.rotate(-1);
@@ -980,6 +981,42 @@ class RuleGame {
             this.touched = false;
             this.moveResets = 0;
             this.rotationResets = 0;
+        }
+    }
+
+    // A rotation key pressed with a piece in play (not IRS)
+    turn(dir) {
+        if (this.hitting("TRANSFORM")) {
+            // while transforming, the O keeps four rotation states of its own, as the S, Z and I do (the guide)
+            if (this.curPiece_type === tetO || this.canRotate(dir)) this.transform();
+            if (this.curPiece_type === tetO) {
+                this.curPiece_rotation = (this.curPiece_rotation + dir + 4) % 4;
+                return;
+            }
+        }
+        this.rotate(dir);
+    }
+
+    // Whether the piece could rotate, tried on a probe (the game itself unchanged)
+    canRotate(dir) {
+        const probe = Object.create(this);
+        probe.sounds = [];
+        return probe.rotate(dir);
+    }
+
+    // Transform: before a rotation the piece turns into one of the seven picked at random (its own
+    // too), in the same place and rotation state, kicked one column right or left if it doesn't fit
+    // there; it stays as it is if neither does. Only when the piece could rotate as it was. (The guide.)
+    transform() {
+        const type = 1 + Math.floor(this.random() * 7);
+        const step = this.big ? 2 : 1, rot = this.curPiece_rotation, row = this.curPiece_row;
+        for (const col of [this.curPiece_col, this.curPiece_col + step, this.curPiece_col - step]) {
+            if (this.movePossible(row, col, rot, type)) {
+                this.curPiece_type = type;
+                this.curPiece_col = col;
+                this.setShadow();
+                return;
+            }
         }
     }
 
