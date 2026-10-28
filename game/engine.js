@@ -108,7 +108,7 @@ const VERSUS_RULE_NAMES = { [guideline]: "Guideline", [tgmOriginal]: "TGM1", [tg
 // Game mode's
 const MULTI_ITEMS = [
     { name: "Versus Bot", desc: "Against the bot, in the rules of any of the games", accent: tetI,
-      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...versusSubSetup(["Your height", "Bot height"]), BOT_SETUP] } },
+      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, BOT_SETUP, ...versusSubSetup(["Your height", "Bot height"])] } },
     { name: "Versus Player", desc: "Two players side by side, on their own keys or gamepads", accent: tetT,
       modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...versusSubSetup(["P1 height", "P2 height"])], join: true } },
 ];
