@@ -579,15 +579,15 @@ settles is listed as an assumption below.
   as versus begins, "garbage is turned off completely"): no garbage either way, Free Fall's included (`sendsGarbage` false).
   Items stay as the Items card sets them (tetris.wiki leaves open whether Cement turns them off; Heboris's CEMENT does, its
   NORISE doesn't: the two cards give both).
-- TGM3's Match card (`CLEAR_RULE_SETUP`, `options.clearRule`): its VS Rule, or its Clear Rule, "a simple race between the
-  two players" (tetris.wiki, which says no more): here a race to the goal level without garbage or items (`clearRule`; the
-  Style, Items and Garbage cards then do nothing).
 - TGM3's styles (the Style card, `options.style`, `TGM3_VS_STYLES`; tetris.wiki's TGM3 page): Attack sends extra copies of
   the top garbage row (one for a double or triple, two for a Tetris) and gets an item every 40 pieces; Defence sends one
   row less and deletes as many rows from the bottom of its own stack (`defenceRows`, after the clear), an item every 20;
   Item an item every 10. Heboris has the same three (and a NORMAL of its own). TGM3's (and ACE's, "like TGM3") attack
   items go off with the clear itself (`itemsAtClear`, `fireItems(true)`; the others after it), a piece entering with IHS
   doesn't fill the gauge, and a held item piece loses its item (tetris.wiki).
+- TGM3's Match card (`CLEAR_RULE_SETUP`, `options.clearRule`): its VS Rule, or its Clear Rule, "a simple race between the
+  two players" (tetris.wiki, which says no more): here a race to the goal level without garbage or items (`clearRule`; the
+  Style, Items and Garbage cards then do nothing).
 - Items (the Items card, Off at first; TGM1, TAP, TGM3, ACE): every piece fills the gauge, and after `VS_ITEM_PIECES`
   (20) the next carries an item (the guide: the 21st piece; Heboris: `item_interval` 20; `itemGauge`, `nextItem`,
   `pieceItem`). They come from a bag per round with one of each, drawn by TAP's weights
