@@ -837,6 +837,7 @@ class Engine {
             if (own && s === "harddrop" && this.options.shakeScale) this.kickShake(game.hardDropDistance);
             if (s === "lock" || s === "harddrop") view.enterGlow = 0; // the piece from hold is gone
         }
+        if (!game.getCurPiece_type()) view.enterGlow = 0; // or knocked out by an item (a snipe), unlocked
         // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
         if (game.takeHolds() && this.options.effects) view.holdFlash = view.enterGlow = HOLD_FLASH_LIFE;
         for (const dir of game.takeBumps()) if (own && this.options.shakeScale) this.bumpShake(dir);
