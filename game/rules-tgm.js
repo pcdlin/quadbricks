@@ -1738,10 +1738,13 @@ class TiVersusGame extends tgmVersus(TiGame) {
         this.setGoal(options.goal);
         this.style = TGM3_VS_STYLES[options.style] ? options.style : "attack";
         this.itemInterval = TGM3_VS_STYLES[this.style].items;
+        // Clear Rule: a race to the goal, without garbage or items (the race tetris.wiki doesn't detail)
+        this.clearRule = !!options.clearRule;
+        if (this.clearRule) this.sendsGarbage = this.itemsOn = false;
     }
 
     statsName() {
-        return ["TGM3 TI", `${this.ars ? "CLASSIC" : "WORLD"} VS ${TGM3_VS_STYLES[this.style].name}`];
+        return ["TGM3 TI", `${this.ars ? "CLASSIC" : "WORLD"} ${this.clearRule ? "CLEAR RULE" : "VS " + TGM3_VS_STYLES[this.style].name}`];
     }
 
     styleGarbage(rows, n) {

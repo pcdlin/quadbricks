@@ -67,6 +67,9 @@ const TGM1_SETUP = [BIG_SETUP, REV_SETUP, MONO_SETUP, TLS_SETUP]; // TGM1's code
 // TGM3 Master: the qualified grade and its exams (Exams, tgm3ExamFor); none with Big
 const EXAMS_SETUP = { name: "Exams", accent: tetJ, arg: "exams", labels: ["On", "Off"], values: [true, false] };
 const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off", "On"], values: [false, true] }; // GB: gravity 10 levels on
+// TGM3 versus: its VS Rule, or its Clear Rule, "a simple race between the two players" (tetris.wiki)
+const CLEAR_RULE_SETUP = { name: "Match", accent: tetS, arg: "clearRule", labels: ["VS Rule", "Clear Rule"], values: [false, true], modes: [arika, tgmClassic] };
+OPTION_ARGS.push("clearRule");
 // Versus: the bot's level (bot.js, 0-10), 6 at first
 const BOT_VERSUS_LEVEL = 6;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
@@ -108,6 +111,7 @@ const versusSubSetup = (heights, sides) => [
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "Death", "TGM+"], values: ["master", "death", "plus"], modes: [tgmTap] },
     { ...RULE_SETUP, modes: [arika, tgmClassic] },
+    CLEAR_RULE_SETUP,
     { name: "Style", accent: tetJ, arg: "style", labels: ["Attack", "Defence", "Item"], values: ["attack", "defence", "item"], modes: [arika, tgmClassic] },
     VERSUS_GOAL_SETUP,
     handicapSetup(sides),

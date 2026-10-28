@@ -2878,6 +2878,12 @@ const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c))
         [200, true, "LEVEL 200", true, "win", "lose", tetI]);
 }
 {
+    // TGM3's Clear Rule: a race to the goal level, no garbage, no items
+    const [c] = versusPair(arika, 5, 0, { clearRule: true, items: true });
+    check("TGM3 Clear Rule: a race to the goal level, without garbage or items", [c.sendsGarbage, c.itemsOn, c.maxLevel, c.getStats()[0][1]],
+        [false, false, 200, "WORLD CLEAR RULE"]);
+}
+{
     const [a, b] = versusPair(arika);
     a.frames = b.frames = TGM_VS_FRAMES - 1;
     a.level = 120; b.level = 80;

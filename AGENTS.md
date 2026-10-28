@@ -579,6 +579,9 @@ settles is listed as an assumption below.
   as versus begins, "garbage is turned off completely"): no garbage either way, Free Fall's included (`sendsGarbage` false).
   Items stay as the Items card sets them (tetris.wiki leaves open whether Cement turns them off; Heboris's CEMENT does, its
   NORISE doesn't: the two cards give both).
+- TGM3's Match card (`CLEAR_RULE_SETUP`, `options.clearRule`): its VS Rule, or its Clear Rule, "a simple race between the
+  two players" (tetris.wiki, which says no more): here a race to the goal level without garbage or items (`clearRule`; the
+  Style, Items and Garbage cards then do nothing).
 - TGM3's styles (the Style card, `options.style`, `TGM3_VS_STYLES`; tetris.wiki's TGM3 page): Attack sends extra copies of
   the top garbage row (one for a double or triple, two for a Tetris) and gets an item every 40 pieces; Defence sends one
   row less and deletes as many rows from the bottom of its own stack (`defenceRows`, after the clear), an item every 20;
@@ -901,7 +904,7 @@ settles is listed as an assumption below.
 - TGM versus: garbage rises after the receiver's every lock, as Heboris has it (the guide excerpts don't say when);
   copied rows keep their colours; a level 200 reached by both sides on one frame, or the same level at time
   up, is a draw (the guide gives the defending side the first; this match has none); the 8-row cap takes the first rows
-  that arrive. The Clear Rule, handicaps and the service menu's other limits aren't there. The same goes for TGM1, TAP
+  that arrive. The service menu's other limits aren't there. The same goes for TGM1, TAP
   and ACE versus; ACE's two rounds are TAP's.
 - Versus, not settled by the sources: TGM1's goal (tetris.wiki names none; a forum post remembers a level limit of 100
   by default in the series); the item gauge's 20 pieces taken for TGM1 too (its page says both "every 20 blocks" and that
@@ -909,9 +912,9 @@ settles is listed as an assumption below.
   deleted rows taken from the bottom of the stack after the clear; TGM3's items going off with the clear's end like TAP's
   (the wiki: at once in TGM3); the GB hole's piece drawn from the match seed (the GB takes the last of its 256-piece list);
   GB garbage pushed out of the top lost, as in TAP; the GB's starting rows taken from the bottom of its pattern; the
-  cut-in's length (Heboris's 60-frame wait after a snipe); attack items take effect at once rather than over their
-  animation (the guide: Mirror Block's three flips); TAP's Cement Mode
-  (no garbage) and the service menu's round count aren't there; the Goal card stops at 900 (the arcade's upper limit isn't
+  cut-in's length (Heboris's 60-frame wait after a snipe); a Mirror Block turn's 40 frames (Heboris's take about 50); the
+  other attack items take effect at once rather than over an animation; the Rounds card's range (1 to 7; Heboris allows 1
+  to 10) and TGM3's Clear Rule taken as a race to the goal level; the Goal card stops at 900 (the arcade's upper limit isn't
   given); the Guideline's perfect clear +10 (tetris.wiki *Garbage*; NullpoMino gives +6).
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's. TGM3's DAS
