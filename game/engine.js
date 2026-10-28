@@ -276,7 +276,7 @@ const SCROLLED_LISTS = {
     [MENU_VISUALS]: { items: VISUAL_ITEMS, pos: "visualspos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
     [MENU_HANDLING]: { items: HANDLING_ITEMS, pos: "handlingpos", ...HANDLING_ROWS, listH: HANDLING_LIST_H },
     // a mode's setup cards (items: null, they depend on the mode and the cards' choices), when there are more than
-    // SETUP_FIT of them (a versus rule set's)
+    // SETUP_FIT of them, and always for versus's
     [MENU_SETUP]: { items: null, pos: "setuppos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
 };
 const SETUP_FIT = 6;
@@ -2539,17 +2539,19 @@ class Engine {
             }
             case MENU_SETUP: {
                 // Breadcrumb: rule set (or Multiplayer) and mode, then a generic prompt
-                const from = this.setupFrom === MENU_MULTI ? "Multiplayer" : RULESETS[this.rulesetpos].name;
-                heading(`${from}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase(), INK_DIM,
-                    this.setupItems().length > SETUP_FIT ? 220 : listTop - 26);
-                // more than five cards (a versus rule set's, with the Bot card): the tighter cards of Visuals; more
-                // than SETUP_FIT, the Visuals screen's place for them, scrolled to keep the selected one in view
+                const versus = this.setupFrom === MENU_MULTI;
                 const items = this.settingCards(this.setupItems(), true);
-                const { rowH, gap } = items.length > 5 ? VISUALS_ROWS : { rowH: 64, gap: 10 };
+                // more than five cards: the tighter cards of Visuals; more than SETUP_FIT, or versus's cards (their
+                // number changes with the Rules card, the list keeps its place and size), the Visuals screen's
+                // place for them, scrolled to keep the selected one in view
+                const scrolled = versus || items.length > SETUP_FIT;
+                heading(`${versus ? "Multiplayer" : RULESETS[this.rulesetpos].name}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase(),
+                    INK_DIM, scrolled ? 220 : listTop - 26);
+                const { rowH, gap } = scrolled || items.length > 5 ? VISUALS_ROWS : { rowH: 64, gap: 10 };
                 let bottom;
-                if (items.length > SETUP_FIT) {
+                if (scrolled) {
                     this.drawScrolledList(MENU_SETUP, items, 236);
-                    bottom = 236 + Math.min(VISUALS_LIST_H, menuListHeight(items, rowH, gap));
+                    bottom = 236 + VISUALS_LIST_H;
                 } else {
                     this.drawMenuList(items, this.setuppos, listTop, rowH, gap);
                     bottom = listTop + menuListHeight(items, rowH, gap);
