@@ -11,7 +11,7 @@
 // garbage; the higher score once a side tops out wins; best of five (CTWC since 2022).
 // GB "versus": one side of a two-player match over the link cable (tetris.wiki, StrategyWiki, and the
 // disassembly, vinheim3/tetris-gb-disasm: multiplayer.s, inGameFlow.s): both sides dealt the same
-// pieces over the same garbage (the height), at level 1's speed without level-ups (+10 levels in heart
+// pieces over the same garbage (each its own height of one pattern), at level 1's speed without level-ups (+10 levels in heart
 // mode); a double sends 1 line, a triple 2, a Tetris 4, grey rows with their hole in one column both
 // sides share for the round, which the game takes from a piece (L or Z: column 6, J or T 4, I 8, O 2,
 // S 10: always an even one counted from 1); it rises when the receiving side's next piece comes,
@@ -122,12 +122,14 @@ class Game1989 extends RuleGame {
 
     // B-Type: random blocks in the bottom rows, each row with at least one block and one hole
     fillGarbage(rows) {
-        for (let r = HEIGHT - rows; r < HEIGHT; r++) {
-            let cells;
-            do cells = Array.from({ length: WIDTH }, () => this.random() < GB_GARBAGE_FILL ? 1 + Math.floor(this.random() * 7) : 0);
-            while (cells.every(v => v) || cells.every(v => !v));
-            cells.forEach((v, c) => this.setCell(r, c, v));
-        }
+        for (let r = HEIGHT - rows; r < HEIGHT; r++) this.garbageRow().forEach((v, c) => this.setCell(r, c, v));
+    }
+
+    garbageRow() {
+        let cells;
+        do cells = Array.from({ length: WIDTH }, () => this.random() < GB_GARBAGE_FILL ? 1 + Math.floor(this.random() * 7) : 0);
+        while (cells.every(v => v) || cells.every(v => !v));
+        return cells;
     }
 
     getStats() {
@@ -424,6 +426,14 @@ class GbGame extends Game1989 {
     }
 
     garbageRows() { return this.height * GB_ROWS_PER_HEIGHT; }
+
+    // Versus: the GB deals one pattern of garbage to both sides (the highest height's rows), and each
+    // keeps its own height's rows of it from the bottom (each player sets their own height: tetris.wiki)
+    setupField() {
+        if (!this.versus) return super.setupField();
+        const pattern = Array.from({ length: (GB_B_HEIGHTS - 1) * GB_ROWS_PER_HEIGHT }, () => this.garbageRow());
+        for (let k = 0; k < this.garbageRows(); k++) pattern[k].forEach((v, c) => this.setCell(HEIGHT - 1 - k, c, v));
+    }
 
     spawnPosition() {
         return [GB_SPAWN_ROW, 3];

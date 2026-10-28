@@ -210,7 +210,7 @@ for (const [name, mode, variant] of MODES) {
 // Two bots in a versus match, attacks going both ways as the engine routes them, until the rule set
 // decides it (versusOutcome); returns who won (for the first side) and what happened
 function versusMatch(mode, levels, seed, startLevel = 0, options = {}, height = 0) {
-    const games = [0, 1].map(() => createGame(mode, "versus", startLevel, height, {}, { seed, ...options }));
+    const games = [0, 1].map(i => createGame(mode, "versus", startLevel, i ? options.height2 ?? height : height, {}, { seed, ...options }));
     [games[0].rival, games[1].rival] = [games[1], games[0]];
     const bots = levels.map((level, i) => new Bot(level, i + 1));
     let frames = 0, stuck = false, risen = 0, result = null;
@@ -252,10 +252,10 @@ for (const [mode, name] of [[arika, "TGM3 World"], [tgmClassic, "TGM3 Classic"]]
 for (const [name, mode, options, startLevel, height] of [
     ["TGM1 Master with items", tgmOriginal, { items: true }], ["TGM1 20G", tgmOriginal, { speed: "20g" }],
     ["TGM3 Classic, Defence", tgmClassic, { style: "defence" }],
-    ["TAP Master with items", tgmTap, { items: true }], ["TAP Death", tgmTap, { speed: "death" }],
+    ["TAP Master with items", tgmTap, { items: true }], ["TAP Death", tgmTap, { speed: "death" }], ["TAP TGM+", tgmTap, { speed: "plus" }],
     ["TGM3 World with items", arika, { items: true }],
     ["ACE ARS2 Normal with items", aceArs2, { speed: "normal", items: true }], ["ACE SRS Another", tgmAce, { speed: "another" }],
-    ["GB height 2", gbTetris, {}, 0, 2], ["GB heart", gbTetris, { heart: true }],
+    ["GB heights 2 and 4", gbTetris, { height2: 4 }, 0, 2], ["GB heart", gbTetris, { heart: true }],
 ]) {
     // the other rule sets: a round goes to the stronger side, through garbage (and items) both ways
     seeded(24);

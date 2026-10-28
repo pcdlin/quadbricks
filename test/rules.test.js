@@ -2923,6 +2923,11 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     a.advanceFrame(SOFT_PUSH);
     check("TAP versus: level 200 ends the round, the side reaching it wins", [a.level, a.endTitle, a.versusOutcome(), b.versusOutcome()],
         [200, "LEVEL 200", "win", "lose"]);
+    const [plus] = versusPair(tgmTap, 5, 0, { speed: "plus" });
+    clearField(plus);
+    for (let k = 0; k < 13; k++) { place(plus, tetO, 0, 19, 4); plus.lock(); plus.curPiece_type = 0; clearField(plus); }
+    check("TAP versus TGM+: TGM+'s delays and its rising pattern (tetris.wiki: all four modes play in versus)",
+        [plus.are, plus.getStats()[0][1], plus.garbagePos], [27, "TGM+ VERSUS", 1]);
     const [c, d] = versusPair(tgmOriginal);
     c.level = 300; d.level = 100;
     c.frames = d.frames = TGM1_VS_FRAMES - 1;
@@ -2978,6 +2983,10 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     placeGb(c, tetI, 1, HEIGHT - 4, 8);
     c.lock();
     check("  ...30 lines win the round", [c.endTitle, c.versusOutcome(), d.versusOutcome()], ["30 LINES", "win", "lose"]);
+    const [g1] = versusPair(gbTetris, 5, 0, {}, 2), [g2] = versusPair(gbTetris, 5, 0, {}, 5);
+    const bottom = g => Array.from({ length: 4 }, (_, k) => rowText(g, HEIGHT - 1 - k)).join("|");
+    check("  ...each side its own height of one garbage pattern (tetris.wiki: each player sets theirs)",
+        [bottom(g1) === bottom(g2), rowText(g1, HEIGHT - 5), rowText(g2, HEIGHT - 5) !== ".........."], [true, "..........", true]);
     const holes = new Set(Array.from({ length: 60 }, (_, seed) => versusPair(gbTetris, seed)[0].vsHole));
     const [lv] = versusPair(gbTetris, 5, 7), [hv] = versusPair(gbTetris, 5, 0, { heart: true });
     lv.lines = 25; lv.updateLevel();
@@ -3050,9 +3059,14 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     check("  ...Up and Down Del Field delete the stack's upper or lower half",
         [own("↑ DEL FIELD", ["#.........", "##........", "###.......", "####......"]), own("↓ DEL FIELD", ["#.........", "##........", "###.......", "####......"])],
         [["..........", "..........", "###.......", "####......"], ["..........", "..........", "#.........", "##........"]]);
-    check("  ...Nega Field turns the stack's blocks to holes; 180° Field turns it upside down",
+    check("  ...Nega Field turns the stack's blocks to holes; 180° Field swaps its top row with the bottom one, and so on (the guide)",
         [own("NEGA FIELD", ["#.........", "##.######."]), own("180° FIELD", ["#.........", "##.######."])],
-        [[".#########", "..#......#"], [".######.##", ".........#"]]);
+        [[".#########", "..#......#"], ["##.######.", "#........."]]);
+    check("  ...the Del Fields take half the stack's rows, rounded up", [own("↓ DEL FIELD", ["#.........", "##........", "###......."])],
+        [["..........", "..........", "#........."]]);
+    const shot = Array.from({ length: 30 }, () => own("SHOTGUN!", ["#.........", "##########"]));
+    check("  ...Shotgun! picks any column in each row: on an empty cell it misses (the guide)",
+        [shot.some(rows => rows[0] === "#........."), shot.every(rows => rows[1].split("#").length - 1 === 9)], [true, true]);
     check("  ...the Mov Fields push every row's blocks to a wall",
         [own("← MOV FIELD", ["#.#.#.....", ".......##."]), own("→ MOV FIELD", ["#.#.#.....", ".......##."])],
         [["###.......", "##........"], [".......###", "........##"]]);
@@ -3063,6 +3077,36 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     const sent = f.takeAttacks();
     check("  ...Free Fall's rows clear, and 2 or more of them go to the other side as garbage with one hole",
         [sent.map(a => [a.lines, a.rows.length, new Set(a.rows.map(r => r.indexOf(0))).size, a.rows[0].filter(v => !v).length])], [[[2, 2, 1, 1]]]);
+}
+{
+    // setting an item off turns the one in the preview normal too; a held item piece loses its item; an IHS piece
+    // doesn't fill the gauge; TGM3's attack items go off with the clear
+    const [p] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(p);
+    p.setCell(10, 0, 1);
+    fill(p, ["#########."]);
+    place(p, tetI, 1, 18, 7);
+    p.pieceItem = "LASER";
+    p.nextItem = "DEL EVEN";
+    p.advanceFrame(SOFT_PUSH);
+    const [h] = versusPair(arika, 5, 0, { items: true });
+    h.pieceItem = "LASER";
+    h.advanceFrame(HOLD_PUSH);
+    const held = h.pieceItem;
+    const [i] = versusPair(arika, 5, 0, { items: true });
+    const gauge = i.itemGauge;
+    i.held.hold = true;
+    i.curPiece_type = 0;
+    i.spawn(i.nextFromQueue(), false);
+    const [t] = versusPair(arika, 5, 0, { items: true, style: "item" });
+    clearField(t);
+    t.setCell(10, 0, 1);
+    fill(t, ["#########."]);
+    place(t, tetI, 1, 18, 7);
+    t.pieceItem = "LASER";
+    t.advanceFrame(HARD_PUSH);
+    check("  ...an item set off empties the preview's too; a held item piece loses it; IHS doesn't fill the gauge; TGM3's attack items go with the clear",
+        [p.nextItem, held, i.itemGauge === gauge, t.phase, t.takeAttacks()], [null, null, true, "lineclear", [{ lines: 0, item: "LASER" }]]);
 }
 {
     // TGM3's styles

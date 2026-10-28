@@ -161,6 +161,7 @@ class AceVersusGame extends tgmVersus(AceGame) {
         super(mode, variant);
         this.versusFrames = ACE_VS_FRAMES;
         this.levelClock = false;
+        this.itemsAtClear = true; // items work as TGM3's (tetris.wiki)
     }
 
     setOptions(options = {}) {

@@ -952,7 +952,7 @@ class TapGame extends TgmGame {
     tapPlusGarbage() {
         if (++this.garbageCount < TAP_PLUS_RISE - Math.floor(this.level / 100)) return;
         const row = TAP_PLUS_PATTERN[this.garbagePos];
-        this.raiseRow([...row].map(ch => ch === "." ? 0 : 1 + Math.floor(Math.random() * 7)));
+        this.raiseRow([...row].map(ch => ch === "." ? 0 : 1 + Math.floor(this.random() * 7)));
         this.garbagePos = (this.garbagePos + 1) % TAP_PLUS_PATTERN.length;
         this.garbageCount = 0;
     }
@@ -1679,6 +1679,8 @@ function tgmVersus(Base) {
 // top garbage row (one for a double or triple, two for a Tetris) and gets an item every 40 pieces;
 // Defence sends one row less but deletes as many rows from the bottom of its own stack as it sent
 // (one for a double ... three for a Tetris), with an item every 20 pieces; Item gets one every 10.
+// Attack items go off with the clear (the others after it); a piece entering with IHS doesn't fill the
+// gauge, and a held item piece loses its item (RuleGame's).
 class TiVersusGame extends tgmVersus(TiGame) {
     constructor(mode, variant) {
         super(mode, variant);
@@ -1686,6 +1688,7 @@ class TiVersusGame extends tgmVersus(TiGame) {
         this.hasKill = false;
         this.maxLevel = TGM_VS_LEVEL_GOAL;
         this.defenceRows = 0; // Defence: rows to delete from the bottom once the clear is done
+        this.itemsAtClear = true; // items "activate immediately upon being cleared" (tetris.wiki)
     }
 
     setOptions(options = {}) {
@@ -1722,7 +1725,9 @@ class TiVersusGame extends tgmVersus(TiGame) {
     checkLevelStop() {}
 }
 
-// TAP: Master's speed or Death's (options.speed: "death"), Master's levels and score, no grades
+// TAP: each of its modes can be played in versus (tetris.wiki): Master's speed, Death's or TGM+'s
+// (options.speed: "death", "plus"; Normal's is played as Master's), Master's levels and score, no
+// grades; TGM+ keeps its rising garbage
 class TapVersusGame extends tgmVersus(TapGame) {
     constructor(mode, variant) {
         super(mode, variant);
@@ -1732,12 +1737,13 @@ class TapVersusGame extends tgmVersus(TapGame) {
 
     setOptions(options = {}) {
         this.death = options.speed === "death";
+        this.tapPlus = options.speed === "plus";
         this.sonicTrail = !this.death;
         super.setOptions(options);
     }
 
     statsName() {
-        return ["TGM2 TAP", this.death ? "DEATH VERSUS" : "MASTER VERSUS"];
+        return ["TGM2 TAP", this.death ? "DEATH VERSUS" : this.tapPlus ? "TGM+ VERSUS" : "MASTER VERSUS"];
     }
 
     // Death: 20G (its delays come from TapGame's delayRow) and no ghost

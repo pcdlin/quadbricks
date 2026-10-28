@@ -116,7 +116,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `padCapturing`; the next control pressed on the pad being set up is bound by `GamepadControls.poll()` (`Options.bindPad(key, …)`,
   the same rules as keys, `bindIn()`; other pads do nothing meanwhile), Start or Esc cancels, and so does that pad going away. Start (`PAD_START`) can't be bound. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
-- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Single Player, Multiplayer, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Single Player → `MENU_SINGLE` (`SINGLE_ITEMS`: Quick Play, Custom Game). Multiplayer → `MENU_MULTI` (`MULTI_ITEMS`): Versus Bot and Versus Player, each a `modeItem` (variant `"versus"`) that goes through `MENU_SETUP` like a Custom Game mode (`setupFrom` says which screen the cards came from, for `chosenMode()`, its `setupChoices` key (`chosenKey()`) and Esc): the Rules card (`VERSUS_RULES_SETUP`: Guideline, TGM3, NES; it sets the mode), under it the rule set's own card (`VERSUS_SUB_SETUP`; the user's request): TGM3's Rule, World or Classic (`VERSUS_TGM3_RULE_SETUP`, which sets the mode again), or NES's Level (`VERSUS_NES_LEVEL_SETUP`, 18 at first, `NES_VERSUS_LEVEL`), then Versus Bot's Bot card. A card with `modes` is shown (`setupItems()`) and used (`modeArgs()`) only when the cards before it that set the mode chose one of them. Versus Player's (`join: true`) Enter goes on to `MENU_JOIN` (below) instead of starting, whose Esc comes back to the cards. Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
+- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Single Player, Multiplayer, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Single Player → `MENU_SINGLE` (`SINGLE_ITEMS`: Quick Play, Custom Game). Multiplayer → `MENU_MULTI` (`MULTI_ITEMS`): Versus Bot and Versus Player, each a `modeItem` (variant `"versus"`) that goes through `MENU_SETUP` like a Custom Game mode (`setupFrom` says which screen the cards came from, for `chosenMode()`, its `setupChoices` key (`chosenKey()`) and Esc): the Rules card (`VERSUS_RULES_SETUP`: Guideline, TGM1, TAP, TGM3, ACE, NES, GB; it sets the mode), under it the rule set's own cards (`versusSubSetup()`; the user's request): TGM1's and TAP's Speed, TGM3's Rule (World or Classic, which sets the mode again) and Style, ACE's Rule and Speed, Items (TGM1, TAP, TGM3, ACE), NES's Level (18 at first, `NES_VERSUS_LEVEL`), GB's two Height cards (each side's) and Heart, then Versus Bot's Bot card. A card with `modes` is shown (`setupItems()`) and used (`modeArgs()`) only when the cards before it that set the mode chose one of them. Versus Player's (`join: true`) Enter goes on to `MENU_JOIN` (below) instead of starting, whose Esc comes back to the cards. Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
   TAP Master, TGM3 Master, NES A-Type, each a `RULESETS` mode named by rule set and mode, started at once with its setup
   cards' first or `initial` choices (`quickArgs()` → `modeArgs()`), so its records are Custom Game's for those choices; the
   list keeps its place like the rule sets'). Custom Game → `MENU_RULES` (rule sets) →
@@ -125,7 +125,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or a hidden mode's option
-  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, versus's `"speed"` and `"items"`, and Versus Bot's `"bot"`, gathered into `options`) (the label's entry in
+  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, versus's `"speed"`, `"style"`, `"items"` and `"height2"`, and Versus Bot's `"bot"`, gathered into `options`) (the label's entry in
   `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
   but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; TGM3 Master's Exams,
   On / Off; GB's Heart, Off / On; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
@@ -174,7 +174,7 @@ a fourth, `height` (their B-Type and GB versus only, clamped to 0–5, `GB_B_HEI
 `GUIDELINE_DIG_ROWS`), the garbage height; a fifth,
 `handling` (Guideline only, overrides of `GUIDELINE_HANDLING`: `das`, `arr`, `sdf`, `dcd`, `ghost`,
 `dropGuard`; ignored by the others, whose timing is part of their spec); a sixth, `options`, versus's `seed` (both sides of a
-match deal the same pieces), `speed` (TGM1 `"20g"`, TAP `"death"`, ACE's mode names), `style` (TGM3's `"attack"`, `"defence"`, `"item"`) and `items`, and the hidden modes (`setOptions()`, before the first piece; they combine): `big` (`setBig()`; offered for
+match deal the same pieces), `speed` (TGM1 `"20g"`, TAP `"death"` or `"plus"`, ACE's mode names), `style` (TGM3's `"attack"`, `"defence"`, `"item"`) and `items`, and the hidden modes (`setOptions()`, before the first piece; they combine): `big` (`setBig()`; offered for
 TGM1, TAP but TGM+, and TGM3; ACE's is its `"big"` variant), and TGM1's `rev`, `mono` (`MONO_PALETTE`)
 and `tls` (the ghost all game).
 
@@ -536,8 +536,9 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   (`endNotes()`, lines under its sub-title), not in the records.
 
 ### Versus: the sources checked
-The versus modes were reviewed (the user's request) against tetris.wiki (through search excerpts only: tetris.wiki,
-harddrop.com and the fandom wiki can't be reached from here), Heboris (nightmareci/HeborisCE, the continuation of Heboris
+The versus modes were reviewed (the user's request) against tetris.wiki (*TGM Versus Mode Guide*, the TGM1, TAP, TGM3,
+ACE and Game Boy pages; fetch them with `index.php?title=…&action=raw`, slowly: the wiki answers bursts with 429),
+harddrop.com (nothing more on versus), Heboris (nightmareci/HeborisCE, the continuation of Heboris
 U.E., a TGM clone: `src/game/game.c`), NullpoMino (`VSBattleMode.java`; it has no TGM, GB or NES versus, only an unused
 `Field.getLastLinesAsTGMAttack()` that builds TGM garbage the same way as here) and the Game Boy disassembly
 (vinheim3/tetris-gb-disasm, `multiplayer.s`, `inGameFlow.s`). Where they agree the rule is followed; what none of them
@@ -547,9 +548,9 @@ settles is listed as an assumption below.
 - Source: tetris.wiki *TGM Versus Mode Guide*, the arcade's default VS settings, written for TAP; TGM3's and ACE's taken as
   the same; Heboris for what the guide doesn't say. `tgmVersus(Base)` (rules-tgm.js) makes the versus side of a game:
   `TiVersusGame`, `TapVersusGame`, `Tgm1VersusGame`, and in rules-ace.js `AceVersusGame`.
-- Each side at its mode's speed with its levels and score (TGM3: Master's tables without COOLs or REGRETs; TAP: Master or
-  Death, the Speed card, `options.speed`, a Normal game being played as Master in the arcade; TGM1: Master or 20G; ACE: one
-  of its five modes, and its Rule card), no grade, roll, exams, 15-minute speed-up or level stop. Both sides deal the same
+- Each side at its mode's speed with its levels and score (TGM3: Master's tables without COOLs or REGRETs; TAP: Master,
+  Death or TGM+ (with its rising pattern, as in single play), the Speed card, `options.speed`; every TAP mode can be
+  played in versus, Normal as Master; TGM1: Master or 20G; ACE: one of its five modes, and its Rule card), no grade, roll, exams, 15-minute speed-up or level stop. Both sides deal the same
   pieces (the rule set's randomizer from the match seed; ACE's `BagRandomizer` never starts with S, Z or O).
 - A round: reaching the goal first wins (`TGM_VS_LEVEL_GOAL`, level 200; the rows collapse and the game ends with LEVEL
   200), topping out loses, and when 2:40 runs out (`TGM_VS_FRAMES`, TIME counts down; TIME UP) the higher level wins.
@@ -567,18 +568,23 @@ settles is listed as an assumption below.
 - TGM3's styles (the Style card, `options.style`, `TGM3_VS_STYLES`; tetris.wiki's TGM3 page): Attack sends extra copies of
   the top garbage row (one for a double or triple, two for a Tetris) and gets an item every 40 pieces; Defence sends one
   row less and deletes as many rows from the bottom of its own stack (`defenceRows`, after the clear), an item every 20;
-  Item an item every 10. Heboris has the same three (and a NORMAL of its own).
+  Item an item every 10. Heboris has the same three (and a NORMAL of its own). TGM3's (and ACE's, "like TGM3") attack
+  items go off with the clear itself (`itemsAtClear`, `fireItems(true)`; the others after it), a piece entering with IHS
+  doesn't fill the gauge, and a held item piece loses its item (tetris.wiki).
 - Items (the Items card, Off at first; TGM1, TAP, TGM3, ACE): every piece fills the gauge, and after `VS_ITEM_PIECES`
   (20) the next carries an item (the guide: the 21st piece; Heboris: `item_interval` 20; `itemGauge`, `nextItem`,
-  `pieceItem`, kept through the hold, `heldItem`). They come from a bag per round with one of each, drawn by TAP's weights
+  `pieceItem`). They come from a bag per round with one of each, drawn by TAP's weights
   without replacement (`VS_ITEM_WEIGHTS`, the guide's table; `drawItem()`, refilled when empty). A clear that takes item
-  blocks sets off the highest (the rightmost in its row) and turns the field's other item blocks normal (the guide;
+  blocks sets off the highest (the rightmost in its row) and turns the field's other item blocks normal, the one in the
+  preview too (the guide;
   `collectItems()`, `fireItems()`, `useItem()`, RuleGame's, which TAP Normal's two items use too). For the side setting it
   off: Free Fall (its rows clear and 2+ of them go to the other side as garbage with one hole, the guide and Heboris), Del
   Even, ↑ / ↓ Del Field, ← / → Mov Field; for the other side, at once (`receiveItem()`), knocking its piece in play out (a
-  snipe; the next comes `VS_SNIPE_DELAY` frames later, Heboris's wait), or after the clear it is in: Mirror Block (the
-  field turned left to right now and after each of its next two pieces, `mirrorPieces`, as Heboris), Shotgun!, Laser,
-  Nega Field, 180° Field. TGM1's set has no Mirror Block (TAP added it, tetris.wiki). Items that change only what a player
+  snipe, not in ARE; the next comes `VS_SNIPE_DELAY` frames later, Heboris's wait), or after the clear it is in: Mirror
+  Block (the field turned left to right now and after each of its next two pieces, `mirrorPieces`), Shotgun! (a random
+  column in every row of the stack, a miss on an empty cell), Laser (a column), Nega Field (blocks and holes swapped up
+  to the stack's top), 180° Field (the top row swapped with the bottom one, and so on). The Del Fields take half the
+  stack, rounded up. TGM1's set has no Mirror Block (TAP added it, tetris.wiki). Items that change only what a player
   sees (X-Ray, Dark Block, Color Block), the piece in play (Roll Roll, Death Block, Hard Block, Transform) or swap fields
   (Exchg Field) aren't there. Item draws come from the match seed (`seedVersus()`, `random()`).
 - Stats: LEVEL (/ 200; TGM1's plain), TIME, SENT, SCORE; ACE: LINES (/ 20), TIME, SENT, LEVEL; TGM3's mode line names the
@@ -586,7 +592,9 @@ settles is listed as an assumption below.
 
 ### GB versus
 - Sources: tetris.wiki *Tetris (Game Boy)*, StrategyWiki, and the disassembly (above). The same pieces (`GbRandomizer`
-  from the match seed) over the same garbage (the Height card, B-Type's rows), at level 1's speed without level-ups
+  from the match seed) over the same garbage: one pattern of 10 rows, each side keeping its own height's rows of it from the
+  bottom (the two Height cards: "each player can configure their starting height"; the other side's is
+  `options.height2`), at level 1's speed without level-ups
   (`GB_VS_LEVEL`; the Heart card adds 10 levels, as the GB's hard mode does). A double sends 1 line, a triple 2, a Tetris 4
   (`GB_VS_LINES`), grey rows with their hole in one column both sides share for the round (`vsHole`): the GB takes it from
   a piece (L or Z: column 6, J or T 4, I 8, O 2, S 10, counted from 1; `GB_VS_HOLES`), so it is always an even one. It rises
@@ -851,8 +859,10 @@ settles is listed as an assumption below.
   clears fill it), TGM3 and ACE; TGM3's default style (Attack first here: the arcade lets each player choose); Defence's
   deleted rows taken from the bottom of the stack after the clear; TGM3's items going off with the clear's end like TAP's
   (the wiki: at once in TGM3); the GB hole's piece drawn from the match seed (the GB takes the last of its 256-piece list);
-  GB garbage pushed out of the top lost, as in TAP; one Height card for both GB sides (each player sets their own on the
-  GB); the Guideline's perfect clear +10 (tetris.wiki *Garbage*; NullpoMino gives +6).
+  GB garbage pushed out of the top lost, as in TAP; the GB's starting rows taken from the bottom of its pattern; the
+  snipe's wait (Heboris's 60 frames: the arcade shows a cut-in); attack items take effect at once rather than over their
+  animation (the guide: Mirror Block's three flips and the meter not charging while an attack runs); TAP's Cement Mode
+  (no garbage) and the service menu's other goals aren't there; the Guideline's perfect clear +10 (tetris.wiki *Garbage*; NullpoMino gives +6).
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's. TGM3's DAS
   freezes are taken as TAP's (the wiki doesn't know them).
@@ -909,7 +919,7 @@ export names explicitly at the top; add new globals there, and new rule files to
   modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master"
   (Versus against the bot is Multiplayer → Versus Bot: Rules card (Guideline, TGM1, TAP, TGM3, ACE, NES, GB; the user's
   request), under it the rule set's own cards (TGM1's and TAP's Speed, TGM3's Rule and Style, ACE's Rule and Speed, Items
-  for TGM1, TAP, TGM3 and ACE, NES's Level, GB's Height and Heart), then the Bot card Level 0 … Level 10, 6 at first; Versus Player
+  for TGM1, TAP, TGM3 and ACE, NES's Level, GB's heights (each side's) and Heart), then the Bot card Level 0 … Level 10, 6 at first; Versus Player
   has the same cards but the Bot's);
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,
   Mono and Ghost cards), TGM3's are
