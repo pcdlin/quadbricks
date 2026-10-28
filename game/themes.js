@@ -76,9 +76,20 @@ function spaceMoon(g) {
         g.fillStyle = sea;
         g.fillRect(mx - mr, my - mr, mr * 2, mr * 2);
     }
-    for (let i = 0; i < 16; i++) { // craters, smaller ones more common
-        const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * r * 0.9;
-        const cx = x + Math.cos(a) * d, cy = y + Math.sin(a) * d, cr = 1 + Math.pow(rnd(), 2) * r * 0.22;
+    // craters, smaller ones more common, placed largest first, each inside the disc and clear of the others
+    const sizes = Array.from({ length: 9 }, () => 1 + Math.pow(rnd(), 2) * r * 0.22).sort((p, q) => q - p);
+    const craters = [];
+    for (const cr of sizes) {
+        for (let tries = 0; tries < 40; tries++) {
+            const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * (r - cr - 1);
+            const cx = x + Math.cos(a) * d, cy = y + Math.sin(a) * d;
+            if (craters.every(c => Math.hypot(cx - c.cx, cy - c.cy) > cr + c.cr + 2)) {
+                craters.push({ cx, cy, cr });
+                break;
+            }
+        }
+    }
+    for (const { cx, cy, cr } of craters) {
         g.fillStyle = "rgba(55,64,85,0.35)";
         g.beginPath();
         g.arc(cx, cy, cr, 0, Math.PI * 2);
