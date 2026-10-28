@@ -1669,10 +1669,12 @@ function tgmVersus(Base) {
         }
 
         // The goal level (options.goal, TAP and TGM3: 100 to 900 in steps of 100, 200 by default) and
-        // the time limit that goes with it
+        // the time limit that goes with it. A handicap takes at most half the way to it (Goal 100 with a start at
+        // 100 would win the round on the first lock)
         setGoal(goal = TGM_VS_LEVEL_GOAL) {
             const level = clamp(Math.round(goal / TGM_VS_GOAL_STEP) * TGM_VS_GOAL_STEP, TGM_VS_GOAL_STEP, TGM_VS_GOAL_MAX);
             this.maxLevel = level;
+            this.level = Math.min(this.level, level / 2);
             this.versusFrames = TGM_VS_FRAMES + (level - TGM_VS_LEVEL_GOAL) / TGM_VS_GOAL_STEP * TGM_VS_STEP_FRAMES;
         }
 

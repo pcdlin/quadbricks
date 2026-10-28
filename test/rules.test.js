@@ -2991,6 +2991,11 @@ const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c))
     const [p1, p2] = handicapped(tgmTap, { handicap: { side: 1, levels: 100 } }), [d1, d2] = handicapped(tgmTap, { handicap: { side: 0, levels: 50 }, speed: "death" });
     check("Versus Handicap: the side it names starts at its level, with that level's speed (TAP Master, Death)",
         [p1.level, p2.level, p2.gravity > p1.gravity, d1.level, d2.level], [0, 100, true, 50, 0]);
+    const [g1] = handicapped(tgmTap, { handicap: { side: 0, levels: 100 }, goal: 100 });
+    for (let f = 0; f < 200 && g1.phase !== "active"; f++) g1.advanceFrame(0);
+    g1.lock();
+    check("  ...at most half the way to the goal (Goal 100: a start at 100 starts at 50, no round won on the first lock)",
+        [g1.level >= 50 && g1.level < 100, g1.isGameOver()], [true, false]);
 }
 {
     const [a, b] = versusPair(tgmClassic);
