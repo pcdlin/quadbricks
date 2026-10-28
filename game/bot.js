@@ -23,9 +23,7 @@
 // Left out: building for T-spin triples and minis (tried, see AGENTS.md: no gain), finesse.
 
 const BOT_ROWS = HEIGHT - FIELD_TOP;
-// Bit-row boards are as wide as the game's well (botSetWidth(), at each input: TAP Doubles' is 14)
-let BOT_W = WIDTH;
-let BOT_FULL = (1 << WIDTH) - 1;
+const BOT_FULL = (1 << WIDTH) - 1;
 
 // One level of proficiency: reaction (frames after a piece appears before the first input),
 // interval (frames per action), das (long moves by DAS), hard (share of pieces it hard or sonic
@@ -74,7 +72,7 @@ const BOT_DANGER = -1e6;         // the next piece could not enter
 
 const BOT_TMAX = 240;            // frames the explorer looks ahead
 const BOT_MAXN = 9000;           // explorer nodes
-const BOT_COLS = 32, BOT_COL_OFF = 8; // explorer columns, -8 to 23
+const BOT_COLS = 28, BOT_COL_OFF = 8;
 const BOT_DAS_MIN = 4;           // moves in a row that are worth a held key
 const BOT_ITEM_LEVEL = 3;        // levels from which the bot values versus items
 const BOT_SNIPE_LEVEL = 7, BOT_SNIPE_WAIT = 90; // and times its attack items (frames it waits at most)
@@ -137,7 +135,7 @@ function botBoardFrom(game, rows) {
     for (let i = 0; i < BOT_ROWS; i++) {
         const line = game.field[i];
         let m = 0;
-        for (let c = 0; c < BOT_W; c++) if (line[c] !== 0) m |= 1 << c;
+        for (let c = 0; c < WIDTH; c++) if (line[c] !== 0) m |= 1 << c;
         rows[i] = m;
     }
 }
@@ -178,7 +176,7 @@ function botShapes(game) {
 function botFits(game, rows, cells, row, col) {
     for (let k = 0; k < cells.length; k++) {
         const r = row + cells[k][0], c = col + cells[k][1];
-        if (c < 0 || c >= BOT_W || r >= HEIGHT || r < game.pieceTop || (rows[r - FIELD_TOP] >> c & 1)) return false;
+        if (c < 0 || c >= WIDTH || r >= HEIGHT || r < game.pieceTop || (rows[r - FIELD_TOP] >> c & 1)) return false;
     }
     return true;
 }
@@ -214,7 +212,7 @@ function botLock(src, dst, cells, row, col) {
 // Versus garbage the bot is told is waiting (the meter beside the well) rises when it locks a
 // piece (without clearing, in the Guideline). Where its holes will be isn't shown, so the bot counts the rows as solid
 // ones that never clear: a bit beside the well (BOT_GARBAGE_BIT) keeps them from ever being full.
-let BOT_GARBAGE_BIT = 1 << WIDTH;
+const BOT_GARBAGE_BIT = 1 << WIDTH;
 
 // Rows of garbage rise under the board; returns false when blocks are pushed above the highest row
 // a block may be in (lost there, where that doesn't top out)
@@ -261,7 +259,7 @@ function botItemCleared(game, rows, cells, row, col) {
     }
     for (const r of [...full.keys()].sort((a, b) => a - b)) {
         if ((full.get(r) & BOT_FULL) !== BOT_FULL) continue;
-        for (let c = BOT_W - 1; c >= 0; c--) {
+        for (let c = WIDTH - 1; c >= 0; c--) {
             const mine = cells.some(([i, j]) => row + i === r && col + j === c);
             const item = mine ? game.pieceItem : game.getCellItem(r, c);
             if (item) return item;
@@ -301,7 +299,7 @@ function botJewelsCleared(game, rows, cells, row, col) {
     let n = 0;
     for (const [r, mask] of full) {
         if ((mask & BOT_FULL) !== BOT_FULL) continue;
-        for (let c = 0; c < BOT_W; c++) if (game.getCellItem(r, c) === "JEWEL") n++;
+        for (let c = 0; c < WIDTH; c++) if (game.getCellItem(r, c) === "JEWEL") n++;
     }
     return n;
 }
@@ -322,17 +320,7 @@ function botBlocked(game, rows, type) {
     return false;
 }
 
-let botHeight = new Int32Array(WIDTH), botCount = new Int32Array(WIDTH);
-
-// The boards' width: the game's
-function botSetWidth(width) {
-    if (width === BOT_W) return;
-    BOT_W = width;
-    BOT_FULL = (1 << width) - 1;
-    BOT_GARBAGE_BIT = 1 << width;
-    botHeight = new Int32Array(width);
-    botCount = new Int32Array(width);
-}
+const botHeight = new Int32Array(WIDTH), botCount = new Int32Array(WIDTH);
 
 // How good a board is (not counting the move that led to it); with `tslot` weights, a T-spin double
 // slot counts as filled by the T it waits for, plus the slot's credit
@@ -355,7 +343,7 @@ function botTslot(rows, out) {
     let best = -1, bestY = 0, bestC = 0;
     for (let y = Math.max(top + 1, 2); y < BOT_ROWS; y++) {
         const below = rows[y] & BOT_FULL, mid = rows[y - 1] & BOT_FULL, over = rows[y - 2] & BOT_FULL;
-        for (let c = 1; c < BOT_W - 1; c++) {
+        for (let c = 1; c < WIDTH - 1; c++) {
             const L = 1 << (c - 1), C = 1 << c, R = 1 << (c + 1);
             if ((below & (L | C | R)) !== (L | R) || (mid & (L | C | R)) || (over & C)) continue;
             const ol = over & L, or = over & R;
@@ -387,7 +375,7 @@ function botShapeScore(rows, w) {
     if (top === BOT_ROWS) return 0;
     botHeight.fill(0);
     botCount.fill(0);
-    const well = w.edgeWell && !w.fast && BOT_ROWS - top <= BOT_TETRIS_MAX_STACK ? 1 << (BOT_W - 1) : 0;
+    const well = w.edgeWell && !w.fast && BOT_ROWS - top <= BOT_TETRIS_MAX_STACK ? 1 << (WIDTH - 1) : 0;
     let rowTrans = 0, colTrans = 0, holes = 0, holeDepth = 0, holeRows = 0, covered = 0, prev = 0;
     for (let r = top; r < BOT_ROWS; r++) {
         const bits = rows[r] & BOT_FULL; // without the garbage marker
@@ -407,9 +395,9 @@ function botShapeScore(rows, w) {
     }
     colTrans += botPop(BOT_FULL ^ prev); // the floor
     let wells = 0;
-    for (let c = 0; c < BOT_W; c++) {
-        if (w.edgeWell && c === BOT_W - 1) continue;
-        const left = c > 0 ? botHeight[c - 1] : 99, right = c < BOT_W - 1 ? botHeight[c + 1] : 99;
+    for (let c = 0; c < WIDTH; c++) {
+        if (w.edgeWell && c === WIDTH - 1) continue;
+        const left = c > 0 ? botHeight[c - 1] : 99, right = c < WIDTH - 1 ? botHeight[c + 1] : 99;
         const d = Math.min(left, right) - botHeight[c];
         if (d > 0) wells += d * (d + 1) / 2;
     }
@@ -477,7 +465,7 @@ function botDrops(game, rows, type, shapes, fn) {
     for (const shape of shapes[type]) {
         let first = spawn[1];
         while (first - step >= -shape.minJ) first -= step;
-        for (let col = first; col + shape.maxJ < BOT_W; col += step) {
+        for (let col = first; col + shape.maxJ < WIDTH; col += step) {
             let row = spawn[0];
             if (!botFits(game, rows, shape.cells, row, col)) continue;
             while (botFits(game, rows, shape.cells, row + 1, col)) row++;
@@ -674,7 +662,6 @@ class Bot {
 
     // The input bitmap for the game's next frame
     input(game) {
-        botSetWidth(game.width);
         if (game !== this.game || !this.weights) this.attach(game, game === this.game);
         for (const [k] of BOT_KEYS) this.want[k] = 0;
         this.hard = false;
@@ -720,7 +707,7 @@ class Bot {
             this.preDas = null;
             if (charged) { // DAS charged in the entry delay: keep the key held until the piece is at the wall
                 this.macro = { kind: "das", dir: charged.dir, stop: charged.col, start: game.curPiece_col, frames: 0,
-                    limit: game.das + BOT_W * Math.max(1, game.arr) + 12 };
+                    limit: game.das + WIDTH * Math.max(1, game.arr) + 12 };
                 this.want[charged.dir] = 1;
                 this.wait = 0;
             }
@@ -820,7 +807,7 @@ class Bot {
         if (!this.chargesInAre(game) || choice.col === undefined || choice.start !== choice.rot) return null;
         const cells = game.curCells[type][choice.rot], cols = cells.map(([, j]) => j);
         const spawn = (game.big ? game.bigSpawnPosition(type) : game.spawnPosition(type))[1];
-        const dir = choice.col + Math.min(...cols) === 0 ? -1 : choice.col + Math.max(...cols) === BOT_W - 1 ? 1 : 0;
+        const dir = choice.col + Math.min(...cols) === 0 ? -1 : choice.col + Math.max(...cols) === WIDTH - 1 ? 1 : 0;
         if (!dir || Math.abs(choice.col - spawn) < BOT_DAS_MIN) return null;
         return { dir: dir < 0 ? "left" : "right", col: choice.col };
     }

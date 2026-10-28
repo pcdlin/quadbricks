@@ -386,7 +386,7 @@ const THEMES = {
             drawBrackets(r, x, y, w, h, 18, 2, exam ? goldAlpha(0.9) : SPACE_BRACKET);
             // a dot at each inner grid corner, a tick every five rows down the left
             const rows = e.boardH / CELL;
-            for (let c = 1; c < BOARD_W / CELL; c++) {
+            for (let c = 1; c < WIDTH; c++) {
                 for (let row = 1; row < rows; row++) r.rect(BOARD_X + c * CELL - 1, e.boardY + row * CELL - 1, 2, 2, "rgba(120,210,255,0.1)");
             }
             for (let row = 0; row <= rows; row += 5) r.rect(x - 9, e.boardY + row * CELL, 5, 1, "rgba(140,220,255,0.5)");
@@ -506,7 +506,7 @@ const THEMES = {
             r.rect(x, y, w, h, [6 / 255, 6 / 255, 7 / 255, e.options.effects ? LINES_WELL_ALPHA : 0.94]); // the lines show faintly through
             r.shape(x, y, w, h, { radius: 0, stroke: exam ? goldAlpha(0.6 + 0.35 * e.pulse) : LINES_RULE, lineWidth: 1 });
             const rows = e.boardH / CELL;
-            for (let c = 1; c < BOARD_W / CELL; c++) {
+            for (let c = 1; c < WIDTH; c++) {
                 for (let row = 1; row < rows; row++) r.rect(BOARD_X + c * CELL - 0.5, e.boardY + row * CELL - 0.5, 1, 1, "rgba(242,242,242,0.16)");
             }
         },

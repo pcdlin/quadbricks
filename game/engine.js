@@ -300,36 +300,25 @@ function menuListHeight(items, rowH, gap) {
 const VIEW_W = 800;
 const VIEW_H = 720;
 const CELL = 30;
-// The well: BOARD_X and BOARD_W are the standard 10-wide one's; a wider one (TAP Doubles: 14 columns) is
-// centred on it, the side panels beside it (setBoardWidth(), from the game's width in layoutBoard())
-const BOARD_X0 = 250;
-let BOARD_X = BOARD_X0;
+const BOARD_X = 250;
 const BOARD_Y = 70; // the standard 20-row well; a shorter one (GB) is centred on it (boardY, boardH)
-let BOARD_W = CELL * WIDTH;
+const BOARD_W = CELL * WIDTH;
 const BOARD_H = CELL * (HEIGHT - VISIBLE_TOP);
 const SIDE_W = 170;
-let LEFT_X = BOARD_X - 30 - SIDE_W;
-let RIGHT_X = BOARD_X + BOARD_W + 30;
+const LEFT_X = BOARD_X - 30 - SIDE_W;
+const RIGHT_X = BOARD_X + BOARD_W + 30;
 // The compact layout (touch devices, narrow windows) crops the view to the well with a narrow column
 // each side: HOLD over the stats on the left, NEXT on the right; clear messages show over the well
 const COMPACT_SIDE_W = 72;
 const COMPACT_GAP = 10; // between the well's frame and a column
 const COMPACT_GAIN = 1.2; // without touch: used when it shows the well at least this much bigger
 // view: the part of the logical view [x, y, w, h] fitted to the window
-// (a wider well widens the full view to keep its panels in)
-let LAYOUT_FULL, LAYOUT_COMPACT;
-function setBoardWidth(cols) {
-    BOARD_W = CELL * cols;
-    BOARD_X = BOARD_X0 + (CELL * WIDTH - BOARD_W) / 2;
-    LEFT_X = BOARD_X - 30 - SIDE_W;
-    RIGHT_X = BOARD_X + BOARD_W + 30;
-    const x0 = Math.min(0, LEFT_X - 10);
-    LAYOUT_FULL = { compact: false, view: [x0, 0, VIEW_W - 2 * x0, VIEW_H], leftX: LEFT_X, rightX: RIGHT_X, sideW: SIDE_W };
-    const leftX = BOARD_X - 8 - COMPACT_GAP - COMPACT_SIDE_W, cx0 = leftX - 12;
-    LAYOUT_COMPACT = { compact: true, view: [cx0, 24, VIEW_W - 2 * cx0, BOARD_Y + BOARD_H + 16 - 24],
+const LAYOUT_FULL = { compact: false, view: [0, 0, VIEW_W, VIEW_H], leftX: LEFT_X, rightX: RIGHT_X, sideW: SIDE_W };
+const LAYOUT_COMPACT = (() => {
+    const leftX = BOARD_X - 8 - COMPACT_GAP - COMPACT_SIDE_W, x0 = leftX - 12;
+    return { compact: true, view: [x0, 24, VIEW_W - 2 * x0, BOARD_Y + BOARD_H + 16 - 24],
         leftX, rightX: BOARD_X + BOARD_W + 8 + COMPACT_GAP, sideW: COMPACT_SIDE_W };
-}
-setBoardWidth(WIDTH);
+})();
 const METER_W = 6, METER_GAP = 2; // garbage meter beside a well's frame (clear of the compact layout's column)
 // Versus (two players, or a player and the bot): both board groups (well, panels, meter) whole and the same size, side by side about
 // the view's centre; duo.gx: where each player's group is drawn (translated in x). Each field is the
@@ -1028,14 +1017,10 @@ class Engine {
 
     // The well's rows (wellTop to the bottom) set the board's height; a shorter well than the
     // standard 20 rows is centred where those would be, and the side panels follow it
-    // returns whether the well's width changed (the view is then fitted again)
-    layoutBoard(wellTop, cols = WIDTH) {
-        const widened = BOARD_W !== CELL * cols;
-        if (widened) setBoardWidth(cols);
+    layoutBoard(wellTop) {
         this.wellTop = wellTop;
         this.boardH = CELL * (HEIGHT - wellTop);
         this.boardY = BOARD_Y + (BOARD_H - this.boardH) / 2;
-        return widened;
     }
 
     // The main menu's items: Continue and Restart come first while there is a game
@@ -1075,10 +1060,10 @@ class Engine {
             : this.newMatch(mode, startLevel, height, gameOptions, options.bot ?? BOT_VERSUS_LEVEL);
         if (this.match) [this.game.rival, this.match.view.game.rival] = [this.match.view.game, this.game];
         this.rev = this.game.rev; // the well drawn upside down (cellY)
-        const widened = this.layoutBoard(this.game.wellTop, this.game.width);
+        this.layoutBoard(this.game.wellTop);
         this.clearEffects();
-        // the view widens for the other board or a wider well, or back; the boards take their places
-        if (hadMatch !== !!this.match || widened) this.resize();
+        // the view widens for the other board, or back; the boards take their places
+        if (hadMatch !== !!this.match) this.resize();
         else this.placeBoards();
         this.newTiltWaves();
         this.flySide = Math.random() < 0.5 ? -1 : 1; // which way the field comes in turned
@@ -1857,7 +1842,7 @@ class Engine {
             const [y0, y1] = this.trailYs(Math.max(i, top), i + game.getDropOffset(i, this.tickPhase));
             if (this.rev ? y0 <= y1 : y0 >= y1) continue;
             const yEnd = y1 + depth, streaks = [];
-            for (let j = 0; j < game.width; j++) {
+            for (let j = 0; j < WIDTH; j++) {
                 const cell = game.getCell(i, j);
                 if (!cell || game.getCellAlpha(i, j) <= 0) continue;
                 if (i > firstRow && game.getCell(i - 1, j) && game.getDropDistance(i - 1) === dist) continue; // not the run's top
@@ -2940,7 +2925,7 @@ class Engine {
 
             // Well grid
             const grid = "rgba(160,170,255,0.06)";
-            for (let c = 1; c < game.width; c++) r.rect(BOARD_X + c * CELL, this.boardY, 1, this.boardH, grid);
+            for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL, this.boardY, 1, this.boardH, grid);
             for (let row = 1; row < HEIGHT - this.wellTop; row++) r.rect(BOARD_X, this.boardY + row * CELL, BOARD_W, 1, grid);
         }
 
@@ -2968,7 +2953,7 @@ class Engine {
         }
         for (let i = firstRow; i < HEIGHT; i++) {
             const y = this.cellY(i + game.getDropOffset(i, this.tickPhase)); // rows fall into place during a line clear
-            for (let j = 0; j < game.width; j++) {
+            for (let j = 0; j < WIDTH; j++) {
                 const alpha = game.getCellAlpha(i, j); // TGM3 and TAP staff roll: blocks fade or vanish
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
@@ -2979,7 +2964,7 @@ class Engine {
         // their lights after them, in one go (one blend mode and texture for the whole stack)
         for (let i = firstRow; i < HEIGHT; i++) {
             const y = this.cellY(i + game.getDropOffset(i, this.tickPhase));
-            for (let j = 0; j < game.width; j++) {
+            for (let j = 0; j < WIDTH; j++) {
                 const alpha = game.getCellAlpha(i, j);
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
@@ -3030,11 +3015,11 @@ class Engine {
         const r = this.r, game = this.board.game, w = STACK_BORDER_W, c = STACK_BORDER_COLOR;
         // empty beside a block of a row drawn at offset off: inside the well with nothing visible
         // there (or a block of a row falling apart from it); above the drawn rows counts as empty
-        const open = (i, j, off) => j >= 0 && j < game.width && i < HEIGHT &&
+        const open = (i, j, off) => j >= 0 && j < WIDTH && i < HEIGHT &&
             (i < firstRow || !game.getCell(i, j) || game.getCellAlpha(i, j) <= 0 || game.getDropOffset(i, this.tickPhase) !== off);
         for (let i = firstRow; i < HEIGHT; i++) {
             const off = game.getDropOffset(i, this.tickPhase), y = this.cellY(i + off);
-            for (let j = 0; j < game.width; j++) {
+            for (let j = 0; j < WIDTH; j++) {
                 if (open(i, j, off)) continue;
                 const x = this.cellX(j);
                 r.globalAlpha = game.getCellAlpha(i, j);

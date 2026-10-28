@@ -226,8 +226,6 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   stack waits `LINE_DROP_PAUSE` frames so the confetti shows first (less if the delay can't fit the
   longest fall after it), then falls into the cleared rows at `LINE_DROP_SPEED` rows per frame, faster if the delay is shorter,
   with a trail, `drawLineDropTrails()`; the field itself collapses when the delay ends).
-- `width`: the well's columns (`WIDTH`, 10, but for TAP Doubles' 14), which the field, collision and the engine's drawing
-  and the bot's boards (`botSetWidth()`) follow.
 - `shapes`, `pieceCells` (`shapeCells(shapes)`: `[type][rotation]` → `[row, col]` offsets, what the
   rules and the engine iterate) and `palette` (piece type → colour index) per rule set; `nextCount` (TGM1, TAP, NES and GB: 1, so the
   engine draws no list under the first next piece); `hasHold` (no HOLD box when false);
@@ -352,9 +350,7 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   The cache is cleared on resize and when a web font finishes loading. `measureText()` uses
   a separate 2D context.
 - Logical view 800×720, scaled to the window and drawn at device pixel ratio; the
-  backdrop fills letterbox areas. Board at x=250, y=70, 30 px cells (`BOARD_*` constants;
-  a wider well, `game.width` columns, is centred on the standard one and widens the view: `setBoardWidth()` from
-  `layoutBoard()`, which sets `BOARD_X`, `BOARD_W`, `LEFT_X`, `RIGHT_X` and the layouts). The
+  backdrop fills letterbox areas. Board at x=250, y=70, 30 px cells (`BOARD_*` constants). The
   engine draws with `boardY`/`boardH`/`wellTop` set per game by `layoutBoard()`: a shorter well (GB's
   18 rows) is centred on the 20-row one, and HOLD/NEXT, banners, glow and the wordmark follow it; the
   stats keep the standard position so five rows still clear the wordmark. Rev (`game.rev`, TGM1's hidden
