@@ -4,7 +4,7 @@
 const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
-const BOT_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js", "rules-doubles.js", "bot.js"];
+const BOT_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js", "bot.js"];
 vm.runInThisContext(BOT_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
     "\n;Object.assign(globalThis, {createGame, Bot, BOT_LEVELS, BOT_ROWS, WIDTH, BotExplorer, botShapes, botDrops, botLock, botDead, botItemCleared, VS_ITEMS, VS_CUTIN_FRAMES, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, HEIGHT, WIDTH, FIELD_TOP, tetI, tetT, tetO, tetS, tetZ, tetL, tetJ});");
 
@@ -215,22 +215,6 @@ for (const [name, mode, variant] of MODES) {
     while (!g.isGameOver() && g.cleared < 3 && frames < 60 * 60 * 6) { g.advanceFrame(bot.input(g)); frames++; }
     check(`TGM3 Sakura: level 10 clears stages (${g.cleared} of ${g.tried} by stage ${g.stageName()}, ${(frames / 60).toFixed(0)} s)`, g.cleared >= 3,
         JSON.stringify({ stage: g.stageName(), tried: g.tried, title: g.endTitle }));
-}
-
-{
-    // TAP Doubles: two bots in the one well, each keeping to its half, neither stuck behind the other's piece
-    seeded(13);
-    const a = createGame(tgmTap, "doubles"), b = a.partner, bots = [new Bot(8, 1), new Bot(8, 2)];
-    let frames = 0, stuck = false;
-    while (!a.isGameOver() && frames < 60 * 60 * 2) {
-        a.advanceFrame(bots[0].input(a));
-        b.advanceFrame(bots[1].input(b));
-        for (const g of [a, b]) if (g.curPiece_type && g.activeTime > 600) stuck = true;
-        if (stuck) break;
-        frames++;
-    }
-    check(`TAP Doubles: two level 8 bots play together (${(frames / 60).toFixed(0)} s, levels ${a.level} / ${b.level}, lines ${a.lines} / ${b.lines})`,
-        !stuck && a.lines + b.lines > 0, JSON.stringify({ frames, stuck, title: a.endTitle }));
 }
 
 // ---------------------------------------------------------------- versus

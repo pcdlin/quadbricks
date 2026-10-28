@@ -4,7 +4,7 @@ const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
-const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js", "rules-doubles.js"];
+const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
     "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY, TGM_VS_FRAMES, TGM1_VS_FRAMES, VS_ITEM_PIECES, VS_ITEMS, VS_CUTIN_FRAMES, TGM_VS_GARBAGE_MAX});");
 
@@ -2204,50 +2204,6 @@ function startedMode(mode, variant) {
     g.rollFrames = g.rollLength - 1;
     g.advanceFrame(0);
     check("  ...surviving it: EXCELLENT, 24 more and the ones still waiting", [g.endTitle, g.hanabi - before], ["EXCELLENT", 29]);
-}
-
-// ---------------------------------------------------------------- TAP Doubles
-{
-    const doubles = () => {
-        const a = createGame(tgmTap, "doubles"), b = a.partner;
-        for (let f = 0; f < 200 && (a.phase !== "active" || b.phase !== "active"); f++) { a.advanceFrame(0); b.advanceFrame(0); }
-        return [a, b];
-    };
-    const [a, b] = doubles();
-    check("TAP Doubles: one well 14 wide for both players, each piece entering over its player's half",
-        [a.width, b.field === a.field, a.curPiece_col, b.curPiece_col, a.getStats().map(r => r[0])],
-        [14, true, 2, 9, ["TGM2 TAP", "P1 LEVEL", "P2 LEVEL", "TIME", "SCORE"]]);
-    // the partner's piece is solid: P1's I can't shift into it
-    const [c, d] = doubles();
-    c.gravity = d.gravity = 0;
-    place(c, tetI, 0, 10, 3); // horizontal I in columns 3-6
-    place(d, tetO, 0, 10, 6); // ARS O in columns 7-8
-    c.advanceFrame(RIGHT_PUSH);
-    check("  ...the partner's piece in play is solid", [c.curPiece_col, c.blocked(11, 7), c.blocked(11, 9)], [3, true, false]);
-}
-{
-    // a clear is the clearing player's; the partner's clear waiting to collapse follows the rows that fall
-    const a = createGame(tgmTap, "doubles"), b = a.partner;
-    for (let f = 0; f < 200 && (a.phase !== "active" || b.phase !== "active"); f++) { a.advanceFrame(0); b.advanceFrame(0); }
-    clearField(a);
-    for (let c = 0; c < 14; c++) if (c !== 0) a.setCell(21, c, 1);
-    b.curPiece_type = 0;
-    b.setPhase("lineclear", 40);
-    b.pendingRows = [15];
-    place(a, tetI, 1, 18, -2); // vertical I in column 0, rows 18-21
-    a.advanceFrame(SOFT_PUSH);
-    for (let f = 0; f < 60 && a.phase === "lineclear"; f++) a.advanceFrame(0);
-    check("TAP Doubles: a clear counts for the player who made it; the partner's waiting clear follows the rows that fall",
-        [a.lines, b.lines, b.pendingRows, a.getCell(21, 0) !== 0], [1, 0, [16], true]);
-    // both at 300 complete it; topping out ends it for both
-    const [x, y] = [createGame(tgmTap, "doubles"), null];
-    const xp = x.partner;
-    x.level = 300; xp.level = 300;
-    x.afterClear();
-    const z = createGame(tgmTap, "doubles");
-    z.onBlockOut();
-    check("  ...both at level 300 complete the game; one topping out ends it for both",
-        [x.endTitle, xp.endTitle, z.endTitle, z.partner.endTitle], ["COMPLETE", "COMPLETE", "GAME OVER", "GAME OVER"]);
 }
 
 // ---------------------------------------------------------------- TAP TGM+
