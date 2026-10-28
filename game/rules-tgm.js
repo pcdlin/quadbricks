@@ -1675,6 +1675,13 @@ function tgmVersus(Base) {
 
         maxIncoming() { return TGM_VS_GARBAGE_MAX; }
 
+        // Color Block: the stack shimmers through the piece colours, a band per row moving up (the guide:
+        // "shimmer your opponent's stack different colors"; Heboris's rows of colours)
+        getCellColor(row, col) {
+            if (!this.hitting("COLOR BLOCK") || !this.getCell(row, col)) return super.getCellColor(row, col);
+            return 1 + ((row + Math.floor(this.frames / 4)) % 7 + 7) % 7;
+        }
+
         // The goal first; else topping out loses; else, when time is up, a draw (TGM1) or the one
         // further on
         versusOutcome() {

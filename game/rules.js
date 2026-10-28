@@ -70,6 +70,7 @@ const VS_ITEM_PIECES = 20;
 // the other side, and for an attack that lasts: the pieces (locks) or frames it lasts there (itemEffects,
 // itemTimers), brief when the attacker's gauge fills again after its cut-in all the same (the guide)
 const VS_ITEMS = {
+    "COLOR BLOCK": { weight: 250, attack: true, pieces: 3 }, // pieces: Heboris's
     "LASER": { weight: 250, attack: true },
     "↑ DEL FIELD": { weight: 250 },
     "DEL EVEN": { weight: 150 },

@@ -3144,6 +3144,18 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     check("  ...garbage sent during Mirror Block waits for its end, which a perfect clear brings at once", [held, m.mirrorPieces, m.incoming.length], [[0, 2], 0, 1]);
 }
 {
+    // Color Block: the other side's stack shimmers through the piece colours for 3 pieces (Heboris)
+    const [c] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(c);
+    fill(c, ["#######..."]);
+    const plain = c.getCellColor(21, 0);
+    c.receiveGarbage({ item: "COLOR BLOCK" });
+    const colours = new Set(Array.from({ length: 28 }, (_, f) => { c.frames = f; return c.getCellColor(21, 0); }));
+    for (let k = 0; k < 3; k++) c.takeItems();
+    check("Color Block: the other side's stack cycles through the piece colours for its next 3 pieces, then shows its own again",
+        [colours.size, c.getCellColor(21, 0) === plain, c.getCellColor(20, 0)], [7, true, 0]);
+}
+{
     // setting an item off turns the one in the preview normal too; a held item piece loses its item; an IHS piece
     // doesn't fill the gauge; TGM3's attack items go off with the clear
     const [p] = versusPair(tgmTap, 5, 0, { items: true });

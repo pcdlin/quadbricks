@@ -588,6 +588,7 @@ settles is listed as an assumption below.
   `statusClear`). While an attack is active (`attackActive()`: its cut-in, Mirror Block's flips, the pieces or frames an
   item lasts, `itemEffects`) the attacker's gauge doesn't fill and its own items wait (`attacking()`, `waitingItems`; the
   guide). The items, in the guide's table order:
+  - Color Block: the stack shimmers through the piece colours, a band per row, for 3 pieces (Heboris's; `getCellColor()`).
   - Laser: a column deleted.
   - ↑ Del Field: the stack's upper half deleted (half its rows, rounded up, as ↓ Del Field).
   - Del Even: every other row from the bottom deleted (the second, fourth, ...).
