@@ -3155,9 +3155,14 @@ class Engine {
         const step = stats.length > 4 ? 70 : 80; // five rows must still clear the wordmark
         stats.forEach(([name, value], n) => {
             if (n === 0) {
+                // both shrunk to the panel width if needed ("WORLD VS DEFENCE"); the letter spacing doesn't shrink
+                const fit = (s, max) => {
+                    const glyphs = this.measureText(s, max, 800);
+                    return Math.min(max, Math.floor(max * (SIDE_W - (this.measureText(s, max, 800, 3) - glyphs)) / glyphs));
+                };
                 this.label("RULESET", LEFT_X, y, SIDE_W);
-                this.text(name, LEFT_X, y + 32, { size: 20, weight: 800, color: INK, spacing: 3 });
-                this.text(value, LEFT_X, y + 54, { size: 14, weight: 800, color: INK_DIM, spacing: 3 });
+                this.text(name, LEFT_X, y + 32, { size: fit(name, 20), weight: 800, color: INK, spacing: 3 });
+                this.text(value, LEFT_X, y + 54, { size: fit(value, 14), weight: 800, color: INK_DIM, spacing: 3 });
                 y += step + 14; // the mode line takes the extra room
                 return;
             }
