@@ -138,7 +138,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `menuAction()` turns them into arguments). The mode lists use the Visuals screen's
   tighter cards (`VISUALS_ROWS`, as the setup screen does with more than five cards, and with more than six, `SETUP_FIT`, or always for versus (its cards come and go with the Rules card, the list keeps its place and size), in the
   Visuals screen's place, scrolled to keep the selected card in view: `SCROLLED_LISTS`), the rule set list (seven) tighter still, a little higher, with its
-  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds"), `MENU_CONTROLS2` (player 2's, "Keybinds P2"),
+  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds": a column per player, ← → choosing one (`controlscol`), `drawBindings()` with two columns; player 2's sound row reads SHARED; the last row resets the column's player; the user's request),
   `MENU_GAMEPAD` (gamepad bindings), `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
 - Visuals and Guideline handling are setting screens (`SETTING_ITEMS`: `VISUAL_ITEMS`, `HANDLING_ITEMS`),

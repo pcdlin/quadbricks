@@ -21,8 +21,8 @@ const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELE
 
 // Menu screens
 const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8, MENU_QUICK = 9,
-    MENU_SINGLE = 10, MENU_MULTI = 11, MENU_JOIN = 12, MENU_CONTROLS2 = 13;
-const MENU_DEPTH = [0, 2, 3, 1, 2, 2, 2, 4, 2, 2, 1, 1, 2, 2];   // by screen; deeper = slide in from the right
+    MENU_SINGLE = 10, MENU_MULTI = 11, MENU_JOIN = 12;
+const MENU_DEPTH = [0, 2, 3, 1, 2, 2, 2, 4, 2, 2, 1, 1, 2];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
 const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", accent: tetI, resume: true };
@@ -227,8 +227,7 @@ const QUICK_PLAY = [
     { name: "NES A-Type", ruleset: "NES", mode: "A-Type", accent: tetJ, desc: "From level 0, faster every 10 lines" },
 ].map(item => ({ ...item, modeItem: RULESETS.find(r => r.name === item.ruleset).modes.find(m => m.name === item.mode) }));
 const OPTIONS_ITEMS = [
-    { name: "Keybinds", desc: "Change key bindings (player 1)", accent: tetS, screen: MENU_CONTROLS },
-    { name: "Keybinds P2", desc: "Player 2's keys, for two players on one keyboard", accent: tetZ, screen: MENU_CONTROLS2 },
+    { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS },
     { name: "Gamepad", desc: "Change each gamepad's buttons", accent: tetI, screen: MENU_GAMEPAD },
     { name: "Visuals", desc: "Block style, scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
@@ -576,6 +575,7 @@ class Engine {
         this.joined = [];     // join screen: the input devices picked so far, player 1's first (deviceName())
         this.duoDevices = []; // the two-player game's devices
         this.controlspos = 0; // key action, or "reset" after the last one
+        this.controlscol = 0; // the player whose keys it is: 0 or 1
         this.capturing = null; // action waiting for a new key (for capturingPlayer's keys, 1 or 2)
         this.capturingPlayer = 1;
         this.padpos = 0;      // the gamepad chosen, then its actions (from 1), then "reset" after the last one
@@ -1362,7 +1362,6 @@ class Engine {
             [MENU_MODES]: { pos: "menupos", count: () => RULESETS[this.rulesetpos].modes.length, back: MENU_RULES },
             [MENU_OPTIONS]: { pos: "optionspos", count: () => OPTIONS_ITEMS.length, back: MENU_MAIN },
             [MENU_CONTROLS]: { pos: "controlspos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
-            [MENU_CONTROLS2]: { pos: "controlspos", count: () => PLAYER2_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_GAMEPAD]: { pos: "padpos", count: () => this.gamepad.connected ? KEY_ACTIONS.length + 2 : 1, back: MENU_OPTIONS },
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
@@ -1400,6 +1399,8 @@ class Engine {
                 continue; // nothing to set up
             } else if ((code === "ArrowLeft" || code === "ArrowRight") && this.menuStep === MENU_GAMEPAD && pos === 0) {
                 this.stepConfigPad(code === "ArrowLeft" ? -1 : 1, !repeat);
+            } else if ((code === "ArrowLeft" || code === "ArrowRight") && this.menuStep === MENU_CONTROLS) {
+                this.controlscol = code === "ArrowLeft" ? 0 : 1; // player 1's column or player 2's
             } else if ((code === "ArrowLeft" || code === "ArrowRight") && settings && !settings[pos].action) {
                 this.changeOption(settings[pos].id, code === "ArrowLeft" ? -1 : 1, !repeat);
             } else if (code === "Enter") {
@@ -1422,6 +1423,7 @@ class Engine {
                     this.menuStep = next;
                     // the start lists remember their place
                     if (![MENU_RULES, MENU_QUICK, MENU_SINGLE, MENU_MULTI].includes(next)) this[screens[next].pos] = 0;
+                    if (next === MENU_CONTROLS) this.controlscol = 0;
                     if (this.menuScroll[next]) this.menuScroll[next] = { at: 0, target: 0 };
                     // opened from a gamepad: that one is set up first
                     if (next === MENU_GAMEPAD && this.gamepad.active && this.gamepad.pads.includes(this.gamepad.last)) this.padConfig = this.gamepad.last;
@@ -1445,13 +1447,13 @@ class Engine {
                     return;
                 } else if (settings) {
                     this.changeOption(settings[pos].id, 1);
-                } else if (this.menuStep === MENU_CONTROLS || this.menuStep === MENU_CONTROLS2) {
-                    const player = this.menuStep === MENU_CONTROLS2 ? 2 : 1, actions = player === 2 ? PLAYER2_ACTIONS : KEY_ACTIONS;
-                    if (pos === actions.length) this.options.resetKeys(player);
-                    else { // next key press becomes the binding
-                        this.capturing = actions[pos].id;
+                } else if (this.menuStep === MENU_CONTROLS) {
+                    const player = this.controlscol + 1, action = KEY_ACTIONS[pos];
+                    if (pos === KEY_ACTIONS.length) this.options.resetKeys(player);
+                    else if (player === 1 || PLAYER2_ACTIONS.includes(action)) { // next key press becomes the binding
+                        this.capturing = action.id;
                         this.capturingPlayer = player;
-                    }
+                    } // player 2 has no sound key: player 1's works for both
                 } else if (this.menuStep === MENU_GAMEPAD) {
                     const key = this.gamepad.padKey(this.configPad());
                     if (pos === 0) this.stepConfigPad(1);
@@ -2735,13 +2737,18 @@ class Engine {
                 hint = HANDLING_ITEMS[this.handlingpos].action ? "ENTER  RESET      ESC  BACK" : "← →  CHANGE      ESC  BACK";
                 break;
             }
-            case MENU_CONTROLS:
-            case MENU_CONTROLS2: {
-                const p2 = step === MENU_CONTROLS2;
-                heading(p2 ? "OPTIONS  ·  KEYBINDS  ·  PLAYER 2" : "OPTIONS  ·  KEYBINDS  ·  PLAYER 1");
-                this.drawBindings(listTop - 8, p2 ? PLAYER2_ACTIONS : KEY_ACTIONS, this.options.keysOf(p2 ? 2 : 1), keyLabel, this.controlspos,
-                    this.capturing, "PRESS A KEY", p2 ? tetZ : tetS);
-                hint = this.capturing ? "NEW KEY ADDS · BOUND KEY REMOVES      ESC  CANCEL" : "ENTER  CHANGE      ESC  BACK";
+            case MENU_CONTROLS: {
+                // a column per player, ← → choosing one; player 2 shares player 1's sound key
+                heading("OPTIONS  ·  KEYBINDS", INK_DIM, listTop - 34);
+                const columns = [1, 2].map(p => ({
+                    title: "PLAYER " + p, table: this.options.keysOf(p), accent: p === 2 ? tetZ : tetS,
+                    capturing: this.capturingPlayer === p ? this.capturing : null,
+                }));
+                this.drawBindings(listTop - 8, KEY_ACTIONS, columns, keyLabel, this.controlspos, "PRESS A KEY", this.controlscol);
+                const shared = this.controlscol === 1 && KEY_ACTIONS[this.controlspos] && !PLAYER2_ACTIONS.includes(KEY_ACTIONS[this.controlspos]);
+                hint = this.capturing ? "NEW KEY ADDS · BOUND KEY REMOVES      ESC  CANCEL"
+                    : shared ? "PLAYER 1'S SOUND KEY WORKS FOR BOTH      ESC  BACK"
+                    : `← →  PLAYER      ENTER  ${this.controlspos === KEY_ACTIONS.length ? "RESET" : "CHANGE"}      ESC  BACK`;
                 break;
             }
             case MENU_GAMEPAD:
@@ -2784,7 +2791,7 @@ class Engine {
             });
         });
         const table = this.options.padTable(gp.padKey(pad));
-        this.drawBindings(top + rowH + 8, KEY_ACTIONS, table, padLabel, this.padpos - 1, this.padCapturing, "PRESS A BUTTON", tetI);
+        this.drawBindings(top + rowH + 8, KEY_ACTIONS, [{ table, accent: tetI, capturing: this.padCapturing }], padLabel, this.padpos - 1, "PRESS A BUTTON");
         // the cancel hint names Start, the pad's only way out (Esc works too)
         if (this.padCapturing) return `NEW BUTTON ON GAMEPAD ${n + 1} ADDS · BOUND BUTTON REMOVES      START  CANCEL`;
         if (this.padpos === 0) return (many ? "← →  CHOOSE GAMEPAD" : "ONE GAMEPAD CONNECTED") + "      ESC  BACK";
@@ -2849,34 +2856,59 @@ class Engine {
         return inkAlpha(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(this.clock / period)));
     }
 
-    // Rows of action name and keys (or gamepad buttons: table, labelled by label) for the actions
-    // listed; Enter on a row waits for a key to add (or remove, if it has it): capturing is the action
-    // waiting, prompt is shown in its row
-    drawBindings(top, actions, table, label, pos, capturing, prompt, accent) {
-        const listW = 420, rowH = 31, x = VIEW_W / 2 - listW / 2;
-        const rows = [...actions.map(a => ({ name: a.name, key: table[a.id], id: a.id })), { name: "Reset to defaults" }];
+    // Rows of action name and keys (or gamepad buttons, labelled by label) for the actions listed, a
+    // column of them per table in columns ({ table, accent, title, capturing }): one right-aligned, or
+    // several side by side under their titles, col the one selected; an action missing from a table is
+    // shared (player 1's sound key). Enter on a row waits for a key to add (or remove, if it has it):
+    // a column's capturing is the action waiting, prompt is shown in its place
+    drawBindings(top, actions, columns, label, pos, prompt, col = 0) {
+        const many = columns.length > 1, listW = many ? 460 : 420, rowH = 31, x = VIEW_W / 2 - listW / 2;
+        const nameW = many ? 164 : 0, cellW = many ? (listW - nameW - 8) / columns.length : 0;
+        const cellX = c => x + nameW + c * cellW; // a column's left edge (several columns)
+        const keys = (codes, right, cy) => { // right-aligned, first key leftmost
+            let kx = right;
+            for (const code of [...codes].reverse()) {
+                const text = label(code);
+                kx -= this.keycapWidth(text);
+                this.keycap(text, kx, cy);
+                kx -= 6;
+            }
+        };
+        if (many) {
+            columns.forEach((c, i) => this.text(c.title, cellX(i) + cellW / 2, top + 6,
+                { size: 11, weight: 800, color: i === col ? INK : INK_DIM, align: "center", spacing: 3 }));
+            top += 20;
+        }
+        const rows = [...actions, { name: "Reset to defaults" }];
         rows.forEach((row, n) => {
-            const y = top + n * (rowH + 2);
+            const y = top + n * (rowH + 2), cy = y + rowH / 2;
             const selected = n === pos;
-            this.card(x, y, listW, rowH, 8, selected, PIECE_COLORS[accent].base, 4);
-
-            const cy = y + rowH / 2;
-            if (!row.id) { // reset row
-                this.text(row.name.toUpperCase(), VIEW_W / 2, cy + 1, { size: 12, weight: 800, color: selected ? INK : INK_DIM, align: "center", spacing: 3 });
+            this.card(x, y, listW, rowH, 8, selected, PIECE_COLORS[columns[col].accent].base, 4);
+            const ink = selected ? INK : INK_DIM;
+            if (!many) {
+                const c = columns[0];
+                if (!row.id) this.text(row.name.toUpperCase(), VIEW_W / 2, cy + 1, { size: 12, weight: 800, color: ink, align: "center", spacing: 3 });
+                else {
+                    this.text(row.name.toUpperCase(), x + 20, cy + 1, { size: 13, weight: 800, color: ink, spacing: 2 });
+                    if (c.capturing === row.id) this.text(prompt, x + listW - 18, cy + 1, { size: 11, weight: 800, color: this.pulseInk(6), align: "right", spacing: 3 });
+                    else keys(c.table[row.id], x + listW - 18, cy);
+                }
                 return;
             }
-            this.text(row.name.toUpperCase(), x + 20, cy + 1, { size: 13, weight: 800, color: selected ? INK : INK_DIM, spacing: 2 });
-            if (capturing === row.id) {
-                this.text(prompt, x + listW - 18, cy + 1, { size: 11, weight: 800, color: this.pulseInk(6), align: "right", spacing: 3 });
-            } else {
-                let kx = x + listW - 18;
-                for (const code of [...row.key].reverse()) { // right-aligned, first key leftmost
-                    const text = label(code);
-                    kx -= this.keycapWidth(text);
-                    this.keycap(text, kx, cy);
-                    kx -= 6;
+            this.text(row.id ? row.name.toUpperCase() : "DEFAULTS", x + 20, cy + 1, { size: 13, weight: 800, color: ink, spacing: 2 }); // each cell: RESET
+            columns.forEach((c, i) => {
+                const cx = cellX(i) + cellW / 2;
+                if (selected && i === col) this.r.shape(cellX(i) + 3, y + 3, cellW - 6, rowH - 6,
+                    { radius: 6, fill: "rgba(244,236,220,0.07)", stroke: "rgba(244,236,220,0.3)", lineWidth: 1 });
+                const words = { size: 11, weight: 800, align: "center", spacing: 3 };
+                if (!row.id) this.text("RESET", cx, cy + 1, { ...words, color: selected && i === col ? INK : INK_DIM });
+                else if (c.capturing === row.id) this.text(prompt, cx, cy + 1, { ...words, color: this.pulseInk(6) });
+                else if (!c.table[row.id]) this.text("SHARED", cx, cy + 1, { ...words, color: INK_FAINT });
+                else { // centred in the cell
+                    const w = c.table[row.id].reduce((w, code) => w + this.keycapWidth(label(code)) + 6, -6);
+                    keys(c.table[row.id], cx + w / 2, cy);
                 }
-            }
+            });
         });
     }
 
