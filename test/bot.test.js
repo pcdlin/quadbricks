@@ -1,17 +1,35 @@
 // Checks for the bot (game/bot.js): the probe leaves the game alone, the places it finds are
 // real, and every level plays every rule set without getting stuck.
 // Usage: node test/bot.test.js
+// The checks are jobs, each seeding its own games, run in worker threads (heaviest first); their
+// output is printed in the order of this file, so a run reads the same however they are spread.
 const fs = require("fs");
 const vm = require("vm");
+const os = require("os");
+const { Worker, isMainThread, parentPort } = require("worker_threads");
 const dir = require("path").join(__dirname, "..", "game");
 const BOT_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js", "bot.js"];
 vm.runInThisContext(BOT_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
     "\n;Object.assign(globalThis, {createGame, Bot, BOT_LEVELS, BOT_ROWS, WIDTH, BotExplorer, botShapes, botDrops, botLock, botDead, botItemCleared, VS_ITEMS, VS_CUTIN_FRAMES, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, HEIGHT, WIDTH, FIELD_TOP, tetI, tetT, tetO, tetS, tetZ, tetL, tetJ});");
 
-let failures = 0;
+// A job's lines of output ({ text, ok }; ok undefined for notes)
+let out = [];
 function check(name, ok, detail = "") {
-    if (!ok) failures++;
-    console.log((ok ? "PASS " : "FAIL ") + name + (ok || !detail ? "" : `\n     ${detail}`));
+    out.push({ text: (ok ? "PASS " : "FAIL ") + name + (ok || !detail ? "" : `\n     ${detail}`), ok: !!ok });
+}
+function note(text) {
+    out.push({ text });
+}
+
+// jobs: run in the workers, cost: a rough guess of their time, to start the long ones first;
+// value: what the job returns, for the summaries (run in the main thread once every job is done)
+const jobs = [], summaries = [];
+function job(run, cost = 1) {
+    jobs.push({ run, cost });
+    return jobs.length - 1;
+}
+function summary(run) {
+    summaries.push(run);
 }
 
 // The bag and the garbage use Math.random: seed it so the games repeat
@@ -72,7 +90,7 @@ function poseKey(g) {
 }
 
 // ---------------------------------------------------------------- the probe changes nothing
-{
+job(() => {
     seeded(7);
     const g = started(guideline, "standard");
     for (let c = 0; c < 9; c++) g.setCell(21, c, 1);
@@ -82,8 +100,8 @@ function poseKey(g) {
     bot.attach(g);
     bot.decide(g);
     check("a full search leaves the game as it was", snapshot() === before);
-}
-{
+});
+job(() => {
     seeded(7);
     const g = started(tgmClassic, "standard");
     const before = JSON.stringify(g);
@@ -91,20 +109,20 @@ function poseKey(g) {
     bot.attach(g);
     bot.decide(g);
     check("a full search leaves an ARS game as it was", JSON.stringify(g) === before);
-}
+});
 
 // ---------------------------------------------------------------- known positions
-{
+job(() => {
     // an empty well: a flat piece goes in many places, every one on the floor
     seeded(3);
     const g = started(guideline, "standard");
     const bot = new Bot(10, 1);
     bot.attach(g);
-    const out = [];
-    bot.gather(g, g.curPiece_type, g.curPiece_row, g.curPiece_col, g.curPiece_rotation, false, out);
-    check("empty well: placements found for the first piece", out.length >= 17, `got ${out.length}`);
-}
-{
+    const found = [];
+    bot.gather(g, g.curPiece_type, g.curPiece_row, g.curPiece_col, g.curPiece_rotation, false, found);
+    check("empty well: placements found for the first piece", found.length >= 17, `got ${found.length}`);
+});
+job(() => {
     // at 20G the piece sits on the floor and can only slide: a column behind a two-row step is out
     // of reach when the piece can't be lifted by a kick
     seeded(3);
@@ -119,8 +137,8 @@ function poseKey(g) {
     const cols = new Set();
     for (const lk of bot.explorer.cands) cols.add((lk >> 2) % 28 - 8);
     check("20G: the O stays on its side of a step it can't climb", [...cols].every(c => c <= 3), JSON.stringify([...cols]));
-}
-{
+});
+job(() => {
     // big pieces move two columns at a time: the lookahead only drops them where they can get
     const g = createGame(tgmOriginal, "standard", 0, 0, {}, { big: true });
     const shapes = botShapes(g), rows = new Int32Array(BOT_ROWS), wrong = [];
@@ -128,20 +146,20 @@ function poseKey(g) {
         botDrops(g, rows, type, shapes, (shape, col) => { if ((col - shapes.spawn[type][1]) % 2) wrong.push([type, col]); });
     }
     check("Big: lookahead drops keep the spawn column's parity", wrong.length === 0, JSON.stringify(wrong));
-}
-{
+});
+job(() => {
     // a piece locked wholly above the visible rows is a lock out in the Guideline
     const g = createGame(guideline, "standard");
-    const rows = new Int32Array(BOT_ROWS), out = new Int32Array(BOT_ROWS);
-    botLock(rows, out, g.curCells[tetO][0], 0, 4); // the O's blocks in rows 0 and 1
-    check("lock out counts as dead where the rule set has it", botDead(g, out, tetT));
-    botLock(rows, out, g.curCells[tetO][0], 19, 4);
-    check("a piece on the floor is not a lock out", !botDead(g, out, tetT));
-}
-{
+    const rows = new Int32Array(BOT_ROWS), locked = new Int32Array(BOT_ROWS);
+    botLock(rows, locked, g.curCells[tetO][0], 0, 4); // the O's blocks in rows 0 and 1
+    check("lock out counts as dead where the rule set has it", botDead(g, locked, tetT));
+    botLock(rows, locked, g.curCells[tetO][0], 19, 4);
+    check("a piece on the floor is not a lock out", !botDead(g, locked, tetT));
+});
+for (const level of [6, 10]) {
     // a T-spin double slot (stem in column 4, an overhang over the left arm) and a T in play: the
     // upper levels turn it in for the T-spin double rather than drop it anywhere
-    for (const level of [6, 10]) {
+    job(() => {
         seeded(3);
         const g = started(guideline, "marathon");
         for (let c = 0; c < WIDTH; c++) {
@@ -157,18 +175,19 @@ function poseKey(g) {
         const r = play(g, new Bot(level, 1), 1);
         while (g.actions.length) done.push(g.actions.shift().text);
         check(`level ${level} turns a T into a T-spin double slot`, r.locked === 1 && g.lines === 2 && done.includes("T-SPIN DOUBLE"), JSON.stringify({ lines: g.lines, done }));
-    }
+    });
 }
-{
+job(() => {
     // a restart doesn't replay the same noise and mistakes
     const bot = new Bot(0, 9);
     bot.attach(createGame(guideline, "standard"));
     const first = JSON.stringify(bot.weights);
     bot.attach(createGame(guideline, "standard"));
     check("each game draws new weight noise", JSON.stringify(bot.weights) !== first);
-}
+});
 
 // ---------------------------------------------------------------- it plays every rule set
+// and its pieces land where it planned them (NES at level 0's slow gravity among them)
 const MODES = [
     ["Guideline Marathon", guideline, "marathon"],
     ["Guideline Sprint", guideline, "sprint"],
@@ -187,24 +206,15 @@ const MODES = [
     ["GB A-Type", gbTetris, "standard"],
 ];
 for (const [name, mode, variant] of MODES) {
-    seeded(11);
-    const g = started(mode, variant);
-    const bot = new Bot(10, 5);
-    const r = play(g, bot, 120);
-    check(`${name}: level 10 places pieces without getting stuck (${r.locked} placed, ${g.lines || 0} lines, ${Math.round(r.hit / Math.max(1, r.planned) * 100)}% as planned, slowest piece ${r.worst} frames, ${(r.ms / Math.max(1, r.frames)).toFixed(2)} ms/frame, at most ${r.maxMs.toFixed(0)} ms)`,
-        r.stuck === 0 && (r.locked >= 100 || r.over && r.locked >= 20), JSON.stringify(r));
-}
-{
-    seeded(5);
-    const g = started(nesTetris, "standard");
-    const r = play(g, new Bot(10, 5), 100);
-    check("NES: places pieces at level 0 as planned", r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
-}
-{
-    seeded(5);
-    const g = started(guideline, "standard");
-    const r = play(g, new Bot(10, 5), 100);
-    check("Guideline: level 10's pieces land where planned", r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
+    job(() => {
+        seeded(11);
+        const g = started(mode, variant);
+        const bot = new Bot(10, 5);
+        const r = play(g, bot, 120);
+        check(`${name}: level 10 places pieces without getting stuck (${r.locked} placed, ${g.lines || 0} lines, ${Math.round(r.hit / Math.max(1, r.planned) * 100)}% as planned, slowest piece ${r.worst} frames, ${(r.ms / Math.max(1, r.frames)).toFixed(2)} ms/frame, at most ${r.maxMs.toFixed(0)} ms)`,
+            r.stuck === 0 && (r.locked >= 100 || r.over && r.locked >= 20), JSON.stringify(r));
+        check(`${name}: level 10's pieces land where planned`, r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
+    }, 3);
 }
 
 {
@@ -238,27 +248,29 @@ function versusMatch(mode, levels, seed, startLevel = 0, options = {}, height = 
     }
     return { result, frames, stuck, risen, games };
 }
-{
+job(() => {
     // Guideline: the stronger one wins, and neither gets stuck under the garbage
     seeded(21);
     const { result, frames, stuck, risen, games } = versusMatch(guideline, [10, 0], 99);
     check(`versus: level 10 beats level 0 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} lines sent, ${risen} garbage rows risen in all)`,
         !stuck && result === "win" && games[1].isGameOver() && !games[0].isGameOver() && games[0].linesSent > 0, JSON.stringify({ frames, stuck, result }));
-}
+}, 3);
 for (const [mode, name] of [[arika, "TGM3 World"], [tgmClassic, "TGM3 Classic"]]) {
     // TGM3: garbage copied from the clears goes both ways, and the round ends (level 200, a top out or time)
-    seeded(22);
-    const { result, frames, stuck, risen, games } = versusMatch(mode, [10, 2], 31);
-    check(`${name} versus: level 10 beats level 2 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} rows sent, ${risen} risen, levels ${games.map(g => g.level).join(" / ")})`,
-        !stuck && result === "win" && games[0].linesSent > 0, JSON.stringify({ frames, stuck, result }));
+    job(() => {
+        seeded(22);
+        const { result, frames, stuck, risen, games } = versusMatch(mode, [10, 2], 31);
+        check(`${name} versus: level 10 beats level 2 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} rows sent, ${risen} risen, levels ${games.map(g => g.level).join(" / ")})`,
+            !stuck && result === "win" && games[0].linesSent > 0, JSON.stringify({ frames, stuck, result }));
+    });
 }
-{
+job(() => {
     // NES: no garbage, the higher score once a side tops out
     seeded(23);
     const { result, frames, stuck, games } = versusMatch(nesTetris, [10, 0], 41, 9);
     check(`NES versus at level 9: level 10 beats level 0 (${(frames / 60).toFixed(0)} s, scores ${games.map(g => g.score).join(" / ")})`,
         !stuck && result === "win" && games[0].score > games[1].score, JSON.stringify({ frames, stuck, result }));
-}
+});
 
 for (const [name, mode, options, startLevel, height] of [
     ["TGM1 Master with items", tgmOriginal, { items: true }], ["TGM1 20G", tgmOriginal, { speed: "20g" }],
@@ -269,10 +281,12 @@ for (const [name, mode, options, startLevel, height] of [
     ["GB heights 2 and 4", gbTetris, { height2: 4 }, 0, 2], ["GB heart", gbTetris, { heart: true }],
 ]) {
     // the other rule sets: a round goes to the stronger side, through garbage (and items) both ways
-    seeded(24);
-    const { result, frames, stuck, risen, games } = versusMatch(mode, [8, 2], 42, startLevel, options, height);
-    check(`${name} versus: level 8 beats level 2 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} / ${games[1].linesSent} sent, ${risen} risen)`,
-        !stuck && result === "win", JSON.stringify({ frames, stuck, result, over: games.map(g => g.endTitle) }));
+    job(() => {
+        seeded(24);
+        const { result, frames, stuck, risen, games } = versusMatch(mode, [8, 2], 42, startLevel, options, height);
+        check(`${name} versus: level 8 beats level 2 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} / ${games[1].linesSent} sent, ${risen} risen)`,
+            !stuck && result === "win", JSON.stringify({ frames, stuck, result, over: games.map(g => g.endTitle) }));
+    });
 }
 
 // ---------------------------------------------------------------- versus items
@@ -335,23 +349,76 @@ for (const [name, mode, options, startLevel, height] of [
 }
 
 // ---------------------------------------------------------------- levels
-{
-    // each level on Guideline Marathon (lines before topping out or 100 lines), the better ones further
-    const lines = [];
-    for (let level = 0; level < BOT_LEVELS.length; level++) {
-        let total = 0;
-        for (let game = 0; game < 3; game++) {
-            seeded(100 + game);
-            const g = started(guideline, "marathon");
-            const r = play(g, new Bot(level, 7 + game), 400);
-            check(`level ${level}, game ${game} never gets stuck`, r.stuck === 0, JSON.stringify(r));
-            total += g.lines;
-        }
-        lines.push(total / 3);
-    }
-    console.log("     average lines (of 400 pieces):", lines.map((n, i) => `${i}: ${n.toFixed(0)}`).join(", "));
+// Each level on Guideline Marathon for LADDER_PIECES pieces (or until it tops out), the better ones
+// further: short of the 150 lines that end it, which every level from 2 up reaches. The games start
+// at levels 1, 8 and 15 (LADDER_STARTS), so each level still plays the slow and the fast gravity
+// a whole Marathon would take it through.
+const LADDER_PIECES = 150, LADDER_STARTS = [0, 7, 14];
+const ladder = BOT_LEVELS.map((_, level) => LADDER_STARTS.map((start, game) => job(() => {
+    seeded(100 + game);
+    const g = started(guideline, "marathon", start);
+    const r = play(g, new Bot(level, 7 + game), LADDER_PIECES);
+    check(`level ${level}, game ${game} (from level ${start + 1}) never gets stuck`, r.stuck === 0, JSON.stringify(r));
+    return g.lines;
+}, level)));
+summary(values => {
+    const lines = ladder.map(ids => ids.reduce((sum, id) => sum + values[id], 0) / ids.length);
+    note(`     average lines (of ${LADDER_PIECES} pieces): ` + lines.map((n, i) => `${i}: ${n.toFixed(0)}`).join(", "));
     check("level 10 clears at least as many lines as level 0", lines[10] >= lines[0], JSON.stringify(lines));
-}
+});
 
-console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed");
-process.exit(failures ? 1 : 0);
+// ---------------------------------------------------------------- running them
+if (!isMainThread) {
+    parentPort.on("message", i => {
+        out = [];
+        let value;
+        try {
+            value = jobs[i].run();
+        } catch (e) {
+            check(`job ${i} runs`, false, e.stack);
+        }
+        parentPort.postMessage({ i, out, value });
+    });
+} else {
+    const results = [], values = [];
+    let failures = 0, printed = 0;
+    const print = lines => {
+        for (const line of lines) {
+            console.log(line.text);
+            if (line.ok === false) failures++;
+        }
+    };
+    const queue = jobs.map((_, i) => i).sort((a, b) => jobs[b].cost - jobs[a].cost);
+    const threads = Math.max(1, Math.min(jobs.length, os.availableParallelism ? os.availableParallelism() : os.cpus().length));
+    let running = threads;
+    const finish = () => {
+        for (const run of summaries) {
+            out = [];
+            run(values);
+            print(out);
+        }
+        console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed");
+        process.exit(failures ? 1 : 0);
+    };
+    for (let t = 0; t < threads; t++) {
+        const worker = new Worker(__filename);
+        const next = () => {
+            if (queue.length) worker.postMessage(queue.shift());
+            else {
+                worker.terminate();
+                if (--running === 0) finish();
+            }
+        };
+        worker.on("message", ({ i, out: lines, value }) => {
+            results[i] = lines;
+            values[i] = value;
+            while (results[printed]) print(results[printed++]); // in file order
+            next();
+        });
+        worker.on("error", e => {
+            console.log("FAIL a worker crashed\n     " + e.stack);
+            process.exit(1);
+        });
+        next();
+    }
+}
