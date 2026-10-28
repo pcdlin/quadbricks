@@ -832,6 +832,77 @@ const TILESETS = {
         },
     },
 
+    // Chalk on a blackboard: a rough outline, hatching, grainy strokes
+    chalk: {
+        name: "Chalk",
+        lamp: false, // chalk dust is matte: no light on it
+        face: [2, 0.06],
+        pad: (style) => style === "active" ? 10 : 2,
+        draw(g, col, size, style, index) {
+            const [inset] = this.face, a = inset, b = size - inset, w = b - a;
+            const rnd = seededRandom(index * 131 + (style === "active" ? 3 : 17));
+            const j = (k) => (rnd() - 0.5) * size * k;
+            const outline = (alpha, lw) => { // four strokes overshooting the corners a little
+                g.strokeStyle = col.light;
+                g.globalAlpha = alpha;
+                g.lineWidth = lw;
+                g.lineCap = "round";
+                const sides = [[[a, a], [b, a]], [[b, a], [b, b]], [[b, b], [a, b]], [[a, b], [a, a]]];
+                for (const [[x0, y0], [x1, y1]] of sides) {
+                    const ox = Math.sign(x1 - x0) * size * 0.04, oy = Math.sign(y1 - y0) * size * 0.04;
+                    g.beginPath();
+                    g.moveTo(x0 - ox + j(0.03), y0 - oy + j(0.03));
+                    g.quadraticCurveTo((x0 + x1) / 2 + j(0.05), (y0 + y1) / 2 + j(0.05), x1 + ox * 0.5 + j(0.03), y1 + oy * 0.5 + j(0.03));
+                    g.stroke();
+                }
+                g.globalAlpha = 1;
+            };
+            if (style === "ghost") {
+                g.setLineDash([2, 3]);
+                outline(0.5, 1.2);
+                g.setLineDash([]);
+                return;
+            }
+            const active = style === "active";
+            if (active) {
+                g.shadowColor = col.light;
+                g.shadowBlur = 8;
+            }
+            g.fillStyle = col.base;
+            g.globalAlpha = active ? 0.3 : 0.16;
+            g.fillRect(a, a, w, w);
+            g.globalAlpha = 1;
+            g.shadowBlur = 0;
+            // hatching at 45 degrees, clipped to the square
+            g.save();
+            g.beginPath();
+            g.rect(a, a, w, w);
+            g.clip();
+            g.strokeStyle = col.light;
+            g.lineCap = "round";
+            const step = size * (active ? 0.12 : 0.15);
+            for (let d = -w; d < w; d += step) {
+                g.globalAlpha = (active ? 0.6 : 0.45) + rnd() * 0.3;
+                g.lineWidth = 1 + rnd() * 0.6;
+                g.beginPath();
+                g.moveTo(a + d + j(0.04), b + j(0.04));
+                g.lineTo(a + d + w + j(0.04), a + j(0.04));
+                g.stroke();
+            }
+            g.restore();
+            outline(active ? 1 : 0.85, active ? 1.8 : 1.5);
+            outline(0.4, 1);
+            // chalk grain: dust rubbed out of the strokes
+            g.globalCompositeOperation = "destination-out";
+            for (let i = 0; i < 90; i++) {
+                g.globalAlpha = 0.3 + rnd() * 0.5;
+                g.fillRect(rnd() * size, rnd() * size, 0.9, 0.9);
+            }
+            g.globalAlpha = 1;
+            g.globalCompositeOperation = "source-over";
+        },
+    },
+
     // Monochrome: every piece in the same warm gallery white, soft rims, no colour at all
     mono: {
         name: "Mono",
