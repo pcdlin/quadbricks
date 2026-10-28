@@ -4,7 +4,7 @@
 const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
-const BOT_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "bot.js"];
+const BOT_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js", "bot.js"];
 vm.runInThisContext(BOT_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
     "\n;Object.assign(globalThis, {createGame, Bot, BOT_LEVELS, BOT_ROWS, WIDTH, BotExplorer, botShapes, botDrops, botLock, botDead, botItemCleared, VS_ITEMS, VS_CUTIN_FRAMES, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, HEIGHT, WIDTH, FIELD_TOP, tetI, tetT, tetO, tetS, tetZ, tetL, tetJ});");
 
@@ -176,6 +176,7 @@ const MODES = [
     ["TGM3 World", arika, "standard"],
     ["TGM3 Classic", tgmClassic, "standard"],
     ["TGM3 Shirase", arika, "shirase"],
+    ["TGM3 Sakura", arika, "sakura"],
     ["TAP Master", tgmTap, "standard"],
     ["TAP Death", tgmTap, "death"],
     ["TGM1", tgmOriginal, "standard"],
@@ -204,6 +205,16 @@ for (const [name, mode, variant] of MODES) {
     const g = started(guideline, "standard");
     const r = play(g, new Bot(10, 5), 100);
     check("Guideline: level 10's pieces land where planned", r.hit / r.planned > 0.9, `${r.hit}/${r.planned}`);
+}
+
+{
+    // TGM3 Sakura: the bot goes for the jewels, and clears stages
+    seeded(12);
+    const g = started(arika, "sakura"), bot = new Bot(10, 5);
+    let frames = 0;
+    while (!g.isGameOver() && g.cleared < 3 && frames < 60 * 60 * 6) { g.advanceFrame(bot.input(g)); frames++; }
+    check(`TGM3 Sakura: level 10 clears stages (${g.cleared} of ${g.tried} by stage ${g.stageName()}, ${(frames / 60).toFixed(0)} s)`, g.cleared >= 3,
+        JSON.stringify({ stage: g.stageName(), tried: g.tried, title: g.endTitle }));
 }
 
 // ---------------------------------------------------------------- versus

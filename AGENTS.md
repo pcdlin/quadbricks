@@ -23,7 +23,7 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 
 There is no bundler, and package.json only holds the serve script. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
-`game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js →
+`game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js → rules-sakura.js →
 bot.js → sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
@@ -38,6 +38,7 @@ when WebGL is unavailable).
 | `game/rules-guideline.js` | `GuidelineGame`: the Guideline and its modes, versus garbage included (`versusAttack()`, `VS_*`). |
 | `game/rules-tgm.js` | `TgmGame` and its games: `Tgm1Game`, `TapGame` (Master, Death, TGM+), `TiGame` (TGM3 Master, World or Classic) with `TiEasyGame` and `TiShiraseGame`; versus: `tgmVersus()` (a mixin, `TGM_VS_*`) makes `Tgm1VersusGame`, `TapVersusGame`, `TiVersusGame` (and ACE's `AceVersusGame`). |
 | `game/rules-ace.js` | `AceGame`: ACE's five modes. |
+| `game/rules-sakura.js` | `TiSakuraGame`: TGM3's Sakura (stages of jewels), registered over `rules-tgm.js`'s TGM3 modes for the `"sakura"` variant. |
 | `game/rules-1989.js` | `Game1989` with `NesGame` and `GbGame`: A-Type and B-Type; NES and GB versus. |
 | `game/bot.js` | `Bot`, a computer player with levels 0–10 (`BOT_LEVELS`, by index; 6 was Skilled and 10 Master of the five named levels before, the user's scale): no DOM or engine dependencies, `Bot.input(game)` returns the frame's input bitmap and sees only what a human sees (field, piece, visible next pieces, hold). `BotExplorer` finds every pose the piece can reach by running the game's own `rotate()`/`shift()` on a probe (`Object.create(game)` with its event arrays shadowed, so no kick table is duplicated) under a gravity model (after each action the piece falls as gravity takes it in the frames the action costs: at 20G it only slides along the stack); the brain is Thiery and Scherrer's evaluator on bit-row boards with a beam search over the visible next pieces and the hold (`decide()`, `deepen()`); the hands turn the route into key presses (`think()`, `act()`, macros for DAS, soft drops and the final drop), closed loop: the rest of the route is kept while the piece is where the model put it, and searched again from where it actually is when not. The explorer tracks per node what limits a grounded piece (lock resets or lock delay, restarted by a fall; TGM3's floor kicks and the lock delay they zero). Levels 7–10 choose during ARE how the next piece enters and hold that rotation key (IRS, `preSpawn()`), which is what lets them survive 20G. The evaluation set comes from the mode (`botProfile()`, `BOT_WEIGHTS`: Tetris stacking where score or grade pays for it, with the right column kept open and rows ready for a Tetris credited while the stack is low and gravity under 1G, else every clear; in the Guideline levels 5 up (`spins`) play as players do: `attack` (Marathon, Ultra, Endless) and `versus` value each clear as the mode does (`botClearValue()`: score, or lines sent) with back-to-backs and combos carried through the search, find T-spins (the explorer keeps whether the last move was a rotation and its kick, per pose; `detectTSpin()` on a probe) and build T-spin double slots (`botTslot()`: the board is scored as if a T filled the slot); `attack` stacks higher for more Tetrises and T-spin doubles, `versus` stays lower and digs, as tuned with Marathon's score and matches against `tetris`); lock outs and blocked entries count as dead. How a piece is finished comes from the rule set (`botLockStyle()`: hard drop, sonic drop then soft drop, soft drop only). Mistakes and noise use the bot's own seeded PRNG. In versus it reads the garbage waiting (the meter, `pendingGarbage()`, where the rule set `sendsGarbage`), not where its holes will be: a placement that clears nothing lets it rise as solid rows that never clear (`botRise()`, `BOT_GARBAGE_BIT`), a clear cancels what it sends in the Guideline only (`botCancels()`, `botPendingAfter()`); TGM3 versus plays the `tetris` profile. With versus items (from level 3, `BOT_ITEM_LEVEL`) it sees the item a placement sets off (`botItemCleared()`, the marks are on screen) and values it (`botItemValue()`: an attack always, a Del Field, Del Even or Free Fall by its stack's height, Exchg Field by how much higher its stack is than the other's); from level 7 (`BOT_SNIPE_LEVEL`) it holds the drop of a placement that sets off an attack item until it will hit the other side's piece in play, a snipe, as it sees that side's screen (`snipeWait()`, at most `BOT_SNIPE_WAIT` frames). Under Dark Block and X-Ray it still reads the whole field, as if it remembered it. Not done yet: aiming for T-spin triples and minis, IHS and DAS pre-charged in ARE. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
@@ -165,7 +166,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 `tgmClassic` (5, TGM3 Classic), `tgmTap` (6, TAP), `gbTetris` (7, GB), `tgmOriginal` (8, TGM1),
 `nesTetris` (9, NES), `tgmAce` (10, ACE with SRS), `aceArs` (11) and `aceArs2` (12) and `variant` ∈ `"standard"`, `"test"`, `"death"` (plus
 `"versus"` for every rule set, the Guideline's `"marathon"`, `"variable"`, `"sprint"`, `"ultra"`, `"dig"`, `"master"`, NES's and GB's
-`"btype"`, TGM1's `"20g"`, TAP's `"plus"` (TGM+), TGM3's `"easy"` and `"shirase"` (with either rule), and
+`"btype"`, TGM1's `"20g"`, TAP's `"plus"` (TGM+), TGM3's `"easy"`, `"shirase"` and `"sakura"` (with either rule), and
 ACE's `"normal"`, `"hispeed1"`, `"hispeed2"`, `"another"`, `"another2"`, `"big"`; and the Guideline's
 `"sprint20"`, `"sprint100"`, `"ultra1"`, `"ultra3"`, `"ultra5"` for its other goals and times).
 TAP's `"standard"` is its Master mode, `"death"` its Death mode; NES's and GB's `"standard"` is A-Type.
@@ -208,7 +209,7 @@ configuration fields set in their constructors and hooks they override:
   override Master's (`scoreTiClear()`, `checkLevelStop()`, `updateSection()`). `TapGame` has
   `tapPlus` / `death`; `Game1989` has `nes` / `gb` and `levelForLines()`.
 - `this.tgm` is true for the TGM series only (`TgmGame`). `this.big` (`setBig()`: the Big mode, and
-  Shirase's roll): every block 2 × 2, moves and kicks doubled, pieces enter in columns 2-9 with their
+  Shirase's roll; `bigMove`, the cells a big piece moves and kicks by, 2 but in Sakura's EX3): every block 2 × 2, moves and kicks doubled, pieces enter in columns 2-9 with their
   top in the top visible row (`bigSpawnPosition()`), two cleared rows count as one line (NullpoMino's
   rule; pieces still fall one row at a time, as there); `this.bigMode` when it was on from the start
   (the stats add BIG to the mode). `this.curCells` holds the current piece's offsets (`pieceCells`, or
@@ -750,6 +751,34 @@ settles is listed as an assumption below.
   1000 (`MONO_PALETTE`). Level 1300: a 3238-frame staff roll with big pieces, blocks visible;
   surviving it completes the mode (orange line), topping out ends it with the grade.
 
+### TGM3 Sakura (World or Classic rule)
+- Sources: tetris.wiki (*Tetris The Grand Master 3 Terror-Instinct*, its *Sakura stage list*), NullpoMino `GemManiaMode.java`
+  (its clone; stage file `config/map/gemmania/default.map`) and HeborisCE's TOMOYO mode (`tomoyo.c`, `config/stage/stage00.sav`
+  …); the three agree on the 27 stage maps (`SAKURA_STAGES`, 7 jewels each) and the 255-piece sequence (`SAKURA_SEQUENCE`).
+- Each stage starts from its field; clearing every jewel (marked like item blocks: `itemCells` `"JEWEL"`, drawn with
+  `drawItemMark()`; `collectItems()` counts them) clears it. The limit time (3:00) runs through the game, a stage time (1:00)
+  through stages 1-20, both only while a stage is played (`onClock()`). +1 s per jewel, +10 s for a stage cleared under 10 s
+  (+5 s under 20 s), +60 s for clearing stage 20 (`SAKURA_*`). The limit running out ends the game (TIME OVER); the stage
+  time running out fails the stage once the piece in play locks. Holding the 180° rotation key (unused in TGM3; the
+  arcade's Start) for a second skips stages 1-19 for 30 s, with more than 30 s left. Between stages the result shows
+  (`"stageend"`, `SAKURA_RESULT_FRAMES`), then the next stage's READY (`loadStage()`: the hold box emptied, level 0).
+- After stage 20 the clear rate (cleared × 100 / tried) opens EX1-EX3 from 90 %, EX1-EX5 at 100 %, all seven at 100 % within
+  5:00 of total time; the last stage played ends the game (COMPLETE, or ALL CLEAR for EX7 cleared).
+- The pieces come in the fixed sequence, the same every game, running on across stages; Hold during READY moves the next
+  piece into the hold box. Speed level from 0 at each stage: +1 per piece (stops at x99), +1 to +4 per clear;
+  `SAKURA_GRAVITY` and `SAKURA_DELAYS` (tetris.wiki's: ARE 25, DAS 14 then 8 from 300, lock 30, line clear 40 then 25); the
+  ghost below 100. No score.
+- Stage effects (`SAKURA_EFFECTS`): Mirror (stages 4 and 13: the field turned after every 3rd piece, `mirrorField()`), X-Ray
+  (stage 8: odd pieces, the jewels left in view), Color (stage 12: the blocks strobe in a moving wave), Roll Roll (stage 16:
+  every 4th piece turns clockwise every 30 frames, grey), Big (EX3: every piece big, moving one cell at a time, `bigMove`).
+- Stats: STAGE (and its effect), REST, LIMIT, STAGE TIME; the banner adds the clear rate and total time. Record: the end
+  reached, the stage, the clear rate, then the time.
+- The bot (`botJewelsCleared()`, `BOT_JEWEL`) values the jewels a placement clears.
+- Not settled by the sources, taken here: the lines' levels 1/2/3/4 (tetris.wiki; the clones 1/2/4/6), the delays
+  (tetris.wiki's; NullpoMino's differ), the 90 % gate (the clones; tetris.wiki gives none), +60 s only for clearing stage 20
+  (NullpoMino), no skip on stage 20 (the clones), no continues (tetris.wiki), the result's 2 s (the clones: 5 s or a key),
+  the usual 3-2-1 for READY, Classic keeping the stage blocks' Guideline colours, Color as a strobe of the blocks' light.
+
 ### ACE: Normal, Hi-Speed 1, Hi-Speed 2, Another, Another 2, Big (SRS, ARS or ARS2)
 - Sources: tetris.wiki *Tetris The Grand Master Ace*; NullpoMino `TimeAttackMode.java` (tables).
 - Hold with IHS, three next pieces, a 7-bag that never deals S, Z or O first (`bagNoSzoFirst`; tetris.wiki
@@ -977,7 +1006,7 @@ export names explicitly at the top; add new globals there, and new rule files to
   has the same cards but the Bot's);
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,
   Mono and Ghost cards), TGM3's are
-  "Master", "Easy" and "Shirase" (each with a Rule card, World or Classic), TAP's "Normal", "Master", "Death" and
+  "Master", "Easy", "Shirase" and "Sakura" (each with a Rule card, World or Classic), TAP's "Normal", "Master", "Death" and
   "TGM+", ACE's "Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2" and "Big" (Big is otherwise
   a setup card, Off / On), NES's and GB's
   "A-Type" and "B-Type". The GB

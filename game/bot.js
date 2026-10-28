@@ -285,6 +285,23 @@ function botItemValue(game, item, rows) {
     return 0;
 }
 
+// TGM3 Sakura: the jewels a placement clears (in the rows it fills), worth BOT_JEWEL each
+const BOT_JEWEL = 40;
+function botJewelsCleared(game, rows, cells, row, col) {
+    const full = new Map();
+    for (const [i, j] of cells) {
+        const r = row + i;
+        if (r < FIELD_TOP) return 0;
+        full.set(r, (full.get(r) ?? rows[r - FIELD_TOP]) | 1 << (col + j));
+    }
+    let n = 0;
+    for (const [r, mask] of full) {
+        if ((mask & BOT_FULL) !== BOT_FULL) continue;
+        for (let c = 0; c < WIDTH; c++) if (game.getCellItem(r, c) === "JEWEL") n++;
+    }
+    return n;
+}
+
 // The lock just made ends the game: a lock out, or the next piece can't enter
 function botDead(game, rows, next) {
     return (game.lockOut && botLocked.above) || botBlocked(game, rows, next);
@@ -442,7 +459,7 @@ function botStepScore(game, rows, w, cleared, b2b = false, combo = -1, tspin = n
 // without regard to how it gets there (used for the pieces beyond the current one)
 function botDrops(game, rows, type, shapes, fn) {
     const spawn = shapes.spawn[type];
-    const step = game.big ? 2 : 1; // big pieces move two columns: only the spawn column's parity
+    const step = game.big ? game.bigMove : 1; // big pieces move two columns: only the spawn column's parity
     for (const shape of shapes[type]) {
         let first = spawn[1];
         while (first - step >= -shape.minJ) first -= step;
@@ -761,7 +778,7 @@ class Bot {
                 let n = 1;
                 while (n < route.length && route[n].act === first.act) n++;
                 const last = route[n - 1];
-                const step = (first.act === BOT_LEFT ? -1 : 1) * (game.big ? 2 : 1);
+                const step = (first.act === BOT_LEFT ? -1 : 1) * (game.big ? game.bigMove : 1);
                 // ARR 0 shoots to the wall (or the stack): only worth it when that is where it stops
                 const stops = game.arr > 0 || !game.movePossible(last.row, last.col + step, last.rot);
                 if (hands.das && n >= BOT_DAS_MIN && stops) {
@@ -936,6 +953,11 @@ class Bot {
             const dead = botDead(game, buf, seq[0] || tetT) || botRiseDead(game, buf, pending, cleared);
             pl.board = Int32Array.from(buf);
             pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
+            if (game.variant === "sakura") { // the jewels it clears
+                const value = BOT_JEWEL * botJewelsCleared(game, this.board, game.curCells[pl.type][pl.rot], pl.row, pl.col);
+                pl.step += value;
+                pl.score += value;
+            }
             if (game.itemsOn && this.level >= BOT_ITEM_LEVEL) { // the item it sets off, if any (see botItemValue)
                 pl.item = botItemCleared(game, this.board, game.curCells[pl.type][pl.rot], pl.row, pl.col);
                 pl.step += botItemValue(game, pl.item, buf);
@@ -1020,7 +1042,7 @@ class Bot {
     // Aims a column (or a turn) off
     misdrop(roots, pick) {
         const near = roots.filter(p => p !== pick && p.hold === pick.hold && p.type === pick.type
-            && ((p.rot === pick.rot && Math.abs(p.col - pick.col) <= (this.game.big ? 2 : 1)) || (p.col === pick.col && p.row === pick.row)));
+            && ((p.rot === pick.rot && Math.abs(p.col - pick.col) <= (this.game.big ? this.game.bigMove : 1)) || (p.col === pick.col && p.row === pick.row)));
         return near.length ? near[Math.floor(this.rng() * near.length)] : pick;
     }
 }

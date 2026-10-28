@@ -4,7 +4,7 @@ const fs = require("fs");
 const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
-const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
+const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
     "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY, TGM_VS_FRAMES, TGM1_VS_FRAMES, VS_ITEM_PIECES, VS_ITEMS, VS_CUTIN_FRAMES, TGM_VS_GARBAGE_MAX});");
 
@@ -2057,6 +2057,78 @@ function startedMode(mode, variant) {
     g.rollFrames = g.rollLength - 1;
     g.advanceFrame(0);
     check("  ...surviving it completes the mode", [g.isGameOver(), g.endTitle], [true, "COMPLETE"]);
+}
+
+// ---------------------------------------------------------------- TGM3 Sakura
+{
+    const sakura = (mode = arika) => { const g = createGame(mode, "sakura"); for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0); return g; };
+    const g = createGame(arika, "sakura"), h = createGame(tgmClassic, "sakura");
+    const letters = gm => [...gm.queue, ...Array.from({ length: 16 - gm.queue.length }, () => gm.randomizer.next())].map(t => "ITLJSZO"[t - 1]).join("");
+    check("TGM3 Sakura: stage 1's field with its 7 jewels, the fixed sequence (LIJOTSZILJOTISJZ, the same with either rule)",
+        [[19, 20, 21].map(r => Array.from({ length: WIDTH }, (_, c) => !g.getCell(r, c) ? "." : g.getCellItem(r, c) ? "j" : "#").join("")), g.jewels, letters(createGame(arika, "sakura")), letters(h)],
+        [["..jj..j#..", ".j######j.", ".j######j."], 7, "LIJOTSZILJOTISJZ", "LIJOTSZILJOTISJZ"]);
+    const r = createGame(arika, "sakura");
+    r.advanceFrame(HOLD_PUSH);
+    r.advanceFrame(HOLD_RELEASE);
+    r.advanceFrame(HOLD_PUSH);
+    check("  ...Hold pressed during READY puts the next piece in the hold box, stepping through the sequence", [r.heldpiece, r.queue[0]], [tetI, tetJ]);
+}
+{
+    // clearing the last jewel clears the stage: +1 s per jewel, +10 s under 10 s; the next stage after the result, its
+    // level back to 0 and the hold box empty
+    const g = (() => { const x = createGame(arika, "sakura"); for (let f = 0; f < 200 && x.phase !== "active"; f++) x.advanceFrame(0); return x; })();
+    clearField(g);
+    g.itemCells.forEach(row => row.fill(null));
+    fill(g, ["#########."]);
+    g.itemCells[HEIGHT - 1 - FIELD_TOP][0] = "JEWEL";
+    g.jewels = 1;
+    g.heldpiece = tetZ;
+    const limit = g.limit;
+    place(g, tetI, 1, 18, 7);
+    g.advanceFrame(HARD_PUSH);
+    for (let f = 0; f < 60 && g.phase === "lineclear"; f++) g.advanceFrame(0);
+    const ended = [g.phase, g.tried, g.cleared, g.limit - limit > 600]; // the line clear's frames run off the limit too
+    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    check("TGM3 Sakura: the last jewel's clear ends the stage (+1 s a jewel, +10 s under 10 s), then stage 2 at level 0 with an empty hold box",
+        [ended, g.stageName(), g.jewels, g.level, g.heldpiece], [["stageend", 1, 1, true], "2", 7, 0, 0]);
+}
+{
+    // the stage time runs out: the stage fails once the piece in play locks; skipping (the 180° key held a second) costs 30 s
+    const g = createGame(arika, "sakura");
+    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    g.stageFrames = 60 * 60 - 1;
+    g.advanceFrame(0);
+    const up = [g.stageTimeUp, g.phase];
+    g.advanceFrame(HARD_PUSH);
+    const failed = [g.phase, g.tried, g.cleared];
+    const s = createGame(arika, "sakura");
+    for (let f = 0; f < 200 && s.phase !== "active"; f++) s.advanceFrame(0);
+    const limit = s.limit;
+    s.advanceFrame(ROT180_PUSH);
+    for (let f = 0; f < 70 && s.phase === "active"; f++) s.advanceFrame(0);
+    check("  ...the stage time running out fails the stage at the next lock; a skip costs 30 s",
+        [up, failed, s.phase, s.tried, limit - s.limit > 30 * 60], [[true, "active"], ["stageend", 1, 0], "stageend", 1, true]);
+}
+{
+    // after stage 20 the clear rate opens the EX stages: under 90 % none, under 100 % three, 100 % five, or seven within 5:00
+    const after20 = (cleared, frames) => {
+        const g = createGame(arika, "sakura");
+        g.stage = 19; g.tried = 19; g.cleared = cleared; g.frames = frames;
+        g.endStage("CLEAR");
+        return [g.lastStage - 19, g.gameover ? g.endTitle : g.phase];
+    };
+    check("TGM3 Sakura: after stage 20 the EX stages by the clear rate (90 %, 100 %) and the time (5:00)",
+        [after20(15, 9000), after20(17, 9000), after20(19, 20000), after20(19, 17000)], [[0, "COMPLETE"], [3, "stageend"], [5, "stageend"], [7, "stageend"]]);
+    const ex3 = createGame(arika, "sakura");
+    ex3.loadStage(22);
+    for (let f = 0; f < 200 && ex3.phase !== "active"; f++) ex3.advanceFrame(0);
+    ex3.gravity = 0;
+    const col = ex3.curPiece_col;
+    ex3.advanceFrame(RIGHT_PUSH);
+    ex3.advanceFrame(0);
+    check("  ...EX3's pieces are big but move one cell at a time; the limit time running out ends the game",
+        [ex3.big, ex3.curPiece_col - col, (() => { const t = createGame(arika, "sakura"); for (let f = 0; f < 200 && t.phase !== "active"; f++) t.advanceFrame(0); t.limit = 1; t.advanceFrame(0); return t.endTitle; })()],
+        [true, 1, "TIME OVER"]);
 }
 
 // ---------------------------------------------------------------- TGM3 Easy

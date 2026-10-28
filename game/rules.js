@@ -220,6 +220,7 @@ class RuleGame {
         this.setShapes(shapes, DEFAULT_PALETTE);
         this.big = false; // pieces twice the size, moving two columns at a time (setBig)
         this.bigMode = false; // big from the start: the Big mode
+        this.bigMove = 2; // cells a big piece moves and kicks by (TGM3 Sakura's big stage: 1)
         this.rev = false; // Rev: the well drawn upside down, pieces "falling" upwards (the engine)
         this.tls = false; // TLS: the ghost piece all game
         // First row of the well (the engine sizes the board to it), the first row the engine draws
@@ -1046,7 +1047,7 @@ class RuleGame {
         const key = STATE_KEYS[from] + "->" + STATE_KEYS[to];
         const table = dir === 2 ? (type === tetI ? KICKS_180_I : KICKS_180) : type === tetI ? this.iKicks : KICKS_JLSTZ;
         const tests = [[0, 0], ...table[key]];
-        const size = this.big ? 2 : 1;
+        const size = this.big ? this.bigMove : 1;
         for (let k = 0; k < tests.length; k++) {
             const [x, y] = tests[k];
             const row = this.curPiece_row - size * y, col = this.curPiece_col + size * x;
@@ -1073,7 +1074,7 @@ class RuleGame {
         if (type === tetO) return false;
         const from = this.curPiece_rotation;
         const to = (from + dir + 4) % 4;
-        const k = this.big ? 2 : 1; // big pieces kick two cells
+        const k = this.big ? this.bigMove : 1; // big pieces kick two cells
         const at = (dr, dc) => this.movePossible(this.curPiece_row + k * dr, this.curPiece_col + k * dc, to) ? [k * dr, k * dc] : null;
 
         let kick = at(0, 0);
@@ -1136,7 +1137,7 @@ class RuleGame {
     // Returns whether the piece moved; sound false: no move sound (later steps of an ARR 0 shift)
     shift(dir, sound = true) {
         if (dir === 0) return false;
-        const step = this.big ? 2 * dir : dir;
+        const step = this.big ? this.bigMove * dir : dir;
         if (this.movePossible(this.curPiece_row, this.curPiece_col + step, this.curPiece_rotation)) {
             this.curPiece_col += step;
             this.lastRotation = false;
