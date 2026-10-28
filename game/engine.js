@@ -70,8 +70,8 @@ const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off",
 // TGM3 versus: its VS Rule, or its Clear Rule, "a simple race between the two players" (tetris.wiki)
 const CLEAR_RULE_SETUP = { name: "Match", accent: tetS, arg: "clearRule", labels: ["VS Rule", "Clear Rule"], values: [false, true], modes: [arika, tgmClassic] };
 OPTION_ARGS.push("clearRule");
-// Versus: the bot's level (bot.js, 0-10), 6 at first
-const BOT_VERSUS_LEVEL = 6;
+// Versus: the bot's level (bot.js, 0-10), 3 at first
+const BOT_VERSUS_LEVEL = 3;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
 // Versus: the rounds a side must win to take the match (TAP: "the rounds per match ... can be changed in the game setup",
 // tetris.wiki), at first the rule set's own (the Guideline 1, the TGM games 2, NES 3, GB 4)

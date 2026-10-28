@@ -1024,7 +1024,7 @@ export names explicitly at the top; add new globals there, and new rule files to
   modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master"
   (Versus against the bot is Multiplayer → Versus Bot: Rules card (Guideline, TGM1, TAP, TGM3, ACE, NES, GB; the user's
   request), under it the rule set's own cards (TGM1's and TAP's Speed, TGM3's Rule and Style, TAP's and TGM3's Goal, ACE's Rule and Speed, Items
-  for TGM1, TAP, TGM3 and ACE, NES's Level, GB's heights (each side's) and Heart), with the Bot card (Level 0 … Level 10, 6 at
+  for TGM1, TAP, TGM3 and ACE, NES's Level, GB's heights (each side's) and Heart), with the Bot card (Level 0 … Level 10, 3 at
   first) right under the Rules card (the user's request); Versus Player
   has the same cards but the Bot's);
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,
