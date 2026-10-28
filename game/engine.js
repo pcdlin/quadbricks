@@ -494,6 +494,7 @@ const COMBO_COLORS = [INK, INK, "#fff1a8", MESSAGE_GOLD, "#ffb35c", "#ff8a4c", "
 const GARBAGE_METER = "#ff4f5e"; // versus: the garbage waiting beside a well
 const GARBAGE_METER_WAIT = "rgba(244,236,220,0.6)"; // and the garbage that may not rise yet
 const ATTACK_LIFE = 50; // frames a "+lines" sent pop-up shows
+const ROUND_ROTATE_DELAY = 45; // frames after a round is decided before a rotate press starts the next
 // Versus items (items.js): an item block a clear takes bursts in rings of its kind's colour for
 // ITEM_BURST_LIFE frames, out to ITEM_BURST_RADIUS, with ITEM_BURST_SPARKS motes (Heboris's 30-frame
 // burst); the item gauge beside the well fills in gold and flashes ITEM_GAUGE_FLASH frames as an item comes
@@ -905,7 +906,8 @@ class Engine {
             bot: new Bot(level, options.seed), level, view: new BoardView(game),
             popups: [[], []], // lines each side sent: "+4" beside or over its well
             result: null,     // "win", "lose" or "draw" (for player 1) once the round is decided (versusOutcome)
-            wins: [0, 0],     // rounds each side has won (the TGM games: the first to two takes the match; GB: four)
+            decided: 0,       // frames since then (a rotate press starts the next round after ROUND_ROTATE_DELAY)
+            wins: [0, 0],    // rounds each side has won (the TGM games: the first to two takes the match; GB: four)
             round: 1,
         };
     }
@@ -914,7 +916,8 @@ class Engine {
     // game, with the player's handling and settings, is dealt from the same seed; view is player 2's board
     newDuo(mode, startLevel, height, options) {
         const game = createGame(mode, "versus", startLevel, options.height2 ?? height, this.options.handling, { ...options, side: 1 });
-        return { duo: true, devices: this.duoDevices, view: new BoardView(game), popups: [[], []], result: null, wins: [0, 0], round: 1 };
+        return { duo: true, devices: this.duoDevices, view: new BoardView(game), popups: [[], []], result: null, decided: 0, wins: [0, 0],
+            round: 1 };
     }
 
     // The match is over once a side has won the rounds the rule set asks for (game.versusWins)
@@ -922,8 +925,8 @@ class Engine {
         return this.match.wins.some(w => w >= this.game.versusWins);
     }
 
-    // Enter after a decided round: the next round, the rounds won kept, or once the match is over a
-    // new match
+    // Enter (or a rotate press, from the touch controls or a gamepad too) after a decided round: the
+    // next round, the rounds won kept, or once the match is over a new match
     nextRound() {
         const m = this.match, carry = this.matchOver() ? null : { wins: m.wins, round: m.round + 1 };
         this.initGame(...this.lastGameArgs);
@@ -937,7 +940,8 @@ class Engine {
     matchFrame() {
         const m = this.match, games = [this.game, m.view.game];
         const hole = () => Math.floor(Math.random() * WIDTH);
-        if (!m.result) {
+        if (m.result) m.decided++;
+        else {
             if (!games[1].isGameOver()) games[1].advanceFrame(m.duo ? this.inputs[1] : m.bot.input(games[1]));
             games.forEach((game, side) => {
                 for (const attack of game.takeAttacks()) {
@@ -1294,7 +1298,11 @@ class Engine {
                     this.menuShown = null;      // no slide when the menu opens
                     return;
                 }
-                if (code === "Enter" && this.match && this.match.result) { // a decided round: the next, or a rematch
+                // a decided round: the next, or a rematch; Enter, or a rotate press once the banner has
+                // shown a moment (the touch controls and gamepads have no Enter in a game; a rotate key
+                // still being hammered as the round ends doesn't skip the banner)
+                const m = this.match;
+                if (m && m.result && (code === "Enter" || (p >= 0 && JOIN_ACTIONS.includes(action) && m.decided >= ROUND_ROTATE_DELAY))) {
                     this.nextRound();
                     this.syncKeys = true;
                     return;
@@ -2969,7 +2977,8 @@ class Engine {
         if (match && match.result) {
             const draw = match.result === "draw", won = !draw && (match.result === "win") === (side === 0);
             const next = this.matchOver() ? "REMATCH" : "NEXT ROUND";
-            const sub = this.gamepad.active ? "START FOR MENU" : this.touch.enabled ? "TAP MENU" : `ENTER  ${next}  ·  ESC  MENU`;
+            const sub = this.gamepad.active ? `ROTATE  ${next}  ·  START  MENU` : this.touch.enabled ? `ROTATE  ${next}  ·  MENU  MENU`
+                : `ENTER  ${next}  ·  ESC  MENU`;
             this.boardBanner(draw ? "DRAW" : won ? "VICTORY" : "DEFEAT", sub, 1, draw ? INK : PIECE_COLORS[won ? tetO : tetZ].base,
                 null, false, this.matchNotes(game, side));
         } else if (game.isGameOver()) {

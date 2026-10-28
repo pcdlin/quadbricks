@@ -285,7 +285,9 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   round (player 1's `game.versusOutcome()`), the games still going end (VICTORY / DEFEAT / DRAW) and both stand
   still. A side that wins `game.versusWins` rounds (the TGM games and ACE: 2, GB 4; the Rounds card, `VERSUS_ROUNDS_SETUP`,
   `options.rounds`: first to 1–7, at first the rule set's own; TAP's rounds "can be changed in the game setup", tetris.wiki) takes the match (`matchOver()`): until then Enter starts the
-  next round with the wins kept, then a rematch (`nextRound()`; Restart in the menu starts a new match). The banners show
+  next round with the wins kept, then a rematch (`nextRound()`; Restart in the menu starts a new match); so does a rotate
+  press (`JOIN_ACTIONS`, from a player's keys, the touch controls or a gamepad, which have no Enter in a game) once the
+  banner has shown `ROUND_ROTATE_DELAY` frames (`match.decided`), so one hammered as the round ends doesn't skip it. The banners show
   how the side's game ended and the rounds (`matchNotes()`). The match pauses with the menu like any game.
 - Each board on screen is a `BoardView` (game, confetti, flashes, the held piece's glow, clear message texture);
   `this.board` is the one being updated (`takeGameEvents(view, own)`) or drawn, `ownBoard` the player's. Drawing code
