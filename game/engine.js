@@ -1091,10 +1091,10 @@ class Engine {
         return this.touch.enabled ? OPTIONS_ITEMS.filter(item => !item.bindings) : OPTIONS_ITEMS;
     }
 
-    // The game can be resumed: it isn't over, or it is a match not yet decided (NES: the other side
-    // plays on after one tops out)
+    // The game can be resumed: it isn't over, or it is a match not yet over (NES: the other side
+    // plays on after one tops out; a decided round goes back to its banner, whose Enter starts the next)
     gameGoesOn() {
-        return !this.game.isGameOver() || (!!this.match && !this.match.result);
+        return !this.game.isGameOver() || (!!this.match && !this.matchOver());
     }
 
     // options: the hidden modes' (createGame)

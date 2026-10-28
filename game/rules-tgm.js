@@ -999,7 +999,7 @@ class TapGame extends TgmGame {
         }
         if (this.level >= this.maxLevel) {
             this.timerStopped = true; // the staff roll starts after the clear (afterClear)
-            if (death) {
+            if (death && !this.versus) { // versus: the goal level, a round won (tgmVersus), not 999
                 this.finalGrade = "GM";
                 this.addAction("GRADE GM", "grade");
             }

@@ -152,8 +152,9 @@ const GARBAGE_COLOR = 9;
 // Hard Block (a versus item): its blocks carry HARD_BIT in their cell until a line clear breaks the
 // shell, drawn in HARD_COLOR
 const HARD_BIT = 16, HARD_COLOR = 10;
+// Every palette maps tetGARBAGE too: Nega Field (useItem) and Guideline and GB garbage put it in the field
 const DEFAULT_PALETTE = [0, 1, 2, 3, 4, 5, 6, 7, GARBAGE_COLOR];
-const MONO_PALETTE = [0, 8, 8, 8, 8, 8, 8, 8]; // every piece one colour (index 8, the neutral white-grey)
+const MONO_PALETTE = [0, 8, 8, 8, 8, 8, 8, 8, GARBAGE_COLOR]; // every piece one colour (index 8, the neutral white-grey)
 
 // ----------------------------------------------------------
 // Arika Rotation System (TGM's Classic rule, TGM1, TAP, ACE's ARS rules)
@@ -175,7 +176,7 @@ const ARS_SPAWN_ROW = 1; // pieces appear in rows 19-20
 const ARS_FLOOR_KICKS = { i: 1, t: 2 };
 
 // The Sega/Arika colours (TGM; see DEFAULT_PALETTE)
-const ARS_PALETTE = [0, 6, 1, 3, 4, 2, 5, 7]; // I red, T cyan, L orange, J blue, S purple, Z green, O yellow
+const ARS_PALETTE = [0, 6, 1, 3, 4, 2, 5, 7, GARBAGE_COLOR]; // I red, T cyan, L orange, J blue, S purple, Z green, O yellow
 
 // The row of a [from level, ...] table that applies at a level
 function tableLookup(table, level) {
@@ -1266,7 +1267,6 @@ class RuleGame {
                     }
                     this.clearedCells.push({ row: r, col: c, type: line[c] });
                     line[c] = 0;
-                    if (shell && this.itemCells) this.itemCells[r - FIELD_TOP][c] = null;
                 }
             }
         }
@@ -1275,7 +1275,14 @@ class RuleGame {
         this.chain = n > 0 ? this.chain + 1 : -1;
         if (n > 0) this.sounds.push("clear" + n + (this.chain > 0 ? "c" + this.chain : "")); // e.g. "clear2c3"
 
+        // the items the clear took (a shell row's too), then the marks of the blocks a shell row lost
         this.collectItems([...rows, ...this.shellRows]);
+        if (this.itemCells) {
+            for (const r of this.shellRows) {
+                const marks = this.itemCells[r - FIELD_TOP], line = this.field[r - FIELD_TOP];
+                for (let c = 0; c < WIDTH; c++) if (!line[c]) marks[c] = null;
+            }
+        }
         this.scoreClear(n, rows);
         if (this.gameover) return;
         if (this.itemsAtClear) this.fireItems(true);
@@ -1538,11 +1545,11 @@ class RuleGame {
         return !!this.rival && this.rival.attackActive();
     }
 
-    // After a lock (a clear's: once it has collapsed): the items the other side sent during the
-    // clear, Mirror Block turning the field, the lasting items counting the piece, and the side's own
-    // items once its attack is over
+    // After a lock (a clear's: once it has collapsed): Mirror Block turning the field and the lasting
+    // items counting the piece, then the items the other side sent during the clear (they start
+    // whole: the lock just made doesn't count against them), and the side's own items once its attack
+    // is over
     takeItems() {
-        for (const item of this.incomingItems.splice(0)) this.useItem(item, true);
         if (this.mirrorPieces > 0) {
             this.mirrorPieces--;
             if (this.fieldEmpty()) this.mirrorPieces = 0; // a perfect clear ends it (the guide)
@@ -1551,6 +1558,7 @@ class RuleGame {
         // garbage sent during Mirror Block comes once it ends (the guide)
         if (!this.mirrorPieces && this.mirrorGarbage.length) this.incoming.push(...this.mirrorGarbage.splice(0));
         for (const item in this.itemEffects) if (this.itemEffects[item] > 0) this.itemEffects[item]--;
+        for (const item of this.incomingItems.splice(0)) this.useItem(item, true);
         const ready = this.waitingItems.filter(item => !this.itemWaits(item));
         this.waitingItems = this.waitingItems.filter(item => !ready.includes(item));
         for (const item of ready) this.useItem(item);

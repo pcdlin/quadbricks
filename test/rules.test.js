@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "rules-sakura.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY, TGM_VS_FRAMES, TGM1_VS_FRAMES, VS_ITEM_PIECES, VS_ITEMS, VS_CUTIN_FRAMES, TGM_VS_GARBAGE_MAX});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY, TGM_VS_FRAMES, TGM1_VS_FRAMES, VS_ITEM_PIECES, VS_ITEMS, VS_CUTIN_FRAMES, TGM_VS_GARBAGE_MAX, HARD_BIT, GARBAGE_COLOR});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -2035,7 +2035,7 @@ function startedMode(mode, variant) {
     h.level = 999; h.updateTimings();
     const colours = h.palette.slice();
     h.level = 1000; h.updateTimings();
-    check("  ...monochrome blocks from level 1000", [colours.every(c => c === 8), h.palette.slice(1).every(c => c === 8)], [false, true]);
+    check("  ...monochrome blocks from level 1000", [colours.every(c => c === 8), h.palette.slice(1, 8).every(c => c === 8)], [false, true]);
 }
 {
     const g = startedMode(arika, "easy"), m = startedMode(arika, "master");
@@ -2563,7 +2563,7 @@ function startedTgm1With(options, variant = "standard") {
 }
 {
     const mono = startedTgm1With({ mono: true });
-    check("TGM1 Mono: every piece one colour", [new Set(mono.palette.slice(1)).size, startedTgm1With({}).palette.slice(1).length], [1, 7]);
+    check("TGM1 Mono: every piece one colour", [new Set(mono.palette.slice(1, 8)).size, new Set(startedTgm1With({}).palette.slice(1, 8)).size], [1, 7]);
     const tls = startedTgm1With({ tls: true }), plain = startedTgm1With({});
     for (const g of [tls, plain]) { clearField(g); g.level = 300; g.updateTimings(); place(g, tetO, 0, 5, 3); }
     check("TGM1 TLS: the ghost piece all game, not only below level 100",
@@ -2572,7 +2572,7 @@ function startedTgm1With(options, variant = "standard") {
     check("TGM1 Rev: the rules only mark the game (the engine draws the well upside down)",
         [rev.rev, plain.rev, rev.getStats()[0]], [true, false, ["TGM1", "MASTER"]]);
     const all = startedTgm1With({ big: true, rev: true, mono: true, tls: true }, "20g");
-    check("  ...the codes combine", [all.big, all.rev, new Set(all.palette.slice(1)).size, all.tls, all.gravity, all.getStats()[0]],
+    check("  ...the codes combine", [all.big, all.rev, new Set(all.palette.slice(1, 8)).size, all.tls, all.gravity, all.getStats()[0]],
         [true, true, 1, true, 20, ["TGM1", "20G BIG"]]);
 }
 
@@ -3542,6 +3542,70 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     }
     check("Dark Block: the other side's stack blinks for a second, then is hidden until 8 seconds are up",
         [shown, d.getCellAlpha(21, 0)], [[1, 0, 0], 1]);
+}
+{
+    // An attack item that lands during this side's line clear starts whole once the clear is done: the
+    // lock that cleared doesn't count against it (takeItems applies it after counting the lock)
+    const during = (item) => {
+        const [a] = versusPair(tgmTap, 5, 0, { items: true });
+        clearField(a);
+        fill(a, ["##........", "#########."]);
+        place(a, tetI, 1, 18, 7); // a vertical I completes the bottom row; TAP's soft drop locks it
+        a.advanceFrame(SOFT_PUSH);
+        const inClear = a.phase === "lineclear";
+        a.receiveItem(item);
+        while (a.phase === "lineclear") a.advanceFrame(0);
+        const after = [a.mirrorPieces, rowText(a, 21)];
+        for (let f = 0; f < 400 && a.phase !== "active"; f++) a.advanceFrame(0);
+        return [inClear, ...after, a.big, a.hitting(item)];
+    };
+    check("Death Block received during a line clear makes the next piece big",
+        during("DEATH BLOCK"), [true, 0, "##.......#", true, true]);
+    check("Mirror Block received during a line clear turns the field once, with two turns to come",
+        during("MIRROR BLOCK"), [true, 2, "#.......##", false, false]);
+    check("Color Block received during a line clear lasts its full three pieces",
+        during("COLOR BLOCK").concat(), [true, 0, "##.......#", false, true]);
+}
+{
+    // Nega Field's new blocks are versus garbage (tetGARBAGE): every palette gives them GARBAGE_COLOR
+    const colors = [tgmOriginal, tgmTap, tgmClassic, arika].map(mode => {
+        const [a] = versusPair(mode, 5, 0, { items: true });
+        clearField(a);
+        fill(a, ["####.#####"]);
+        a.receiveItem("NEGA FIELD");
+        return [a.getCell(21, 4), a.getCellColor(21, 4)];
+    });
+    check("Nega Field: the blocks it makes are garbage coloured in TGM1, TAP, TGM3 Classic and World",
+        colors, [[tetGARBAGE, GARBAGE_COLOR], [tetGARBAGE, GARBAGE_COLOR], [tetGARBAGE, GARBAGE_COLOR], [tetGARBAGE, GARBAGE_COLOR]]);
+}
+{
+    // An item block among the blocks a Hard Block shell row loses sets its item off like any other clear
+    const [a] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(a);
+    fill(a, ["#########."]);
+    a.setCell(21, 0, 1 | HARD_BIT);
+    a.itemCells[21 - FIELD_TOP][3] = "LASER";
+    place(a, tetI, 1, 18, 7);
+    a.advanceFrame(SOFT_PUSH);
+    check("Hard Block: an item block in a shell row sets its item off and bursts, and its mark goes with it",
+        [a.shellRows, a.firingItems, a.itemBursts.length, a.itemCells[21 - FIELD_TOP][3], rowText(a, 21)],
+        [[21], ["LASER"], 1, null, "#........."]);
+}
+{
+    // The Guideline's versus 20G hides the ghost, as its Master does
+    const ghost = speed => createGame(guideline, "versus", 0, 0, {}, { seed: 5, speed }).ghostVisible();
+    check("Guideline versus: no ghost at 20G, one at a level", [ghost("20g"), ghost(5)], [false, true]);
+}
+{
+    // TAP versus at Death's speed: the goal level wins the round without Death mode's GM at 999
+    const [a] = versusPair(tgmTap, 5, 0, { speed: "death", goal: 100 });
+    clearField(a);
+    a.level = 98;
+    fill(a, ["#########.", "#########."]);
+    place(a, tetI, 1, 18, 7);
+    a.advanceFrame(SOFT_PUSH);
+    check("TAP Death-speed versus: reaching the goal ends the round with the level, not GRADE GM",
+        [a.level, a.endTitle, a.finalGrade, a.actions.map(x => x.text)], [100, "LEVEL 100", null, ["DOUBLE"]]);
 }
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

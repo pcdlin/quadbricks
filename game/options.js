@@ -227,23 +227,31 @@ class Options {
     // the key loses it, and if that was its only key it takes the replaced one (or, with none
     // replaced, swaps: it gets this action's old key, which this action gives up)
     // player: 1 or 2, whose keys. The other player's keys give the key up the same way: an action
-    // left with none takes the key this action gave up (the replaced one, or with none replaced its
-    // old key), so no key is ever both players'; player 2 can't take player 1's sound key
+    // left with none takes a key this action gave up that none of this player's actions took (the
+    // replaced one, or with none replaced its old key), so no key is ever both players'; with no such
+    // key the binding is refused (false), so no action is ever left without one. Player 2 can't take
+    // player 1's sound key
     bind(action, code, player = 1) {
         if (RESERVED_KEYS.includes(code) || (player === 2 && this.keys.sound.includes(code))) return false;
-        const [mine, theirs] = player === 2 ? [this.keys2, this.keys] : [this.keys, this.keys2];
-        const before = [...mine[action]];
-        bindIn(mine, action, code);
-        if (mine[action].includes(code)) {
-            for (const codes of Object.values(theirs)) {
+        const [mine, theirs] = player === 2 ? ["keys2", "keys"] : ["keys", "keys2"];
+        const my = copyTable(this[mine]), their = copyTable(this[theirs]);
+        const before = [...my[action]];
+        bindIn(my, action, code);
+        if (my[action].includes(code)) {
+            const used = new Set(Object.values(my).flat());
+            for (const codes of Object.values(their)) {
                 if (!codes.includes(code)) continue;
                 codes.splice(codes.indexOf(code), 1);
                 if (codes.length) continue;
-                let given = before.find(k => !mine[action].includes(k));
-                if (given === undefined) given = mine[action].shift(); // the two swap
+                let given = before.find(k => !used.has(k));
+                if (given === undefined && my[action].length > 1) given = my[action].shift(); // the two swap
+                if (given === undefined) return false; // no key left for that action
+                used.add(given);
                 codes.push(given);
             }
         }
+        this[mine] = my;
+        this[theirs] = their;
         this.save();
         return true;
     }

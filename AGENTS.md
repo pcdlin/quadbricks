@@ -11,6 +11,7 @@ npm run serve    # runs `npx serve game` on port 8123; then open http://localhos
 # Rule-set spec tests (plain Node, no dependencies)
 node test/rules.test.js                    # must end with "All checks passed"
 node test/bot.test.js                      # the bot plays every rule set and versus matches (every rule set), in worker threads (~10 s on 20 threads); must end with "All checks passed"
+node test/options.test.js                  # the two players' key bindings; must end with "All checks passed"
 
 # Minified build for a web server (output in dist/, git-ignored)
 node build.js [outDir]
@@ -55,6 +56,7 @@ when WebGL is unavailable).
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for the rule sets (~515 checks). |
+| `test/options.test.js` | The options: `Options.bind()` keeps every key one player's and every action with a key. |
 | `test/bot.test.js` | The bot: the probe leaves the game alone, plans are carried out as planned, every level plays every rule set without sticking. Each check is a `job()` (seeding its own games), run in worker threads heaviest first (`cost`), its output printed in file order; checks over several jobs' results go in a `summary()`, run once they are all done. |
 | `tools/bot-bench.js` | Not in the test run: `node tools/bot-bench.js [level] [games] [mode filter] [profile]` plays modes headless (seeded) and prints each one's own result (`record()`), for tuning the bot. |
 
@@ -103,7 +105,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 - Game keys come from `options.keys` (rebindable; player 2's from `options.keys2`, `PLAYER2_ACTIONS`: the same but the sound key, which works for both; defaults `DEFAULT_KEYS2`, ESDF to move and drop, W/R turn, Q 180°, left Shift hold, clear of player 1's): each action has a list of one or two key codes
   (`MAX_KEYS_PER_ACTION`). On the Keybinds screen, Enter then a new key adds it (a third replaces
   the action's oldest); a key the action already has is removed, unless it is its only one
-  (`Options.bind(action, code, player)`; the other player's keys give the key up the same way, an action left with none taking the key the binding gave up, so no key is ever both players'; player 2 can't take the sound key). A key taken from another action leaves that one its other key, or if it had
+  (`Options.bind(action, code, player)`; the other player's keys give the key up the same way, an action left with none taking a key the binding gave up that none of this player's actions took, so no key is ever both players', and a binding that would leave an action without a key is refused; player 2 can't take the sound key). A key taken from another action leaves that one its other key, or if it had
   none, the replaced key (or, with nothing replaced, the two swap). An action is released only when
   none of its keys is held. Key hints and the touch controls use each action's first key.
 - Gamepad bindings, per gamepad (`options.pads`, by `padKey()`; a pad not set up yet uses `options.pad`, the defaults or the
@@ -118,7 +120,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `padCapturing`; the next control pressed on the pad being set up is bound by `GamepadControls.poll()` (`Options.bindPad(key, …)`,
   the same rules as keys, `bindIn()`; other pads do nothing meanwhile), Start or Esc cancels, and so does that pad going away. Start (`PAD_START`) can't be bound. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
-- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Single Player, Multiplayer, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Single Player → `MENU_SINGLE` (`SINGLE_ITEMS`: Quick Play, Custom Game). Multiplayer → `MENU_MULTI` (`MULTI_ITEMS`; `multiItems()` leaves out Versus Player with the touch controls, the user's request): Versus Bot and Versus Player, each a `modeItem` (variant `"versus"`) that goes through `MENU_SETUP` like a Custom Game mode (`setupFrom` says which screen the cards came from, for `chosenMode()`, its `setupChoices` key (`chosenKey()`) and Esc): the Rules card (`VERSUS_RULES_SETUP`: Guideline, TGM1, TAP, TGM3, ACE, NES, GB; it sets the mode), under it the rule set's own cards (`versusSubSetup()`; the user's request): the Guideline's Speed, Garbage cap, Garbage delay and Holes (`GUIDELINE_VS_SETUP`), TGM1's and TAP's Speed, TGM3's Rule (World or Classic, which sets the mode again) and Style, TAP's and TGM3's Goal, ACE's Rule and Speed, Items (TGM1, TAP, TGM3, ACE), NES's Level (18 at first, `NES_VERSUS_LEVEL`), GB's two Height cards (each side's) and Heart, and the TGM games' match settings (*TGM versus* below); Versus Bot's Bot card always comes right under the Rules card (the user's request). A card with `modes` is shown (`setupItems()`) and used (`modeArgs()`) only when the cards before it that set the mode chose one of them. Versus Player's (`join: true`) Enter goes on to `MENU_JOIN` (below) instead of starting, whose Esc comes back to the cards. Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
+- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Single Player, Multiplayer, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it (a match too while it isn't over: a decided round goes back to its banner) and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Single Player → `MENU_SINGLE` (`SINGLE_ITEMS`: Quick Play, Custom Game). Multiplayer → `MENU_MULTI` (`MULTI_ITEMS`; `multiItems()` leaves out Versus Player with the touch controls, the user's request): Versus Bot and Versus Player, each a `modeItem` (variant `"versus"`) that goes through `MENU_SETUP` like a Custom Game mode (`setupFrom` says which screen the cards came from, for `chosenMode()`, its `setupChoices` key (`chosenKey()`) and Esc): the Rules card (`VERSUS_RULES_SETUP`: Guideline, TGM1, TAP, TGM3, ACE, NES, GB; it sets the mode), under it the rule set's own cards (`versusSubSetup()`; the user's request): the Guideline's Speed, Garbage cap, Garbage delay and Holes (`GUIDELINE_VS_SETUP`), TGM1's and TAP's Speed, TGM3's Rule (World or Classic, which sets the mode again) and Style, TAP's and TGM3's Goal, ACE's Rule and Speed, Items (TGM1, TAP, TGM3, ACE), NES's Level (18 at first, `NES_VERSUS_LEVEL`), GB's two Height cards (each side's) and Heart, and the TGM games' match settings (*TGM versus* below); Versus Bot's Bot card always comes right under the Rules card (the user's request). A card with `modes` is shown (`setupItems()`) and used (`modeArgs()`) only when the cards before it that set the mode chose one of them. Versus Player's (`join: true`) Enter goes on to `MENU_JOIN` (below) instead of starting, whose Esc comes back to the cards. Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
   TAP Master, TGM3 Master, NES A-Type, each a `RULESETS` mode named by rule set and mode, started at once with its setup
   cards' first or `initial` choices (`quickArgs()` → `modeArgs()`), so its records are Custom Game's for those choices; the
   list keeps its place like the rule sets'). Custom Game → `MENU_RULES` (rule sets) →
@@ -400,7 +402,7 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   draws its blocks first and their lights (`drawLights()`: Holo's sheen, the lamp) in a second pass.
 - `PIECE_COLORS` (index 1..7 = cyan, purple, orange, blue, green, red, yellow) were sampled
   from the legacy tile PNGs; 8 is the neutral grey-white, 9 the dark grey of versus garbage (`GARBAGE_COLOR`; the cells hold
-  `tetGARBAGE`, 8, and `DEFAULT_PALETTE` maps it). Effects receive colour indices (types mapped through
+  `tetGARBAGE`, 8, which every palette maps: the Guideline's and GB's garbage, and the blocks Nega Field makes). Effects receive colour indices (types mapped through
   `game.palette`), so TGM3 Classic's Sega colours work everywhere.
 - Confetti (Options → Visuals → Confetti, `options.confetti`, `CONFETTI_STYLES` in `options.js`): Off (no confetti; the row flash and clear burst stay), Glow (soft additive light motes), Paper (tumbling slips that flutter down), Sparks (default, streaks along their flight), Stars (twinkling four-point stars), Bubbles (rings floating up) and Pixels (squares snapped to a 3-unit grid, fading in steps). `CONFETTI_SPECS` (`engine.js`) gives each its count, size, motion, life, alpha and blending; `confettiSprites()` draws an atlas with a row per sprite style and a column per colour (`CONFETTI_COLORS`), turned sprites go through `confettiQuad()`. Light styles are added, Paper and Pixels drawn normally after them. TGM3 Easy's fireworks are always Glow.
 - Effects: confetti per cleared cell, cleared-row flash, hard-drop flash, held-piece flash, clear messages
@@ -624,7 +626,7 @@ settles is listed as an assumption below.
   `collectItems()`, `fireItems()`, `useItem()`, RuleGame's, which TAP Normal's two items use too). Items for the side setting
   them off act after the clear; attack items (`attack` in `VS_ITEMS`) act on the other side at once (`receiveItem()`), knocking
   its piece in play out (a snipe, not in ARE) and holding it still for a cut-in (`VS_CUTIN_FRAMES`, `cutIn`; Heboris's
-  60-frame wait after a snipe), or after the clear it is in. A new attack ends the last one's effects (`hitBy()`, Heboris's
+  60-frame wait after a snipe), or after the clear it is in, starting whole then (`takeItems()` counts the lock before applying them). A new attack ends the last one's effects (`hitBy()`, Heboris's
   `statusClear`). While an attack is active (`attackActive()`: its cut-in, Mirror Block's flips, the pieces or frames an
   item lasts, `itemEffects`) the attacker's gauge doesn't fill and its own items wait (`attacking()`, `waitingItems`; the
   guide). The items, in the guide's table order:
@@ -650,7 +652,7 @@ settles is listed as an assumption below.
     the attacker's gauge fills again after the cut-in (the guide).
   - → Mov Field: every row's blocks pushed to the right wall.
   - Hard Block: the next piece to enter locks in shells (`HARD_BIT` in its cells, drawn in `HARD_COLOR`); a full row with
-    shell blocks loses its other blocks, the shells break and the row stays (`shellRows`; Heboris), counting as a line but
+    shell blocks loses its other blocks, the shells break and the row stays (`shellRows`; Heboris), an item block among them setting its item off as in any clear, counting as a line but
     sending no garbage (the guide); Free Fall clears such rows as any others. Brief, like Death Block.
   - Shotgun!: a random column in every row of the stack shot out, a miss on an empty cell.
   - Dark Block: the stack blinks for a second, then is hidden like in TAP's M-roll, for 8 seconds (480 frames, Heboris's).

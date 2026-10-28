@@ -224,8 +224,9 @@ class GuidelineGame extends RuleGame {
         this.rot180 = h.rot180;
     }
 
+    // None at 20G (Master, versus's 20G speed): it would sit under the piece
     ghostVisible() {
-        return super.ghostVisible() && !this.master;
+        return super.ghostVisible() && !this.master && this.vsSpeed !== "20g";
     }
 
     onClock() {
