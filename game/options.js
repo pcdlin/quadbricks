@@ -226,14 +226,23 @@ class Options {
     // only one); a key past MAX_KEYS_PER_ACTION replaces the action's oldest. Another action using
     // the key loses it, and if that was its only key it takes the replaced one (or, with none
     // replaced, swaps: it gets this action's old key, which this action gives up)
-    // player: 1 or 2, whose keys. The other player's keys give the key up where that leaves the
-    // action another one (else both have it); player 2 can't take player 1's sound key
+    // player: 1 or 2, whose keys. The other player's keys give the key up the same way: an action
+    // left with none takes the key this action gave up (the replaced one, or with none replaced its
+    // old key), so no key is ever both players'; player 2 can't take player 1's sound key
     bind(action, code, player = 1) {
         if (RESERVED_KEYS.includes(code) || (player === 2 && this.keys.sound.includes(code))) return false;
         const [mine, theirs] = player === 2 ? [this.keys2, this.keys] : [this.keys, this.keys2];
+        const before = [...mine[action]];
         bindIn(mine, action, code);
-        for (const codes of Object.values(theirs)) {
-            if (codes.includes(code) && codes.length > 1) codes.splice(codes.indexOf(code), 1);
+        if (mine[action].includes(code)) {
+            for (const codes of Object.values(theirs)) {
+                if (!codes.includes(code)) continue;
+                codes.splice(codes.indexOf(code), 1);
+                if (codes.length) continue;
+                let given = before.find(k => !mine[action].includes(k));
+                if (given === undefined) given = mine[action].shift(); // the two swap
+                codes.push(given);
+            }
         }
         this.save();
         return true;

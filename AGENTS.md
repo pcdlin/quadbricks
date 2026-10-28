@@ -103,7 +103,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
 - Game keys come from `options.keys` (rebindable; player 2's from `options.keys2`, `PLAYER2_ACTIONS`: the same but the sound key, which works for both; defaults `DEFAULT_KEYS2`, ESDF to move and drop, W/R turn, Q 180°, left Shift hold, clear of player 1's): each action has a list of one or two key codes
   (`MAX_KEYS_PER_ACTION`). On the Keybinds screen, Enter then a new key adds it (a third replaces
   the action's oldest); a key the action already has is removed, unless it is its only one
-  (`Options.bind(action, code, player)`; the other player's keys give the key up where that leaves the action another, player 2 can't take the sound key). A key taken from another action leaves that one its other key, or if it had
+  (`Options.bind(action, code, player)`; the other player's keys give the key up the same way, an action left with none taking the key the binding gave up, so no key is ever both players'; player 2 can't take the sound key). A key taken from another action leaves that one its other key, or if it had
   none, the replaced key (or, with nothing replaced, the two swap). An action is released only when
   none of its keys is held. Key hints and the touch controls use each action's first key.
 - Gamepad bindings, per gamepad (`options.pads`, by `padKey()`; a pad not set up yet uses `options.pad`, the defaults or the
