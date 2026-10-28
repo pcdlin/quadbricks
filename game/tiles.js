@@ -493,6 +493,79 @@ const TILESETS = {
         },
     },
 
+    // Translucent gummy cubes: light scatters inside, a soft highlight sits on top
+    jelly: {
+        name: "Jelly",
+        face: [1.5, 0.3],
+        pad: (style) => style === "active" ? 12 : 0,
+        draw(g, col, size, style) {
+            const [inset, round] = this.face, w = size - inset * 2, r = size * round;
+            const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
+            if (style === "ghost") {
+                path();
+                g.fillStyle = col.base + "1e";
+                g.fill();
+                g.strokeStyle = col.light + "99";
+                g.lineWidth = 1.5;
+                g.stroke();
+                return;
+            }
+            const active = style === "active";
+            if (active) {
+                g.shadowColor = col.light;
+                g.shadowBlur = 14;
+            }
+            path();
+            g.fillStyle = col.dark;
+            g.fill();
+            g.shadowBlur = 0;
+            // lighter in the middle and low down, where the light scatters
+            const body = g.createRadialGradient(size * 0.5, size * 0.6, 0, size * 0.5, size * 0.6, w * 0.72);
+            body.addColorStop(0, col.light);
+            body.addColorStop(0.55, col.base);
+            body.addColorStop(1, col.dark);
+            path();
+            g.fillStyle = body;
+            g.globalAlpha = active ? 0.95 : 0.78;
+            g.fill();
+            g.globalAlpha = 1;
+            // a darker band just inside the edge: the jelly's thickness
+            g.save();
+            path();
+            g.clip();
+            path();
+            g.strokeStyle = col.dark;
+            g.lineWidth = size * 0.18;
+            g.globalAlpha = 0.55;
+            g.stroke();
+            g.restore();
+            // soft highlight, top left
+            const hx = inset + w * 0.34, hy = inset + w * 0.27;
+            const hi = g.createRadialGradient(hx, hy, 0, hx, hy, w * 0.3);
+            hi.addColorStop(0, `rgba(255,255,255,${active ? 0.85 : 0.6})`);
+            hi.addColorStop(0.45, `rgba(255,255,255,${active ? 0.35 : 0.22})`);
+            hi.addColorStop(1, "rgba(255,255,255,0)");
+            g.save();
+            g.translate(hx, hy);
+            g.scale(1, 0.62);
+            g.translate(-hx, -hy);
+            g.fillStyle = hi;
+            g.fillRect(inset, inset - w, w, w * 2);
+            g.restore();
+            // a small glint opposite
+            g.beginPath();
+            g.arc(inset + w * 0.74, inset + w * 0.76, w * 0.055, 0, Math.PI * 2);
+            g.fillStyle = "rgba(255,255,255,0.4)";
+            g.fill();
+            if (!active) {
+                g.globalCompositeOperation = "source-atop";
+                g.fillStyle = "rgba(6,8,22,0.14)";
+                g.fillRect(0, 0, size, size);
+                g.globalCompositeOperation = "source-over";
+            }
+        },
+    },
+
     // Monochrome: every piece in the same warm gallery white, soft rims, no colour at all
     mono: {
         name: "Mono",
