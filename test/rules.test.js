@@ -333,6 +333,25 @@ for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 1
     check(`${name} auto-shift frames after holding left`, shifts.slice(0, expected.length), expected.slice(0, shifts.length));
 }
 
+// TGM: DAS shortens with the level; a key held across the change keeps its charge and the new
+// threshold applies at once (the first auto-shift comes DAS - 1 frames after the press, then every frame)
+for (const [rs, name, level, das, expected] of [[arika, "TGM3", 499, [16, 10], [0, 9, 10, 11]], [tgmTap, "TAP", 499, [16, 10], [0, 9, 10, 11]],
+    [arika, "TGM3", 899, [10, 8], [0, 7, 8, 9]], [tgmTap, "TAP", 899, [10, 8], [0, 7, 8, 9]], [tgmOriginal, "TGM1 (no DAS speed-up)", 499, [16, 16], [0]]]) {
+    const g = createGame(rs, "test");
+    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    clearField(g);
+    place(g, tetO, 0, 10, 7);
+    g.level = level; g.updateTimings();
+    const before = g.das, shifts = [];
+    for (let f = 0; f < 14; f++) {
+        if (f === 5) { g.level = level + 1; g.updateTimings(); }
+        const col = g.curPiece_col;
+        g.advanceFrame(f === 0 ? LEFT_PUSH : 0);
+        if (g.curPiece_col !== col) shifts.push(f);
+    }
+    check(`${name} DAS ${das[0]} -> ${das[1]} when the level passes ${level + 1} with left held`, [before, g.das, shifts.slice(0, expected.length)], [das[0], das[1], expected]);
+}
+
 // TGM: a piece's first frame takes only IRS and gravity (NullpoMino's Classic rules, Cambridge)
 {
     // TAP Death (20G) with DAS charged: the piece falls in its spawn column, then shifts
