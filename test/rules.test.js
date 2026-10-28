@@ -3334,6 +3334,17 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     entered();
     check("Versus items: the item gauge fills with 20 pieces and the 21st carries an item (tetris.wiki, Heboris)",
         [before, !!item, g.pieceItem === item, g.nextItem], [null, true, true, null]);
+    const [h] = versusPair(arika, 5, 0, { items: true });
+    const ihsEntry = (hold) => {
+        h.nextItem = "LASER";
+        h.held.hold = hold;
+        h.curPiece_type = 0;
+        h.spawn(h.nextFromQueue(), false);
+        h.held.hold = false;
+        return [h.pieceItem, h.nextItem];
+    };
+    check("  ...an item piece put in the hold box by IHS loses its item, as a held one does (tetris.wiki, TGM3)",
+        [ihsEntry(false), ihsEntry(true)], [["LASER", null], [null, null]]);
     check("  ...none without the card; TGM1 has them too, but not Mirror Block (which TAP added)",
         [versusPair(tgmTap)[0].itemsOn, versusPair(tgmOriginal, 5, 0, { items: true })[0].itemsOn, versusPair(tgmOriginal, 5, 0, { items: true })[0].itemSet.includes("MIRROR BLOCK")],
         [false, true, false]);

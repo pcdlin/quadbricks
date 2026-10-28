@@ -603,7 +603,7 @@ settles is listed as an assumption below.
   row less and deletes as many rows from the bottom of its own stack (`defenceRows`, after the clear), an item every 20;
   Item an item every 10. Heboris has the same three (and a NORMAL of its own). TGM3's (and ACE's, "like TGM3") attack
   items go off with the clear itself (`itemsAtClear`, `fireItems(true)`; the others after it), a piece entering with IHS
-  doesn't fill the gauge, and a held item piece loses its item (tetris.wiki).
+  doesn't fill the gauge, and a held item piece loses its item (tetris.wiki), with IHS too.
 - TGM3's Match card (`CLEAR_RULE_SETUP`, `options.clearRule`): its VS Rule, or its Clear Rule, "a simple race between the
   two players" (tetris.wiki, which says no more): here a race to the goal level without garbage or items (`clearRule`; the
   Style, Items and Garbage cards then do nothing).

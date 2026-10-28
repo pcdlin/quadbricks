@@ -920,7 +920,8 @@ class RuleGame {
         this.floorKicked = false;
         this.lockDelayZeroed = false;
         if (newPiece) { // the item waiting comes with the piece entering; a full gauge brings the next
-            this.pieceItem = this.nextItem;
+            // IHS put the item piece in the hold box: it loses its item, as with a hold in play (hold())
+            this.pieceItem = ihs ? null : this.nextItem;
             this.nextItem = null;
             // an IHS piece doesn't count (TGM3), nor any while this side's attack item is active (the guide)
             if (this.itemsOn && !ihs && !this.attacking() && ++this.itemGauge >= this.itemInterval) {
