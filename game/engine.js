@@ -248,7 +248,11 @@ const HANDLING_LIST_H = 7 * 48 - 4; // seven cards show; the help for the select
 const SCROLLED_LISTS = {
     [MENU_VISUALS]: { items: VISUAL_ITEMS, pos: "visualspos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
     [MENU_HANDLING]: { items: HANDLING_ITEMS, pos: "handlingpos", ...HANDLING_ROWS, listH: HANDLING_LIST_H },
+    // a mode's setup cards (items: null, they depend on the mode and the cards' choices), when there are more than
+    // SETUP_FIT of them (a versus rule set's)
+    [MENU_SETUP]: { items: null, pos: "setuppos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
 };
+const SETUP_FIT = 6;
 // Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
 const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
 const PREVIEW_GAP = 6;
@@ -1329,6 +1333,7 @@ class Engine {
                     this.setupFrom = MENU_MULTI;
                     this.menuStep = MENU_SETUP;
                     this.setuppos = 0;
+                    this.menuScroll[MENU_SETUP] = { at: 0, target: 0 };
                 } else if (this.menuStep === MENU_MAIN || this.menuStep === MENU_OPTIONS || this.menuStep === MENU_SINGLE) {
                     const items = this.menuStep === MENU_MAIN ? this.mainItems() : this.menuStep === MENU_SINGLE ? SINGLE_ITEMS : OPTIONS_ITEMS;
                     const next = items[pos].screen;
@@ -1349,6 +1354,7 @@ class Engine {
                 } else if (this.menuStep === MENU_MODES && this.chosenMode().setup) {
                     this.menuStep = MENU_SETUP;
                     this.setuppos = 0;
+                    this.menuScroll[MENU_SETUP] = { at: 0, target: 0 };
                 } else if (this.menuStep === MENU_SETUP && this.chosenMode().join) { // the join screen: devices picked afresh
                     this.joined = [];
                     this.menuStep = MENU_JOIN;
@@ -2506,12 +2512,20 @@ class Engine {
             case MENU_SETUP: {
                 // Breadcrumb: rule set (or Multiplayer) and mode, then a generic prompt
                 const from = this.setupFrom === MENU_MULTI ? "Multiplayer" : RULESETS[this.rulesetpos].name;
-                heading(`${from}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase());
-                // more than five cards (a versus rule set's, with the Bot card): the tighter cards of Visuals
+                heading(`${from}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase(), INK_DIM,
+                    this.setupItems().length > SETUP_FIT ? 220 : listTop - 26);
+                // more than five cards (a versus rule set's, with the Bot card): the tighter cards of Visuals; more
+                // than SETUP_FIT, the Visuals screen's place for them, scrolled to keep the selected one in view
                 const items = this.settingCards(this.setupItems(), true);
                 const { rowH, gap } = items.length > 5 ? VISUALS_ROWS : { rowH: 64, gap: 10 };
-                this.drawMenuList(items, this.setuppos, listTop, rowH, gap);
-                const bottom = listTop + menuListHeight(items, rowH, gap);
+                let bottom;
+                if (items.length > SETUP_FIT) {
+                    this.drawScrolledList(MENU_SETUP, items, 236);
+                    bottom = 236 + Math.min(VISUALS_LIST_H, menuListHeight(items, rowH, gap));
+                } else {
+                    this.drawMenuList(items, this.setuppos, listTop, rowH, gap);
+                    bottom = listTop + menuListHeight(items, rowH, gap);
+                }
                 this.drawBest(bottom + 22);
                 hintY = Math.max(hintY, bottom + 46);
                 hint = `← →  CHANGE      ENTER  ${this.chosenMode().join ? "SELECT" : "START"}      ESC  BACK`;
@@ -2715,7 +2729,9 @@ class Engine {
 
     // Eases the scrolled lists toward keeping their selected card in view
     updateMenuScroll(dt) {
-        for (const [step, { items, pos: posField, rowH, gap, listH }] of Object.entries(SCROLLED_LISTS)) {
+        for (const [step, { items: listed, pos: posField, rowH, gap, listH }] of Object.entries(SCROLLED_LISTS)) {
+            if (!listed && Number(step) !== this.menuStep) continue; // setup cards: only while they are shown
+            const items = listed || this.setupItems();
             const s = this.menuScroll[step], pos = this[posField];
             const y = pos ? menuListHeight(items.slice(0, pos), rowH, gap) + gap : 0; // selected card's top
             const h = menuRowHeight(items[pos], rowH);
