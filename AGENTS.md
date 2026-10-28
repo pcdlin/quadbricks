@@ -281,7 +281,8 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   each side's attacks (`takeAttacks()`: `{ lines }`, the TGM games' `{ lines, rows }` or an item) go to the other with a random hole
   column (`receiveGarbage()`), garbage rising shakes the player's field up (`riseShake()`); once the rule set decides the
   round (player 1's `game.versusOutcome()`), the games still going end (VICTORY / DEFEAT / DRAW) and both stand
-  still. A side that wins `game.versusWins` rounds (the TGM games and ACE: 2, GB 4) takes the match (`matchOver()`): until then Enter starts the
+  still. A side that wins `game.versusWins` rounds (the TGM games and ACE: 2, GB 4; the Rounds card, `VERSUS_ROUNDS_SETUP`,
+  `options.rounds`: first to 1–7, at first the rule set's own; TAP's rounds "can be changed in the game setup", tetris.wiki) takes the match (`matchOver()`): until then Enter starts the
   next round with the wins kept, then a rematch (`nextRound()`; Restart in the menu starts a new match). The banners show
   how the side's game ended and the rounds (`matchNotes()`). The match pauses with the menu like any game.
 - Each board on screen is a `BoardView` (game, confetti, flashes, the held piece's glow, clear message texture);

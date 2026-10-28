@@ -3073,6 +3073,12 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         [types.size >= 5, new Set(stuck).size, stuck[0], d.curPiece_type], [true, 1, tetI, tetT]);
 }
 {
+    // the Rounds card: the rounds a side must win, in any rule set (else the rule set's own)
+    check("Versus: the Rounds card sets the rounds to win the match",
+        [versusPair(guideline, 5, 0, { rounds: 3 })[0].versusWins, versusPair(tgmTap, 5, 0, { rounds: 1 })[0].versusWins,
+            versusPair(gbTetris, 5, 0, { rounds: 7 })[0].versusWins, versusPair(nesTetris, 5, 18)[0].versusWins], [3, 1, 7, 3]);
+}
+{
     // GB: lines by clear, one hole column both sides share, the same starting garbage
     const [a, b] = versusPair(gbTetris, 5, 0, {}, 3);
     const rows = g => Array.from({ length: 6 }, (_, k) => rowText(g, HEIGHT - 1 - k)).join("|");

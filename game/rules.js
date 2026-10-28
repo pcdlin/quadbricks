@@ -203,6 +203,7 @@ function createGame(mode, variant = "standard", startLevel = 0, height = 0, hand
     const game = new Game(mode, variant, startLevel, height, handling);
     game.setOptions(options);
     game.begin();
+    if (game.versus && options.rounds) game.versusWins = options.rounds; // the Rounds card
     return game;
 }
 

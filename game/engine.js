@@ -70,6 +70,14 @@ const HEART_SETUP = { name: "Heart", accent: tetZ, arg: "heart", labels: ["Off",
 // Versus: the bot's level (bot.js, 0-10), 6 at first
 const BOT_VERSUS_LEVEL = 6;
 const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.map((l, i) => "Level " + i), initial: BOT_VERSUS_LEVEL };
+// Versus: the rounds a side must win to take the match (TAP: "the rounds per match ... can be changed in the game setup",
+// tetris.wiki), at first the rule set's own (the Guideline 1, the TGM games 2, NES 3, GB 4)
+const VERSUS_ROUND_COUNTS = [1, 2, 3, 4, 5, 6, 7];
+const roundsSetup = (wins, modes) => ({ name: "Rounds", accent: tetS, arg: "rounds", labels: VERSUS_ROUND_COUNTS.map(k => "First to " + k),
+    values: VERSUS_ROUND_COUNTS, initial: wins - 1, modes });
+const VERSUS_ROUNDS_SETUP = [roundsSetup(1, [guideline]), roundsSetup(TGM_VS_WINS, [tgmOriginal, tgmTap, arika, tgmClassic, tgmAce, aceArs, aceArs2]),
+    roundsSetup(NES_VS_WINS, [nesTetris]), roundsSetup(GB_VS_WINS, [gbTetris])];
+OPTION_ARGS.push("rounds");
 // Versus: the rule set each side plays ("versus" in each: rules-guideline.js, rules-tgm.js, rules-ace.js,
 // rules-1989.js), then its own settings, both sides the same: TGM1's, TAP's and ACE's speed (the mode
 // they play), TGM3's and ACE's rule (which set the mode again), TGM3's style, items (TGM1, TAP, TGM3,
@@ -104,6 +112,7 @@ const versusSubSetup = heights => [
     { ...HEIGHT_SETUP, name: heights[0], modes: [gbTetris] },
     { ...HEIGHT_SETUP, name: heights[1], arg: "height2", modes: [gbTetris] },
     { ...HEART_SETUP, modes: [gbTetris] },
+    ...VERSUS_ROUNDS_SETUP,
 ];
 // The versus rule set's name for a mode (the join screen's heading)
 const VERSUS_RULE_NAMES = { [guideline]: "Guideline", [tgmOriginal]: "TGM1", [tgmTap]: "TAP", [arika]: "TGM3 World", [tgmClassic]: "TGM3 Classic",
