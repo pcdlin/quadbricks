@@ -116,7 +116,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `padCapturing`; the next control pressed on the pad being set up is bound by `GamepadControls.poll()` (`Options.bindPad(key, …)`,
   the same rules as keys, `bindIn()`; other pads do nothing meanwhile), Start or Esc cancels, and so does that pad going away. Start (`PAD_START`) can't be bound. Menus always use arrows / Enter / Esc
   (`MENU_KEYS`); `Escape` can't be bound.
-- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Single Player, Multiplayer, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Single Player → `MENU_SINGLE` (`SINGLE_ITEMS`: Quick Play, Custom Game). Multiplayer → `MENU_MULTI` (`MULTI_ITEMS`): Versus Bot and Versus Player, each a `modeItem` (variant `"versus"`) that goes through `MENU_SETUP` like a Custom Game mode (`setupFrom` says which screen the cards came from, for `chosenMode()`, its `setupChoices` key (`chosenKey()`) and Esc): the Rules card (`VERSUS_RULES_SETUP`: Guideline, TGM1, TAP, TGM3, ACE, NES, GB; it sets the mode), under it the rule set's own cards (`versusSubSetup()`; the user's request): TGM1's and TAP's Speed, TGM3's Rule (World or Classic, which sets the mode again) and Style, ACE's Rule and Speed, Items (TGM1, TAP, TGM3, ACE), NES's Level (18 at first, `NES_VERSUS_LEVEL`), GB's two Height cards (each side's) and Heart, then Versus Bot's Bot card. A card with `modes` is shown (`setupItems()`) and used (`modeArgs()`) only when the cards before it that set the mode chose one of them. Versus Player's (`join: true`) Enter goes on to `MENU_JOIN` (below) instead of starting, whose Esc comes back to the cards. Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
+- Menu screens: `MENU_MAIN` (`MAIN_ITEMS`: Single Player, Multiplayer, Options; `mainItems()` adds Continue and Restart first while a game exists, Continue resuming it and Restart starting it over with the same settings, and Esc from a game opens the menu on it). Single Player → `MENU_SINGLE` (`SINGLE_ITEMS`: Quick Play, Custom Game). Multiplayer → `MENU_MULTI` (`MULTI_ITEMS`): Versus Bot and Versus Player, each a `modeItem` (variant `"versus"`) that goes through `MENU_SETUP` like a Custom Game mode (`setupFrom` says which screen the cards came from, for `chosenMode()`, its `setupChoices` key (`chosenKey()`) and Esc): the Rules card (`VERSUS_RULES_SETUP`: Guideline, TGM1, TAP, TGM3, ACE, NES, GB; it sets the mode), under it the rule set's own cards (`versusSubSetup()`; the user's request): TGM1's and TAP's Speed, TGM3's Rule (World or Classic, which sets the mode again) and Style, TAP's and TGM3's Goal, ACE's Rule and Speed, Items (TGM1, TAP, TGM3, ACE), NES's Level (18 at first, `NES_VERSUS_LEVEL`), GB's two Height cards (each side's) and Heart, then Versus Bot's Bot card. A card with `modes` is shown (`setupItems()`) and used (`modeArgs()`) only when the cards before it that set the mode chose one of them. Versus Player's (`join: true`) Enter goes on to `MENU_JOIN` (below) instead of starting, whose Esc comes back to the cards. Quick Play → `MENU_QUICK` (`QUICK_PLAY`: Marathon, Sprint, Ultra, TGM1 Master,
   TAP Master, TGM3 Master, NES A-Type, each a `RULESETS` mode named by rule set and mode, started at once with its setup
   cards' first or `initial` choices (`quickArgs()` → `modeArgs()`), so its records are Custom Game's for those choices; the
   list keeps its place like the rule sets'). Custom Game → `MENU_RULES` (rule sets) →
@@ -125,7 +125,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   Another/Another 2/Big for ACE, A-Type/B-Type for NES and GB) → game; modes
   with `setup` go through `MENU_SETUP` first: setting cards (`setupItems()`), each choosing one of its
   `labels` for a `createGame` argument (`arg`): `"mode"`, `"variant"` or a hidden mode's option
-  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, versus's `"speed"`, `"style"`, `"items"` and `"height2"`, and Versus Bot's `"bot"`, gathered into `options`) (the label's entry in
+  (`OPTION_ARGS`: `"big"`, `"rev"`, `"mono"`, `"tls"`, `"exams"`, `"heart"`, versus's `"speed"`, `"style"`, `"items"`, `"goal"` and `"height2"`, and Versus Bot's `"bot"`, gathered into `options`) (the label's entry in
   `values`: TGM3's Rule, World / Classic; ACE's Rule, SRS / ARS / ARS2; Big, Off / On, on the TGM modes
   but TGM+; TGM1's Reverse, Mono and Ghost (To level 100 / All game) besides Big; TGM3 Master's Exams,
   On / Off; GB's Heart, Off / On; Marathon's Goal, 150 lines / Variable / Endless; Sprint's Lines, 20 / 40 / 100; Ultra's
@@ -134,7 +134,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `initial`: the label chosen at first (Sprint 40, Ultra 2:00), else the first.
   Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
   `menuAction()` turns them into arguments). The mode lists use the Visuals screen's
-  tighter cards (`VISUALS_ROWS`), the rule set list (seven) tighter still, a little higher, with its
+  tighter cards (`VISUALS_ROWS`, as the setup screen does with more than five cards), the rule set list (seven) tighter still, a little higher, with its
   hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds"), `MENU_CONTROLS2` (player 2's, "Keybinds P2"),
   `MENU_GAMEPAD` (gamepad bindings), `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
@@ -174,7 +174,7 @@ a fourth, `height` (their B-Type and GB versus only, clamped to 0–5, `GB_B_HEI
 `GUIDELINE_DIG_ROWS`), the garbage height; a fifth,
 `handling` (Guideline only, overrides of `GUIDELINE_HANDLING`: `das`, `arr`, `sdf`, `dcd`, `ghost`,
 `dropGuard`; ignored by the others, whose timing is part of their spec); a sixth, `options`, versus's `seed` (both sides of a
-match deal the same pieces), `speed` (TGM1 `"20g"`, TAP `"death"` or `"plus"`, ACE's mode names), `style` (TGM3's `"attack"`, `"defence"`, `"item"`) and `items`, and the hidden modes (`setOptions()`, before the first piece; they combine): `big` (`setBig()`; offered for
+match deal the same pieces), `speed` (TGM1 `"20g"`, TAP `"death"` or `"plus"`, ACE's mode names), `style` (TGM3's `"attack"`, `"defence"`, `"item"`), `goal` (TAP's and TGM3's level 100–900) and `items`, and the hidden modes (`setOptions()`, before the first piece; they combine): `big` (`setBig()`; offered for
 TGM1, TAP but TGM+, and TGM3; ACE's is its `"big"` variant), and TGM1's `rev`, `mono` (`MONO_PALETTE`)
 and `tls` (the ghost all game).
 
@@ -554,6 +554,9 @@ settles is listed as an assumption below.
   pieces (the rule set's randomizer from the match seed; ACE's `BagRandomizer` never starts with S, Z or O).
 - A round: reaching the goal first wins (`TGM_VS_LEVEL_GOAL`, level 200; the rows collapse and the game ends with LEVEL
   200), topping out loses, and when 2:40 runs out (`TGM_VS_FRAMES`, TIME counts down; TIME UP) the higher level wins.
+  TAP and TGM3 take a Goal card (`VERSUS_GOAL_SETUP`, `options.goal`, `setGoal()`): level 100 to 900 in steps of 100, the
+  time limit 1:20 longer or shorter per step (tetris.wiki: TAP's setup; `TGM_VS_GOAL_*`), 200 and 2:40 at first; TAP
+  Death's level 500 check (M, or the credits when late) is single play's and stays out of versus.
   First to two rounds (`TGM_VS_WINS`) takes the match. TGM1 (tetris.wiki's TGM1 page): no goal but the game's end (level
   999), and a round not decided in 5:00 (`TGM1_VS_FRAMES`) is a draw (`timeDraw`). ACE (tetris.wiki: "a time limit of
   three minutes and a 20-line quota"): 20 lines first win, or more lines after 3:00 (`ACE_VS_*`); its level clock is off.
@@ -862,7 +865,8 @@ settles is listed as an assumption below.
   GB garbage pushed out of the top lost, as in TAP; the GB's starting rows taken from the bottom of its pattern; the
   snipe's wait (Heboris's 60 frames: the arcade shows a cut-in); attack items take effect at once rather than over their
   animation (the guide: Mirror Block's three flips and the meter not charging while an attack runs); TAP's Cement Mode
-  (no garbage) and the service menu's other goals aren't there; the Guideline's perfect clear +10 (tetris.wiki *Garbage*; NullpoMino gives +6).
+  (no garbage) and the service menu's round count aren't there; the Goal card stops at 900 (the arcade's upper limit isn't
+  given); the Guideline's perfect clear +10 (tetris.wiki *Garbage*; NullpoMino gives +6).
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll
   (length from NullpoMino) only follows GM and empties the field row by row like TGM3's. TGM3's DAS
   freezes are taken as TAP's (the wiki doesn't know them).
@@ -918,7 +922,7 @@ export names explicitly at the top; add new globals there, and new rule files to
   the rule set and mode lists use tighter cards). Guideline's
   modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master"
   (Versus against the bot is Multiplayer → Versus Bot: Rules card (Guideline, TGM1, TAP, TGM3, ACE, NES, GB; the user's
-  request), under it the rule set's own cards (TGM1's and TAP's Speed, TGM3's Rule and Style, ACE's Rule and Speed, Items
+  request), under it the rule set's own cards (TGM1's and TAP's Speed, TGM3's Rule and Style, TAP's and TGM3's Goal, ACE's Rule and Speed, Items
   for TGM1, TAP, TGM3 and ACE, NES's Level, GB's heights (each side's) and Heart), then the Bot card Level 0 … Level 10, 6 at first; Versus Player
   has the same cards but the Bot's);
   Endless moved under Marathon to keep the list tidy. TGM1's "Master" and "20G" (each with Big, Reverse,

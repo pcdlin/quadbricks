@@ -2942,6 +2942,20 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     a.advanceFrame(SOFT_PUSH);
     check("TAP versus: level 200 ends the round, the side reaching it wins", [a.level, a.endTitle, a.versusOutcome(), b.versusOutcome()],
         [200, "LEVEL 200", "win", "lose"]);
+    const goal = (mode, g) => { const [v] = versusPair(mode, 5, 0, { goal: g }); return [v.maxLevel, v.formatTime(v.versusFrames), v.getStats()[1][1]]; };
+    check("TAP and TGM3 versus: the goal can be set in steps of 100, the time 1:20 longer or shorter per step (tetris.wiki)",
+        [goal(tgmTap, undefined), goal(tgmTap, 300), goal(arika, 100), goal(tgmClassic, 900)],
+        [[200, "2:40.00", "0 / 200"], [300, "4:00.00", "0 / 300"], [100, "1:20.00", "0 / 100"], [900, "12:00.00", "0 / 900"]]);
+    const [dv] = versusPair(tgmTap, 5, 0, { speed: "death", goal: 600 });
+    dv.level = 499;
+    dv.frames = 300 * 60; // past 3:25: in single play the level would stop at 500 and the credits roll
+    clearField(dv);
+    dv.setCell(10, 0, 1);
+    fill(dv, ["#########."]);
+    place(dv, tetI, 1, 18, 7);
+    dv.advanceFrame(SOFT_PUSH);
+    for (let f = 0; f < 100 && dv.phase !== "active"; f++) dv.advanceFrame(0);
+    check("  ...TAP Death's level 500 check is single play's: a versus round goes on past it", [dv.level > 500, dv.timerStopped, dv.phase], [true, false, "active"]);
     const [plus] = versusPair(tgmTap, 5, 0, { speed: "plus" });
     clearField(plus);
     for (let k = 0; k < 13; k++) { place(plus, tetO, 0, 19, 4); plus.lock(); plus.curPiece_type = 0; clearField(plus); }

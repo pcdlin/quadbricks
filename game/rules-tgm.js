@@ -61,6 +61,8 @@ const TGM_VS_LEVEL_GOAL = 200; // the first to reach it wins the round
 const TGM_VS_FRAMES = (2 * 60 + 40) * 60; // a round's time limit, 2:40: then the higher level wins
 const TGM_VS_WINS = 2; // rounds to win the match ("first to 2", up to 3 rounds)
 const TGM_VS_GARBAGE_MAX = 8; // rows of garbage that may wait ("capped at the first 8 lines")
+// The goal can be set in steps of 100 levels, the time limit 1:20 longer or shorter for each (tetris.wiki, TAP)
+const TGM_VS_GOAL_STEP = 100, TGM_VS_GOAL_MAX = 900, TGM_VS_STEP_FRAMES = 80 * 60;
 const TGM1_VS_FRAMES = 5 * 60 * 60; // TGM1: a round not decided in 5:00 is a draw (tetris.wiki)
 // TGM3's versus styles: the pieces between items, and the name the stats show
 const TGM3_VS_STYLES = { attack: { items: 40, name: "ATTACK" }, defence: { items: 20, name: "DEFENCE" }, item: { items: 10, name: "ITEM" } };
@@ -981,7 +983,7 @@ class TapGame extends TgmGame {
         this.level = levelAfter;
         this.updateTapSection();
 
-        if (death && levelBefore < TAP_DEATH_M_LEVEL && this.level >= TAP_DEATH_M_LEVEL) {
+        if (death && !this.versus && levelBefore < TAP_DEATH_M_LEVEL && this.level >= TAP_DEATH_M_LEVEL) {
             if (this.frames <= TAP_DEATH_M_FRAMES) {
                 this.finalGrade = "M";
                 this.addAction("GRADE M", "grade");
@@ -1562,7 +1564,9 @@ class TiShiraseGame extends TiGame {
 // Guide; TAP's, TGM3's and ACE's taken as the same), each side at its mode's speed with the mode's
 // levels and score, but no grade, roll, level stop or 15-minute speed-up; both sides deal the same
 // pieces (options.seed). A round is won by reaching the goal first (level 200), by the other side
-// topping out, or by being further on (the higher level) when the 2:40 run out; ties are draws (the
+// topping out, or by being further on (the higher level) when the 2:40 run out (TAP and TGM3: the goal
+// can be set from 100 to 900, the time 1:20 longer or shorter per 100 levels, as in TAP's setup and
+// Heboris; TAP Death's level 500 check is a single-player rule and stays out); ties are draws (the
 // guide gives the defending side a goal reached on the same frame, a role this match has no use for).
 // A clear of two lines or more sends the rows it removed, the clearing piece's blocks taken out,
 // upside down ("take the line clear, erase the clearing piece, and send it vertically flipped"), a
@@ -1641,6 +1645,14 @@ function tgmVersus(Base) {
             }
         }
 
+        // The goal level (options.goal, TAP and TGM3: 100 to 900 in steps of 100, 200 by default) and
+        // the time limit that goes with it
+        setGoal(goal = TGM_VS_LEVEL_GOAL) {
+            const level = clamp(Math.round(goal / TGM_VS_GOAL_STEP) * TGM_VS_GOAL_STEP, TGM_VS_GOAL_STEP, TGM_VS_GOAL_MAX);
+            this.maxLevel = level;
+            this.versusFrames = TGM_VS_FRAMES + (level - TGM_VS_LEVEL_GOAL) / TGM_VS_GOAL_STEP * TGM_VS_STEP_FRAMES;
+        }
+
         // The goal (the last level: 200, TGM1's 999) and how far this side is towards it
         versusGoal() { return this.level >= this.maxLevel; }
         versusGoalValue() { return this.maxLevel; }
@@ -1693,6 +1705,7 @@ class TiVersusGame extends tgmVersus(TiGame) {
 
     setOptions(options = {}) {
         super.setOptions(options);
+        this.setGoal(options.goal);
         this.style = TGM3_VS_STYLES[options.style] ? options.style : "attack";
         this.itemInterval = TGM3_VS_STYLES[this.style].items;
     }
@@ -1740,6 +1753,7 @@ class TapVersusGame extends tgmVersus(TapGame) {
         this.tapPlus = options.speed === "plus";
         this.sonicTrail = !this.death;
         super.setOptions(options);
+        this.setGoal(options.goal);
     }
 
     statsName() {

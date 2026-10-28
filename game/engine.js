@@ -58,7 +58,7 @@ const RULE_SETUP = { name: "Rule", accent: tetL, arg: "mode", labels: ["World", 
 // createGame options (RuleGame.setOptions): the TGM games' hidden modes, TGM3 Master's exams, GB's heart mode,
 // versus's speed (the mode a TGM1, TAP or ACE side plays), style (TGM3's), items and the other side's GB height (and the
 // versus match's bot level, the label's index)
-const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart", "speed", "style", "items", "height2", "bot"];
+const OPTION_ARGS = ["big", "rev", "mono", "tls", "exams", "heart", "speed", "style", "items", "goal", "height2", "bot"];
 const BIG_SETUP = { name: "Big", accent: tetO, arg: "big", labels: ["Off", "On"], values: [false, true] }; // pieces twice the size
 const REV_SETUP = { name: "Reverse", accent: tetZ, arg: "rev", labels: ["Off", "On"], values: [false, true] }; // the well upside down
 const MONO_SETUP = { name: "Mono", accent: tetS, arg: "mono", labels: ["Off", "On"], values: [false, true] }; // one colour
@@ -79,12 +79,18 @@ const BOT_SETUP = { name: "Bot", accent: tetI, arg: "bot", labels: BOT_LEVELS.ma
 const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM1", "TAP", "TGM3", "ACE", "NES", "GB"],
     values: [guideline, tgmOriginal, tgmTap, arika, tgmAce, nesTetris, gbTetris] };
 const VERSUS_ACE_MODES = [tgmAce, aceArs, aceArs2];
+// TAP and TGM3: the level that wins a round, and its time limit (tetris.wiki: 100-level steps, 1:20 per step; 200 and
+// 2:40 by default)
+const VERSUS_GOAL_SETUP = { name: "Goal", accent: tetL, arg: "goal", modes: [tgmTap, arika, tgmClassic], initial: 1,
+    labels: [1, 2, 3, 4, 5, 6, 7, 8, 9].map(k => `Level ${k * 100}  ·  ${Math.floor(k * 80 / 60)}:${String(k * 80 % 60).padStart(2, "0")}`),
+    values: [100, 200, 300, 400, 500, 600, 700, 800, 900] };
 // GB: each side its own height (heights: the two cards' names)
 const versusSubSetup = heights => [
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "Death", "TGM+"], values: ["master", "death", "plus"], modes: [tgmTap] },
     { ...RULE_SETUP, modes: [arika, tgmClassic] },
     { name: "Style", accent: tetJ, arg: "style", labels: ["Attack", "Defence", "Item"], values: ["attack", "defence", "item"], modes: [arika, tgmClassic] },
+    VERSUS_GOAL_SETUP,
     { ...ACE_RULE_SETUP, modes: VERSUS_ACE_MODES },
     { name: "Speed", accent: tetO, arg: "speed", labels: ["Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2"],
       values: ["normal", "hispeed1", "hispeed2", "another", "another2"], modes: VERSUS_ACE_MODES },
@@ -2500,9 +2506,11 @@ class Engine {
                 // Breadcrumb: rule set (or Multiplayer) and mode, then a generic prompt
                 const from = this.setupFrom === MENU_MULTI ? "Multiplayer" : RULESETS[this.rulesetpos].name;
                 heading(`${from}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase());
+                // more than five cards (a versus rule set's, with the Bot card): the tighter cards of Visuals
                 const items = this.settingCards(this.setupItems(), true);
-                this.drawMenuList(items, this.setuppos, listTop);
-                const bottom = listTop + menuListHeight(items, 64, 10);
+                const { rowH, gap } = items.length > 5 ? VISUALS_ROWS : { rowH: 64, gap: 10 };
+                this.drawMenuList(items, this.setuppos, listTop, rowH, gap);
+                const bottom = listTop + menuListHeight(items, rowH, gap);
                 this.drawBest(bottom + 22);
                 hintY = Math.max(hintY, bottom + 46);
                 hint = `← →  CHANGE      ENTER  ${this.chosenMode().join ? "SELECT" : "START"}      ESC  BACK`;
