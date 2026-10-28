@@ -294,7 +294,10 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   reads `this.board.game`; menus and records keep `this.game`. Against the bot only the player's board plays sounds,
   shakes and sends clear bursts and backdrop hue (`own`).
 - Layout: the bot's match is laid out as two players' (below, `duoFitted()`; the user's request): both board groups whole
-  and the same size, the player's at `groupX`, the bot's tagged BOT and its level (`drawPlayerTag()`). Garbage meters beside the wells
+  and the same size, the player's at `groupX`, the bot's tagged BOT and its level (`drawPlayerTag()`). With the touch
+  controls (the user's request) it keeps the single-player compact layout instead (`layout.mini`): the player's well at
+  full size, no player tags, and the bot's field small at the foot of the right column under NEXT (`drawMiniBoard()`:
+  flat, plain squares in the blocks' colours, item blocks gold, no panels, text, glow or effects). Garbage meters beside the wells
   (`drawGarbageMeter()`, a red bar per attack waiting, grey while it may not rise yet, `garbageReady()`), "+lines" for each attack sent (an item sent has none: its clear message names it) (`drawAttackPopups()`): in the full
   layout in the right column under the clear message that sent it (`drawClearMessage()` returns its bottom,
   `BoardView.popupTop`; the user's request), in the compact one over the well; sounds

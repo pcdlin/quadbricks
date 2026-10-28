@@ -661,8 +661,9 @@ class Engine {
         const pick = (full, compact) => this.touch.enabled || fitIn(compact.view, winW, winH) >= COMPACT_GAIN * fitIn(full.view, winW, winH)
             ? compact : full;
         const single = pick(LAYOUT_FULL, LAYOUT_COMPACT);
-        this.layout = this.match ? duoFitted(single, winW / fitIn(single.view, winW, winH), this._state === STATE_GAME ? this.options.scale : 1)
-            : single;
+        // against the bot with the touch controls: the player's layout alone, the bot's field small in a corner (drawMiniBoard())
+        this.layout = !this.match ? single : this.touch.enabled && !this.match.duo ? { ...LAYOUT_COMPACT, mini: true }
+            : duoFitted(single, winW / fitIn(single.view, winW, winH), this._state === STATE_GAME ? this.options.scale : 1);
         this.placeBoards();
         const [vx, vy, vw, vh] = this.layout.view;
         const inset = this.touch.place(winW, winH, this.layout.view);
@@ -1031,8 +1032,8 @@ class Engine {
         const color = (s) => ({ ...s, rgb: hslToRgb(s.h, s.s, s.l) });
         const ps = this.pixelScale;
         const glowRgb = this.theme.glowRgb ? this.theme.glowRgb(this) : hslToRgb(this.hue, 90, 62);
-        // a glow round each side's board
-        const glows = !inGame || !glowRgb ? [] : this.boards().map(view => {
+        // a glow round each side's board (not the bot's mini-board)
+        const glows = !inGame || !glowRgb ? [] : this.boards().filter(view => !this.layout.mini || view === this.ownBoard).map(view => {
             const m = view === this.ownBoard ? this.motion : this.boardMotion(view);
             const gx = this.offX + (view.gx + m.dx) * ps, gy = this.offY + m.dy * ps; // follows the shake
             // and the fly-in: scaled about the board's centre
@@ -2991,7 +2992,42 @@ class Engine {
 
     drawGame() {
         this.drawSide(this.ownBoard, this.motion, 0);
-        if (this.match) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
+        if (this.layout.mini) this.drawMiniBoard(this.match.view.game);
+        else if (this.match) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
+    }
+
+    // The bot's field in the mini layout (touch controls): small at the foot of the right column,
+    // under the NEXT pieces, flat and still, its blocks plain squares in their colours (the piece
+    // in play lighter), with no panels, text or effects
+    drawMiniBoard(game) {
+        const r = this.r, { rightX: x0, sideW } = this.layout;
+        const cell = sideW / WIDTH, y0 = this.boardY + this.boardH - (HEIGHT - this.wellTop) * cell;
+        const fx = this.options.effects;
+        r.shape(x0 - 3, y0 - 3, sideW + 6, this.boardY + this.boardH - y0 + 6, {
+            radius: 5, fill: [6 / 255, 8 / 255, 22 / 255, fx ? 0.7 : 0.92],
+            stroke: fx ? hsla(this.hue, 90, 82, 0.35) : "rgba(244,236,220,0.22)", lineWidth: 1,
+        });
+        const block = (row, col, color, alpha) => {
+            if (row < this.wellTop || alpha <= 0) return;
+            r.globalAlpha = alpha;
+            r.rect(x0 + col * cell + 0.4, y0 + (row - this.wellTop) * cell + 0.4, cell - 0.8, cell - 0.8, color);
+        };
+        for (let i = this.wellTop; i < HEIGHT; i++) {
+            const row = i + game.getDropOffset(i, this.tickPhase); // rows fall into place during a line clear
+            for (let j = 0; j < WIDTH; j++) {
+                if (!game.getCell(i, j)) continue;
+                const item = game.getCellItem(i, j);
+                block(row, j, item ? MESSAGE_GOLD : PIECE_COLORS[game.getCellColor(i, j)].base, game.getCellAlpha(i, j));
+            }
+        }
+        const type = game.getCurPiece_type();
+        if (type) {
+            const color = PIECE_COLORS[game.getPieceColor()].light;
+            for (const [i, j] of game.curCells[type][game.getCurPiece_rotation()]) {
+                block(game.getCurPiece_row() + i, game.getCurPiece_col() + j, color, 1);
+            }
+        }
+        r.globalAlpha = 1;
     }
 
     // A player's board group where its view is placed (view.gx): the field in its motion m, the
@@ -3014,7 +3050,7 @@ class Engine {
             if (game.itemsOn) this.drawItemGauge(view);
             this.drawAttackPopups(match.popups[side]);
             if (match.duo) this.drawPlayerTag("PLAYER " + (side + 1), deviceName(match.devices[side]));
-            else this.drawPlayerTag(side ? "BOT" : "PLAYER", side ? "LV " + match.level : "");
+            else if (!this.layout.mini) this.drawPlayerTag(side ? "BOT" : "PLAYER", side ? "LV " + match.level : "");
         }
 
         // Overlays
