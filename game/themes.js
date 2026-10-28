@@ -151,7 +151,8 @@ const SPACE_ORBITS = [
     { rx: 208, speed: 0.0035, colors: [tetL, tetJ] },
 ];
 const SPACE_ORBIT_FLAT = 0.06;
-const SPACE_ORBIT_Y = 198; // their centre, clear of the Visuals screen's heading under them
+const SPACE_WORDMARK_Y = 140; // the wordmark's centre, higher than the other themes' to make room for the rings
+const SPACE_ORBIT_Y = 188; // their centre, clear of the scrolled screens' headings under them
 const SPACE_LINE ="rgba(110,215,255,0.28)"; // HUD hairlines
 const SPACE_BRACKET = "rgba(150,232,255,0.9)";
 const SPACE_LABEL = "rgba(127,220,255,0.9)";
@@ -421,7 +422,7 @@ const THEMES = {
         // them: those behind the rings are drawn before them, dimmer and smaller
         wordmark(e, cx) {
             const size = Math.min(72, Math.floor(72 * (e.layout.view[2] - 48) / e.measureText("QUADBRICKS", 72, 500, 20)));
-            e.text("QUADBRICKS", cx, 150, { size, weight: 500, align: "center", spacing: Math.round(size * 20 / 72) });
+            e.text("QUADBRICKS", cx, SPACE_WORDMARK_Y, { size, weight: 500, align: "center", spacing: Math.round(size * 20 / 72) });
             const r = e.r, tex = this.orbitTexture(r), oy = SPACE_ORBIT_Y;
             const dots = [];
             SPACE_ORBITS.forEach(({ rx, speed, colors }) => {
