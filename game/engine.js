@@ -1079,6 +1079,11 @@ class Engine {
         return this.gameGoesOn() ? [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS] : [RESTART_ITEM, ...MAIN_ITEMS];
     }
 
+    // The Multiplayer items: no Versus Player with the touch controls
+    multiItems() {
+        return this.touch.enabled ? MULTI_ITEMS.filter(item => !item.modeItem.join) : MULTI_ITEMS;
+    }
+
     // The Options items: no Keybinds or Gamepad with the touch controls
     optionsItems() {
         return this.touch.enabled ? OPTIONS_ITEMS.filter(item => !item.bindings) : OPTIONS_ITEMS;
@@ -1360,7 +1365,7 @@ class Engine {
         const screens = {
             [MENU_MAIN]: { pos: "mainpos", count: () => this.mainItems().length, back: null },
             [MENU_SINGLE]: { pos: "singlepos", count: () => SINGLE_ITEMS.length, back: MENU_MAIN },
-            [MENU_MULTI]: { pos: "multipos", count: () => MULTI_ITEMS.length, back: MENU_MAIN },
+            [MENU_MULTI]: { pos: "multipos", count: () => this.multiItems().length, back: MENU_MAIN },
             [MENU_JOIN]: { pos: "multipos", count: () => 1, back: MENU_SETUP },
             [MENU_QUICK]: { pos: "quickpos", count: () => QUICK_PLAY.length, back: MENU_SINGLE },
             [MENU_RULES]: { pos: "rulesetpos", count: () => RULESETS.length, back: MENU_SINGLE },
@@ -1417,7 +1422,7 @@ class Engine {
                     this.initGame(...this.lastGameArgs);
                     this.GAMESTATE = STATE_GAME;
                     return;
-                } else if (this.menuStep === MENU_MULTI && MULTI_ITEMS[pos].modeItem) { // its setup cards
+                } else if (this.menuStep === MENU_MULTI && this.multiItems()[pos].modeItem) { // its setup cards
                     this.setupFrom = MENU_MULTI;
                     this.menuStep = MENU_SETUP;
                     this.setuppos = 0;
@@ -1541,7 +1546,7 @@ class Engine {
 
     // The mode selected on the modes screen, or on Multiplayer when the setup cards come from there
     chosenMode() {
-        return this.setupFrom === MENU_MULTI ? MULTI_ITEMS[this.multipos].modeItem : RULESETS[this.rulesetpos].modes[this.menupos];
+        return this.setupFrom === MENU_MULTI ? this.multiItems()[this.multipos].modeItem : RULESETS[this.rulesetpos].modes[this.menupos];
     }
 
     // The chosen mode's key in setupChoices
@@ -2651,7 +2656,7 @@ class Engine {
                 break;
             case MENU_MULTI:
                 heading("MULTIPLAYER");
-                this.drawMenuList(MULTI_ITEMS, this.multipos, listTop);
+                this.drawMenuList(this.multiItems(), this.multipos, listTop);
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
             case MENU_JOIN:
