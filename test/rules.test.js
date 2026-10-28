@@ -511,6 +511,30 @@ check("Handling options don't change TGM3, TAP or GB timing",
     check("Moving away from the wall doesn't bump", g.takeBumps(), []);
 }
 {
+    // soft drop landings, for the engine's knock: the rows the soft drop brought the piece down
+    const landing = (g, row) => {
+        for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+        clearField(g);
+        place(g, tetO, 0, row, 4);
+        g.takeSoftLandings();
+        const rows = [];
+        for (let f = 0; f < 60 && g.phase === "active"; f++) {
+            g.advanceFrame(f === 0 ? SOFT_PUSH : 0);
+            rows.push(...g.takeSoftLandings());
+        }
+        return rows;
+    };
+    const g = createGame(guideline, "marathon");
+    const gravity = createGame(guideline, "marathon");
+    for (let f = 0; f < 200 && gravity.phase !== "active"; f++) gravity.advanceFrame(0);
+    clearField(gravity);
+    place(gravity, tetO, 0, 18, 4);
+    for (let f = 0; f < 200 && gravity.phase === "active"; f++) gravity.advanceFrame(0);
+    check("A soft drop landing is reported once with its rows; gravity alone, 20G or a locking GB soft drop's own rows as they are",
+        [landing(g, 10), gravity.takeSoftLandings(), landing(createGame(guideline, "master"), 10), landing(createGame(gbTetris, "standard"), 12)],
+        [[10], [], [], [7]]); // the GB's O sits a row lower in its box
+}
+{
     const g = createGame(guideline, "test");
     for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
     g.takeHolds();

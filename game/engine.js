@@ -570,6 +570,7 @@ const FLY_DEPTH = 10000; // how far behind its place it starts (logical units; a
 const FLY_TURN = [-16, 28]; // degrees it starts turned about the x and y axes, unwinding as it comes
 const FLY_FADE = 0.2; // part of the flight over which it fades in
 const SHAKE_KICK = 1.8; // downward speed a long hard drop gives the field (logical units per frame)
+const SHAKE_SOFT = 0.6; // a soft drop landing's knock, as a share of a hard drop's over the same rows
 const SHAKE_CLEAR_KICK = 1.4; // speed a single-line clear gives the field, in a random direction
 const SHAKE_CLEAR_LINE = 0.4, SHAKE_CLEAR_CHAIN = 0.08; // extra per further line, per combo step
 const SHAKE_BUMP = 0.6; // sideways speed a piece pushed against the border gives the field
@@ -1018,6 +1019,7 @@ class Engine {
         // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
         if (game.takeHolds() && this.options.effects) view.holdFlash = view.enterGlow = HOLD_FLASH_LIFE;
         for (const dir of game.takeBumps()) if (own && this.options.shakeScale) this.bumpShake(dir);
+        for (const rows of game.takeSoftLandings()) if (own && this.options.shakeScale) this.kickShake(rows, SHAKE_SOFT);
         const fireworks = game.takeFireworks();
         if (own && this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
         for (const burst of game.takeItemBursts()) if (this.options.effects && ITEM_ART[burst.item]) this.burstItem(burst);
@@ -1302,9 +1304,9 @@ class Engine {
     // PLAYING FIELD MOTION
 
     // A hard drop knocks the field (the current board's) down, harder for longer drops, with a
-    // little sideways jolt
-    kickShake(dist) {
-        const kick = SHAKE_KICK * this.options.shakeScale * (0.5 + 0.5 * Math.min(1, dist / 16));
+    // little sideways jolt; a soft drop landing knocks it less (strength SHAKE_SOFT)
+    kickShake(dist, strength = 1) {
+        const kick = SHAKE_KICK * strength * this.options.shakeScale * (0.5 + 0.5 * Math.min(1, dist / 16));
         this.board.shake.vy += kick;
         this.board.shake.vx += (Math.random() - 0.5) * kick * 0.5;
     }

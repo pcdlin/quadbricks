@@ -218,6 +218,7 @@ class Game1989 extends RuleGame {
             if (softDue) this.softRun++;
             if (nes) this.gravityAcc = 0;
             this.onFall();
+            if (softDue && !this.canFall()) this.softLandings.push(this.softRun); // landed (the engine's knock)
         }
         this.curPiece_lockDelay = this.canFall() ? 0 : this.gravityAcc; // lock fade
     }

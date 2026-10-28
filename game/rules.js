@@ -340,6 +340,8 @@ class RuleGame {
         this.clearedCells = [];
         this.hardDropCells = [];
         this.bumps = [];
+        this.softLandings = []; // rows a soft drop brought the piece down before it landed, per landing
+        this.softRows = 0; // rows soft-dropped since soft drop was held or the piece last landed
         this.wallBumped = false;
         this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "zap" (an item used), "clear1".."clear4" (+ "c<chain>" in a combo)
         this.fireworks = 0; // fireworks fired since the engine last looked (TGM3 Easy)
@@ -512,6 +514,7 @@ class RuleGame {
     takeClearedCells() { return this.drain("clearedCells"); }
     takeHardDropCells() { return this.drain("hardDropCells"); }
     takeBumps() { return this.drain("bumps"); } // directions (-1 left, 1 right) pushed against the border
+    takeSoftLandings() { return this.drain("softLandings"); } // rows soft-dropped, per landing
     takeSounds() { return this.drain("sounds"); }
     // Fireworks fired since the last call (TGM3 Easy's are drawn as bursts)
     takeFireworks() {
@@ -926,6 +929,7 @@ class RuleGame {
         this.gravityAcc = 0;
         this.activeTime = 0;
         this.softFrames = 0;
+        this.softRows = 0;
         this.manualLock = false; // locked by the player: hard drop, or a soft drop that locks
         this.hardDropped = false; // locked by a hard drop
         this.lastRotation = false;
@@ -1190,16 +1194,26 @@ class RuleGame {
         return this.held.soft && !this.entering;
     }
 
+    // A soft drop faster than gravity that brings the piece down onto the stack is a landing
+    // (softLandings, the engine's knock)
     applyGravity() {
         const soft = this.softHeld();
         if (soft) this.softFrames++;
+        else this.softRows = 0;
         this.gravityAcc += soft ? this.softGravity : this.gravity;
         while (this.gravityAcc >= 1) {
             if (!this.canFall()) { this.gravityAcc = 0; break; }
             this.curPiece_row++;
             this.gravityAcc -= 1;
-            if (soft) this.score += this.softDropPoints;
+            if (soft) {
+                this.score += this.softDropPoints;
+                if (this.softGravity > this.gravity) this.softRows++;
+            }
             this.onFall();
+        }
+        if (this.softRows && !this.canFall()) {
+            this.softLandings.push(this.softRows);
+            this.softRows = 0;
         }
     }
 

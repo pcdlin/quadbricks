@@ -940,7 +940,7 @@ class Bot {
         const spins = type === tetT && !!this.weights.spin;
         return {
             spins, sp: spins && current && game.lastRotation ? game.lastKick + 2 : 0,
-            game, probe: Object.assign(Object.create(game), { sounds: [], bumps: [], hardDropCells: [], clearedCells: [], actions: [] }),
+            game, probe: Object.assign(Object.create(game), { sounds: [], bumps: [], softLandings: [], hardDropCells: [], clearedCells: [], actions: [] }),
             type, row, col, rot, goal,
             // gravity owed in rows (NES and GB count it in frames)
             acc: !current ? 0 : game.nes || game.gb ? game.gravityAcc * game.gravity : Math.min(game.gravityAcc, 0.99),
