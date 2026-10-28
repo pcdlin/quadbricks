@@ -87,6 +87,7 @@ const VS_ITEMS = {
     "DARK BLOCK": { weight: 5, attack: true, frames: 480 }, // frames: Heboris's
     "FREE FALL": { weight: 3 },
     "← MOV FIELD": { weight: 3 },
+    "EXCHG FIELD": { weight: 3, neutral: true }, // neutral: waits for every attack on either side to end
     "NEGA FIELD": { weight: 1, attack: true },
 };
 // Frames an attack item holds the other side still (its cut-in; the arcade's length isn't known:
@@ -1440,7 +1441,7 @@ class RuleGame {
         const fire = this.firingItems.filter(item => !attacksOnly || VS_ITEMS[item].attack);
         this.firingItems = this.firingItems.filter(item => !fire.includes(item));
         for (const item of fire) {
-            if (!VS_ITEMS[item].attack && this.attacking()) this.waitingItems.push(item);
+            if (this.itemWaits(item)) this.waitingItems.push(item);
             else this.useItem(item);
         }
     }
@@ -1475,6 +1476,13 @@ class RuleGame {
         if (frames) this.itemTimers[item] = frames;
     }
 
+    // An own item set off now waits: while this side's attack is active, and Exchg Field also while the
+    // other side's is (the guide: "it will not go through until all currently active items are resolved")
+    itemWaits(item) {
+        if (VS_ITEMS[item].attack) return false;
+        return this.attacking() || (!!VS_ITEMS[item].neutral && this.attackActive());
+    }
+
     // An attack item lasts on this side (pieces or frames left)
     hitting(item) {
         return this.itemEffects[item] > 0 || this.itemTimers[item] > 0;
@@ -1505,7 +1513,9 @@ class RuleGame {
         // garbage sent during Mirror Block comes once it ends (the guide)
         if (!this.mirrorPieces && this.mirrorGarbage.length) this.incoming.push(...this.mirrorGarbage.splice(0));
         for (const item in this.itemEffects) if (this.itemEffects[item] > 0) this.itemEffects[item]--;
-        if (!this.attacking()) for (const item of this.waitingItems.splice(0)) this.useItem(item);
+        const ready = this.waitingItems.filter(item => !this.itemWaits(item));
+        this.waitingItems = this.waitingItems.filter(item => !ready.includes(item));
+        for (const item of ready) this.useItem(item);
     }
 
     // Items in a match (the Items card): dealt every VS_ITEM_LINES lines, their blocks marked
@@ -1605,8 +1615,38 @@ class RuleGame {
             case "180° FIELD":
                 this.remapField(grid => [...grid.slice(0, top), ...grid.slice(top).reverse()]); // the top row swaps with the bottom one
                 break;
+            case "EXCHG FIELD":
+                if (!received) this.sendAttack({ lines: 0, item }); // the swap is made on the other side
+                else if (this.rival.phase === "lineclear" || this.rival.phase === "rollstart") this.incomingItems.push(item); // after its clear
+                else this.exchangeFields();
+                break;
         }
         this.setShadow();
+    }
+
+    // Exchg Field, on the side it hits: the two fields swap. This side keeps its item blocks where they
+    // were, over the field it gets, and they reach the other side as normal blocks (the guide); a piece in
+    // play on the other side that no longer fits is knocked out like a snipe. This side stands still for
+    // the cut-in.
+    exchangeFields() {
+        const other = this.rival, kept = [];
+        if (this.itemCells) this.itemCells.forEach((row, r) => row.forEach((item, c) => {
+            if (item && this.field[r][c]) kept.push([r, c, this.field[r][c], item]);
+        }));
+        [this.field, other.field] = [other.field, this.field];
+        for (const game of [this, other]) if (game.itemCells) game.itemCells = game.field.map(() => new Array(WIDTH).fill(null));
+        for (const [r, c, type, item] of kept) {
+            this.field[r][c] = type;
+            this.itemCells[r][c] = item;
+        }
+        if (other.phase === "active" && other.curPiece_type
+            && !other.movePossible(other.curPiece_row, other.curPiece_col, other.curPiece_rotation)) {
+            other.curPiece_type = 0;
+            other.pieceItem = null;
+            other.setPhase("are", other.are);
+        }
+        other.setShadow();
+        this.hitBy("EXCHG FIELD");
     }
 
     // The highest row with a block (the end of the field when empty)

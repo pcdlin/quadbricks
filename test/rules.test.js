@@ -2789,6 +2789,27 @@ function versusPair(mode, seed = 5, startLevel = 0, options = {}, height = 0) {
 }
 const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c));
 {
+    // Exchg Field: the fields swap; the side it hits keeps its item blocks where they were; it waits for every attack on
+    // either side to end (the guide)
+    const [a, d] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(a);
+    clearField(d);
+    fill(a, ["#########."]);
+    fill(d, ["###.......", "##........"]);
+    d.itemCells[20 - FIELD_TOP][0] = "LASER"; // an item block of the side hit, in row 20
+    a.receiveGarbage({ item: "180° FIELD" }); // an attack on the side setting it off (its one row stays put): it waits
+    a.firingItems = ["EXCHG FIELD"];
+    a.fireItems();
+    const waited = [a.waitingItems.slice(), a.takeAttacks()];
+    a.cutIn = 0;
+    a.itemEffects = {};
+    a.takeItems();
+    for (const attack of a.takeAttacks()) d.receiveGarbage(attack);
+    check("Exchg Field: it waits for the attacks on either side to end, then the fields swap; the side hit keeps its item blocks",
+        [waited, [20, 21].map(r => rowOf(a, r).map(v => v ? "#" : ".").join("")), [20, 21].map(r => rowOf(d, r).map(v => v ? "#" : ".").join("")), d.getCellItem(20, 0), a.getCellItem(20, 0), d.curPiece_type, d.cutIn],
+        [[["EXCHG FIELD"], []], ["###.......", "##........"], ["#.........", "#########."], "LASER", null, 0, VS_CUTIN_FRAMES]);
+}
+{
     // the Item style, whose garbage is the plain one (Attack and Defence below)
     const [a, b] = versusPair(arika, 7, 0, { style: "item" }), [c] = versusPair(arika, 8, 0, { style: "item" });
     const deal = g => [g.curPiece_type, ...piecesOf(g)].join("");

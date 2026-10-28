@@ -614,6 +614,10 @@ settles is listed as an assumption below.
   - Free Fall: every block drops down its column; its rows clear and 2+ of them go to the other side as garbage with one
     hole (the guide and Heboris).
   - ← Mov Field: every row's blocks pushed to the left wall.
+  - Exchg Field: the two fields swap (`exchangeFields()`, on the side hit, after its line clear or the other's); the side hit
+    keeps its item blocks where they were and they reach the other side as normal blocks (the guide); the other side's piece
+    in play is knocked out if it no longer fits. Neutral (`neutral`): it waits until no attack is active on either side (the
+    guide; `itemWaits()`).
   - Nega Field: blocks and holes swapped up to the stack's top.
 
   TGM1's set (`TGM1_VS_ITEMS`, tetris.wiki's TGM1 page) has no Mirror Block, Color Block or Dark Block (TAP added them), and
