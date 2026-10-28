@@ -6,7 +6,7 @@ const vm = require("vm");
 const dir = require("path").join(__dirname, "..", "game");
 const BOT_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js", "bot.js"];
 vm.runInThisContext(BOT_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {createGame, Bot, BOT_LEVELS, BOT_ROWS, WIDTH, BotExplorer, botShapes, botDrops, botLock, botDead, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, HEIGHT, WIDTH, FIELD_TOP, tetI, tetT, tetO, tetS, tetZ, tetL, tetJ});");
+    "\n;Object.assign(globalThis, {createGame, Bot, BOT_LEVELS, BOT_ROWS, WIDTH, BotExplorer, botShapes, botDrops, botLock, botDead, botItemCleared, VS_ITEMS, VS_CUTIN_FRAMES, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, HEIGHT, WIDTH, FIELD_TOP, tetI, tetT, tetO, tetS, tetZ, tetL, tetJ});");
 
 let failures = 0;
 function check(name, ok, detail = "") {
@@ -262,6 +262,65 @@ for (const [name, mode, options, startLevel, height] of [
     const { result, frames, stuck, risen, games } = versusMatch(mode, [8, 2], 42, startLevel, options, height);
     check(`${name} versus: level 8 beats level 2 (${(frames / 60).toFixed(0)} s, ${games[0].linesSent} / ${games[1].linesSent} sent, ${risen} risen)`,
         !stuck && result === "win", JSON.stringify({ frames, stuck, result, over: games.map(g => g.endTitle) }));
+}
+
+// ---------------------------------------------------------------- versus items
+{
+    // the bot sees which placement sets an item off, and holds an attack item's clear for the other side's piece to be
+    // in play (a snipe)
+    const games = [0, 1].map(() => createGame(tgmTap, "versus", 0, 0, {}, { seed: 3, items: true }));
+    [games[0].rival, games[1].rival] = [games[1], games[0]];
+    for (const g of games) for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    const [g, other] = games;
+    for (let r = FIELD_TOP; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, r >= HEIGHT - 2 && c < 9 ? 1 : 0);
+    g.itemCells[HEIGHT - 1 - FIELD_TOP][3] = "LASER";
+    const rows = new Int32Array(BOT_ROWS);
+    for (let i = 0; i < BOT_ROWS; i++) rows[i] = g.field[i].reduce((m, v, c) => v ? m | 1 << c : m, 0);
+    const vertical = g.curCells[tetI][1];
+    check("versus items: the bot sees the item a placement sets off", botItemCleared(g, rows, vertical, HEIGHT - 4, 7) === "LASER"
+        && botItemCleared(g, rows, vertical, HEIGHT - 4, 3) === null);
+    const bot = new Bot(8, 1);
+    g.curPiece_type = tetI; g.curPiece_rotation = 0; g.curPiece_row = 2; g.curPiece_col = 3; g.activeTime = 1;
+    other.curPiece_type = 0;
+    other.setPhase("are", 70); // no piece to snipe for a while
+    other.gravity = 0;
+    let frames = 0, locked = -1, sent = null;
+    while (frames < 300 && !sent) {
+        g.advanceFrame(bot.input(g));
+        if (locked < 0 && g.phase !== "active") locked = frames;
+        const item = g.takeAttacks().find(a => a.item);
+        if (item) sent = { item: item.item, phase: other.phase };
+        other.advanceFrame(0);
+        frames++;
+    }
+    check(`versus items: level 8 sets the item off, waiting for the other side's piece to snipe it (locked at frame ${locked}, the item went at ${frames})`,
+        locked > 10 && sent && sent.item === "LASER" && sent.phase === "active", JSON.stringify({ locked, sent, frames }));
+}
+{
+    // every item, thrown at both sides again and again: neither bot gets stuck, whatever the item does to its pieces
+    const attacks = Object.keys(VS_ITEMS);
+    for (const [name, mode, options] of [["TAP", tgmTap, {}], ["TGM3 World", arika, {}], ["TGM1 20G", tgmOriginal, { speed: "20g" }], ["ACE SRS", tgmAce, {}]]) {
+        seeded(25);
+        const games = [0, 1].map(() => createGame(mode, "versus", 0, 0, {}, { seed: 9, items: true, ...options }));
+        [games[0].rival, games[1].rival] = [games[1], games[0]];
+        const bots = [new Bot(8, 1), new Bot(6, 2)];
+        let frames = 0, stuck = false, thrown = 0;
+        while (frames < 60 * 60 * 3 && !games[0].versusOutcome()) {
+            games.forEach((g, i) => { if (!g.isGameOver()) g.advanceFrame(bots[i].input(g)); });
+            games.forEach((g, i) => {
+                for (const a of g.takeAttacks()) games[1 - i].receiveGarbage({ ...a, hole: Math.floor(Math.random() * WIDTH) });
+                if (g.curPiece_type && g.activeTime > 600) stuck = true;
+            });
+            if (frames % 240 === 120) { // an item from the other side (or the side's own), in turn
+                const item = attacks[thrown++ % attacks.length], side = thrown % 2;
+                if (VS_ITEMS[item].attack) games[side].receiveGarbage({ item });
+                else { games[side].firingItems.push(item); games[side].fireItems(); }
+            }
+            if (stuck) break;
+            frames++;
+        }
+        check(`versus items: ${name} bots play through every item, ${thrown} thrown (${(frames / 60).toFixed(0)} s, ${games.map(g => g.endTitle || "playing").join(" / ")})`, !stuck);
+    }
 }
 
 // ---------------------------------------------------------------- levels

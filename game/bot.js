@@ -72,6 +72,8 @@ const BOT_TMAX = 240;            // frames the explorer looks ahead
 const BOT_MAXN = 9000;           // explorer nodes
 const BOT_COLS = 28, BOT_COL_OFF = 8;
 const BOT_DAS_MIN = 4;           // moves in a row that are worth a held key
+const BOT_ITEM_LEVEL = 3;        // levels from which the bot values versus items
+const BOT_SNIPE_LEVEL = 7, BOT_SNIPE_WAIT = 90; // and times its attack items (frames it waits at most)
 
 // actions
 const BOT_CW = 0, BOT_CCW = 1, BOT_R180 = 2, BOT_LEFT = 3, BOT_RIGHT = 4, BOT_DOWN = 5, BOT_WAIT = 6;
@@ -240,6 +242,47 @@ function botRiseDead(game, rows, pending, cleared) {
 function botPendingAfter(game, pending, cleared) {
     if (!pending || !cleared || game.garbageEveryLock) return 0;
     return Math.max(0, pending - botClear.attack);
+}
+
+// Versus items (the TGM games with the Items card): the item a placement sets off, the highest item
+// block in the rows it fills (the rightmost of a row; the piece's own blocks carry its item), as the
+// game's collectItems(); null when none. Item blocks are marked on screen, so a player sees them too.
+function botItemCleared(game, rows, cells, row, col) {
+    if (!game.itemCells) return null;
+    const full = new Map(); // row -> its mask with the piece in it
+    for (const [i, j] of cells) {
+        const r = row + i;
+        if (r < FIELD_TOP) return null;
+        full.set(r, (full.get(r) ?? rows[r - FIELD_TOP]) | 1 << (col + j));
+    }
+    for (const r of [...full.keys()].sort((a, b) => a - b)) {
+        if ((full.get(r) & BOT_FULL) !== BOT_FULL) continue;
+        for (let c = WIDTH - 1; c >= 0; c--) {
+            const mine = cells.some(([i, j]) => row + i === r && col + j === c);
+            const item = mine ? game.pieceItem : game.getCellItem(r, c);
+            if (item) return item;
+        }
+    }
+    return null;
+}
+
+// What setting an item off is worth: an attack on the other side always (BOT_ITEM_ATTACK); a Del Field,
+// Del Even or Free Fall more the higher the stack is; Exchg Field when the other side's stack is lower
+const BOT_ITEM_ATTACK = 60;
+function botItemValue(game, item, rows) {
+    if (!item) return 0;
+    if (VS_ITEMS[item].attack) return BOT_ITEM_ATTACK;
+    const height = b => { let top = 0; while (top < BOT_ROWS && !b[top]) top++; return BOT_ROWS - top; };
+    switch (item) {
+        case "↑ DEL FIELD": case "↓ DEL FIELD": case "DEL EVEN": case "FREE FALL": return 4 * height(rows);
+        case "EXCHG FIELD": {
+            if (!game.rival) return 0;
+            const other = new Int32Array(BOT_ROWS);
+            botBoardFrom(game.rival, other);
+            return 8 * (height(rows) - height(other));
+        }
+    }
+    return 0;
 }
 
 // The lock just made ends the game: a lock out, or the next piece can't enter
@@ -589,6 +632,7 @@ class Bot {
         this.cool = 0;
         this.wait = 0;
         this.replans = 0;
+        this.sniping = 0; // frames waited to snipe (snipeWait)
         this.afterHold = false;
         this.useHard = true;
         this.irsDone = false; // the turn for the next piece is chosen (once per entry delay)
@@ -759,6 +803,7 @@ class Bot {
                 } else want.soft = 1;
                 return true;
             case "finish": // the piece is where it should be: drop it
+                if (this.snipeWait(game)) return true;
                 if (this.useHard && this.style !== "soft") {
                     if (this.style === "hard") {
                         if (!(game.handling.dropGuard && game.activeTime <= GUIDELINE_DROP_GUARD)) this.hard = true;
@@ -769,6 +814,20 @@ class Bot {
                 return true;
         }
         return false;
+    }
+
+    // A placement that sets off an attack item waits (levels BOT_SNIPE_LEVEL up, at most BOT_SNIPE_WAIT
+    // frames) for it to hit the other side's piece in play: a snipe (the guide: the attack destroys
+    // the piece in play, not one in ARE). The item goes off with the clear (TGM3, ACE) or after its
+    // delay: it waits for the other side's piece to be in play then, as it sees on that side's screen.
+    snipeWait(game) {
+        const item = this.plan && this.plan.goal && this.plan.goal.item, other = game.rival;
+        if (!item || !VS_ITEMS[item].attack || this.level < BOT_SNIPE_LEVEL || !other || other.isGameOver()) return false;
+        if (++this.sniping > BOT_SNIPE_WAIT) return false;
+        const delay = game.itemsAtClear ? 0 : game.lineClearDelay;
+        if (other.phase === "active") return delay > 0 && other.activeTime > 6; // it may lock before the item lands
+        if (other.phase === "are") return other.phaseLength - other.phaseCounter > delay;
+        return true; // a line clear or a cut-in: it has no piece
     }
 
     // ----------------------------------------------------------
@@ -877,6 +936,11 @@ class Bot {
             const dead = botDead(game, buf, seq[0] || tetT) || botRiseDead(game, buf, pending, cleared);
             pl.board = Int32Array.from(buf);
             pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
+            if (game.itemsOn && this.level >= BOT_ITEM_LEVEL) { // the item it sets off, if any (see botItemValue)
+                pl.item = botItemCleared(game, this.board, game.curCells[pl.type][pl.rot], pl.row, pl.col);
+                pl.step += botItemValue(game, pl.item, buf);
+                pl.score += botItemValue(game, pl.item, buf);
+            }
         }
         roots.sort((a, b) => b.score - a.score);
         if (!roots.length || roots[0].score === -Infinity) return null;
@@ -897,7 +961,7 @@ class Bot {
         if (this.hands.misdrop && this.rng() < this.hands.misdrop) pick = this.misdrop(roots, pick);
         if (pre) return { start: pick.start };
         if (pick.hold) return { hold: true, goal: null };
-        return { hold: false, goal: { col: pick.col, rot: pick.rot, land: pick.row, spin: !!pick.spin } };
+        return { hold: false, goal: { col: pick.col, rot: pick.rot, land: pick.row, spin: !!pick.spin, item: pick.hold ? null : pick.item } };
     }
 
     // Beam search over the next pieces from a placed root: the best total of the moves' scores and
