@@ -106,6 +106,9 @@ const VERSUS_GOAL_SETUP = { name: "Goal", accent: tetL, arg: "goal", modes: [tgm
 const VERSUS_GARBAGE_SETUP = { name: "Garbage", accent: tetZ, arg: "garbage", labels: ["On", "Off (Cement)"], values: [true, false],
     modes: [tgmOriginal, tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] };
 OPTION_ARGS.push("garbage");
+// The TGM games: items off or on. On at first in TAP, whose players turn them off by holding Start as versus
+// begins (harddrop.com); Off at first in the others, whose sources don't say
+const VERSUS_ITEMS_SETUP = { name: "Items", accent: tetS, arg: "items", labels: ["Off", "On"], values: [false, true] };
 // GB: each side its own height (heights: the two cards' names)
 const versusSubSetup = (heights, sides) => [
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
@@ -119,7 +122,8 @@ const versusSubSetup = (heights, sides) => [
     { ...ACE_RULE_SETUP, modes: VERSUS_ACE_MODES },
     { name: "Speed", accent: tetO, arg: "speed", labels: ["Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2"],
       values: ["normal", "hispeed1", "hispeed2", "another", "another2"], modes: VERSUS_ACE_MODES },
-    { name: "Items", accent: tetS, arg: "items", labels: ["Off", "On"], values: [false, true], modes: [tgmOriginal, tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] },
+    { ...VERSUS_ITEMS_SETUP, modes: [tgmOriginal, arika, tgmClassic, ...VERSUS_ACE_MODES] },
+    { ...VERSUS_ITEMS_SETUP, initial: 1, modes: [tgmTap] },
     VERSUS_GARBAGE_SETUP,
     { ...levelSetup(NES_START_LEVELS), initial: NES_VERSUS_LEVEL, modes: [nesTetris] },
     { ...HEIGHT_SETUP, name: heights[0], modes: [gbTetris] },

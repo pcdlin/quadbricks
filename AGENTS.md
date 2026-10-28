@@ -596,7 +596,8 @@ settles is listed as an assumption below.
 - TGM3's Match card (`CLEAR_RULE_SETUP`, `options.clearRule`): its VS Rule, or its Clear Rule, "a simple race between the
   two players" (tetris.wiki, which says no more): here a race to the goal level without garbage or items (`clearRule`; the
   Style, Items and Garbage cards then do nothing).
-- Items (the Items card, Off at first; TGM1, TAP, TGM3, ACE): every piece fills the gauge, and after `VS_ITEM_PIECES`
+- Items (the Items card, `VERSUS_ITEMS_SETUP`; TGM1, TAP, TGM3, ACE; On at first for TAP, whose players turn them off by
+  holding Start as versus begins (harddrop.com), Off for the others, whose sources don't say): every piece fills the gauge, and after `VS_ITEM_PIECES`
   (20) the next carries an item (the guide: the 21st piece; Heboris: `item_interval` 20; `itemGauge`, `nextItem`,
   `pieceItem`). They come from a bag per round with one of each, drawn by TAP's weights
   without replacement (`VS_ITEMS`, the guide's table, in its order; `drawItem()`, refilled when empty). A clear that takes item
