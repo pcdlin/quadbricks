@@ -2859,6 +2859,13 @@ const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c))
     check("  ...at most 8 rows wait (the guide's cap)", [TGM_VS_GARBAGE_MAX, d.pendingGarbage(), d.incoming.map(g => g.lines)], [8, 8, [3, 3, 2]]);
 }
 {
+    // the Handicap card: one side starts some levels on, at their speed
+    const handicapped = (mode, options) => [0, 1].map(side => createGame(mode, "versus", 0, 0, {}, { seed: 5, side, ...options }));
+    const [p1, p2] = handicapped(tgmTap, { handicap: { side: 1, levels: 100 } }), [d1, d2] = handicapped(tgmTap, { handicap: { side: 0, levels: 50 }, speed: "death" });
+    check("Versus Handicap: the side it names starts at its level, with that level's speed (TAP Master, Death)",
+        [p1.level, p2.level, p2.gravity > p1.gravity, d1.level, d2.level], [0, 100, true, 50, 0]);
+}
+{
     const [a, b] = versusPair(tgmClassic);
     a.level = 199;
     clearField(a);

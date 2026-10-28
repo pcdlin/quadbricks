@@ -1602,6 +1602,9 @@ function tgmVersus(Base) {
             super.setOptions(options);
             const seed = options.seed ?? Date.now();
             this.randomizer = this.randomizer ? new this.randomizer.constructor(seed) : new BagRandomizer(seed, this.bagNoSzoFirst);
+            // the Handicap card: one side (options.side: 0 player 1, 1 the other) starts some levels on, at their speed
+            const handicap = options.handicap;
+            if (handicap && handicap.side === (options.side || 0)) this.level = handicap.levels;
             this.seedVersus(seed);
             if (options.items) this.useItems();
             if (options.garbage === false) this.sendsGarbage = false; // TAP's Cement Mode: no garbage either way

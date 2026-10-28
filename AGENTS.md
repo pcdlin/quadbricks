@@ -565,6 +565,9 @@ settles is listed as an assumption below.
   999), and a round not decided in 5:00 (`TGM1_VS_FRAMES`) is a draw (`timeDraw`). ACE (tetris.wiki: "a time limit of
   three minutes and a 20-line quota"): 20 lines first win, or more lines after 3:00 (`ACE_VS_*`); its level clock is off.
   Heboris agrees: goal level 200 (or 20 lines), the higher level (or more lines) at time up, the same is a draw.
+- The Handicap card (`handicapSetup()`, `options.handicap`, TGM1, TAP and TGM3): one side starts at level 50 or 100, at that
+  level's speed (the game that `options.side` names: the engine passes 1 for the other side). This game's own: TAP's versus has
+  no handicap that tetris.wiki or harddrop.com know of (Heboris lets each side set its own speed and delays).
 - Garbage: a clear of 2+ lines sends its rows with the clearing piece's blocks taken out, upside down (`garbageFrom()`:
   the cleared rows from `clearedRows`, the piece's cells from `beforeLock()`), in their own colours; a perfect clear sends
   them twice; singles and clears that set an item off send nothing. At most 8 rows wait (`TGM_VS_GARBAGE_MAX`, the guide;

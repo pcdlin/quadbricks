@@ -87,6 +87,13 @@ OPTION_ARGS.push("rounds");
 const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM1", "TAP", "TGM3", "ACE", "NES", "GB"],
     values: [guideline, tgmOriginal, tgmTap, arika, tgmAce, nesTetris, gbTetris] };
 const VERSUS_ACE_MODES = [tgmAce, aceArs, aceArs2];
+// TGM1, TAP and TGM3: a head start for one side (sides: the two sides' names), levels it starts on. Not TAP's (its versus has
+// no handicap that tetris.wiki or harddrop.com know of); Heboris gives each side its own speed, this the level and with it
+// the speed. options.handicap: { side (0: player 1), levels }
+const handicapSetup = sides => ({ name: "Handicap", accent: tetT, arg: "handicap", modes: [tgmOriginal, tgmTap, arika, tgmClassic],
+    labels: ["Off", ...sides.flatMap(side => [`${side} start at 50`, `${side} start at 100`])],
+    values: [null, { side: 0, levels: 50 }, { side: 0, levels: 100 }, { side: 1, levels: 50 }, { side: 1, levels: 100 }] });
+OPTION_ARGS.push("handicap");
 // TAP and TGM3: the level that wins a round, and its time limit (tetris.wiki: 100-level steps, 1:20 per step; 200 and
 // 2:40 by default)
 const VERSUS_GOAL_SETUP = { name: "Goal", accent: tetL, arg: "goal", modes: [tgmTap, arika, tgmClassic], initial: 1,
@@ -97,12 +104,13 @@ const VERSUS_GARBAGE_SETUP = { name: "Garbage", accent: tetZ, arg: "garbage", la
     modes: [tgmOriginal, tgmTap, arika, tgmClassic, ...VERSUS_ACE_MODES] };
 OPTION_ARGS.push("garbage");
 // GB: each side its own height (heights: the two cards' names)
-const versusSubSetup = heights => [
+const versusSubSetup = (heights, sides) => [
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "20G"], values: ["master", "20g"], modes: [tgmOriginal] },
     { name: "Speed", accent: tetZ, arg: "speed", labels: ["Master", "Death", "TGM+"], values: ["master", "death", "plus"], modes: [tgmTap] },
     { ...RULE_SETUP, modes: [arika, tgmClassic] },
     { name: "Style", accent: tetJ, arg: "style", labels: ["Attack", "Defence", "Item"], values: ["attack", "defence", "item"], modes: [arika, tgmClassic] },
     VERSUS_GOAL_SETUP,
+    handicapSetup(sides),
     { ...ACE_RULE_SETUP, modes: VERSUS_ACE_MODES },
     { name: "Speed", accent: tetO, arg: "speed", labels: ["Normal", "Hi-Speed 1", "Hi-Speed 2", "Another", "Another 2"],
       values: ["normal", "hispeed1", "hispeed2", "another", "another2"], modes: VERSUS_ACE_MODES },
@@ -122,9 +130,9 @@ const VERSUS_RULE_NAMES = { [guideline]: "Guideline", [tgmOriginal]: "TGM1", [tg
 // Game mode's
 const MULTI_ITEMS = [
     { name: "Versus Bot", desc: "Against the bot, in the rules of any of the games", accent: tetI,
-      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, BOT_SETUP, ...versusSubSetup(["Your height", "Bot height"])] } },
+      modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, BOT_SETUP, ...versusSubSetup(["Your height", "Bot height"], ["You", "Bot"])] } },
     { name: "Versus Player", desc: "Two players side by side, on their own keys or gamepads", accent: tetT,
-      modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...versusSubSetup(["P1 height", "P2 height"])], join: true } },
+      modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...versusSubSetup(["P1 height", "P2 height"], ["P1", "P2"])], join: true } },
 ];
 // Input devices of a two-player game: "keys1" (player 1's keys, and the touch controls), "keys2"
 // (player 2's keys) or "pad:N" (the gamepad at index N)
@@ -843,7 +851,7 @@ class Engine {
     // options: the speed, items and seed; GB: its own height, options.height2), so both sides get the same pieces, but not the
     // player's handling. view: the other side's board (here the bot's)
     newMatch(mode, startLevel, height, options, level) {
-        const game = createGame(mode, "versus", startLevel, options.height2 ?? height, {}, options);
+        const game = createGame(mode, "versus", startLevel, options.height2 ?? height, {}, { ...options, side: 1 });
         return {
             bot: new Bot(level, options.seed), level, view: new BoardView(game),
             popups: [[], []], // lines each side sent: "+4" beside or over its well
@@ -856,7 +864,7 @@ class Engine {
     // A match between two players (duo), each on their own input device (duoDevices): player 2's
     // game, with the player's handling and settings, is dealt from the same seed; view is player 2's board
     newDuo(mode, startLevel, height, options) {
-        const game = createGame(mode, "versus", startLevel, options.height2 ?? height, this.options.handling, options);
+        const game = createGame(mode, "versus", startLevel, options.height2 ?? height, this.options.handling, { ...options, side: 1 });
         return { duo: true, devices: this.duoDevices, view: new BoardView(game), popups: [[], []], result: null, wins: [0, 0], round: 1 };
     }
 
