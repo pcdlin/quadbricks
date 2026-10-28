@@ -11,9 +11,8 @@ To play the game:
 
 To run it locally:
 
-- Python 3 (any version with `http.server`), or any other static file server.
-  There is no build step, bundler or `package.json`, so the files in `game/` are
-  served as they are.
+- Node.js with `npm` and `npx`, or any other static file server.
+  There is no build step or bundler, so the files in `game/` are served as they are.
 
 To run the rule-set tests:
 
@@ -24,16 +23,11 @@ To run the rule-set tests:
 From the repository root, start a static server for `game/`:
 
 ```bash
-python -m http.server 8123 --directory game
+npm run serve
 ```
 
-Then open <http://localhost:8123> in your browser.
-
-Any static server works the same way, for example:
-
-```bash
-npx serve game
-```
+Then open <http://localhost:8123> in your browser. The script runs `npx serve game`
+on port 8123 (defined in `package.json`).
 
 Stop the server with Ctrl+C.
 

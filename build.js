@@ -4,7 +4,7 @@
 //   into one minified, content-hashed game.<hash>.js and points index.html at it.
 // - Minifies the page's inline CSS and whitespace, and copies favicon.svg and gfx/ under content-hashed
 //   names (favicon.<hash>.svg, gfx.<hash>/), which the page and the bundle are pointed at.
-// - Minification uses esbuild, fetched on demand by npx (pinned below); there is no package.json.
+// - Minification uses esbuild, fetched on demand by npx (pinned below); package.json only holds the serve script.
 //   Top-level names are kept: the scripts share globals, and the bundle is a classic script.
 // Serve the output folder as it is (any static host); the files are safe to cache for a long time
 // except index.html, which names them: serve it with "Cache-Control: no-cache" (revalidate every time),

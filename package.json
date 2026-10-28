@@ -1,0 +1,8 @@
+{
+  "name": "quadbricks",
+  "private": true,
+  "description": "Quadbricks, a falling-block puzzle game",
+  "scripts": {
+    "serve": "npx serve game -l 8123"
+  }
+}

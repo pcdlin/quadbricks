@@ -3,14 +3,14 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8123", "--directory", "game"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "game", "-l", "8123"],
       "port": 8123
     },
     {
       "name": "web-alt",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8125", "--directory", "game"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "game", "-l", "8125"],
       "port": 8125,
       "autoPort": false
     }
