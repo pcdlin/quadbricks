@@ -405,7 +405,7 @@ class TgmGame extends RuleGame {
 
     // Opacity of a settled block: during the staff roll they fade or vanish after locking,
     // and come back when the game ends
-    getCellAlpha(row, col) {
+    blockAlpha(row, col) {
         if (!this.roll || this.gameover || row < FIELD_TOP || row >= HEIGHT) return 1;
         const age = this.rollFrames - this.lockTime[row - FIELD_TOP][col];
         const hide = this.rollHide[this.roll];

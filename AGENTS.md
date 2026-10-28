@@ -215,7 +215,8 @@ configuration fields set in their constructors and hooks they override:
   `sectionStops` false (TAP Normal) pass x99 with new pieces.
 
 The engine drives it with `advanceFrame(inputBitmap)` and reads:
-- `getCell(row, col)`, `getCellAlpha(row, col)` (staff roll), `getCellItem(row, col)`, `pieceItem`, `nextItem` (TAP Normal's item pieces), `getCurPiece_*()`, `getShadowRow()` (−100 = no ghost),
+- `getCell(row, col)`, `getCellAlpha(row, col)` (the rule set's `blockAlpha()`, TGM's staff roll, times `itemAlpha()`, what
+  versus items leave in view), `getCellColor(row, col)` (the colour index a settled block is drawn in), `getPieceColor()` (the piece in play's), `getCellItem(row, col)`, `pieceItem`, `nextItem` (TAP Normal's item pieces), `getCurPiece_*()`, `getShadowRow()` (−100 = no ghost),
   `getHeldPiece()`, `rnd_get_queue(i)`, `isGameOver()`, `inStartDelay()`, `inRollStart()`,
   `countdown()` (3, 2, 1 during READY, else 0), `startdelayCounter/startdelayMax`, `curPiece_lockDelay/lockDelayMax` (lock fade),
   `endTitle/endSub`, `getStats()` (side panel rows; first row is `[RULESET, VARIANT]`),

@@ -1812,7 +1812,7 @@ class Engine {
                 const cell = game.getCell(i, j);
                 if (!cell || game.getCellAlpha(i, j) <= 0) continue;
                 if (i > firstRow && game.getCell(i - 1, j) && game.getDropDistance(i - 1) === dist) continue; // not the run's top
-                streaks.push({ col: j, y0, y1, index: game.palette[cell], yEnd, alpha });
+                streaks.push({ col: j, y0, y1, index: game.getCellColor(i, j), yEnd, alpha });
             }
             this.drawTrails(streaks);
         }
@@ -2886,8 +2886,7 @@ class Engine {
         }
 
         const cells = game.curCells[game.getCurPiece_type()][game.getCurPiece_rotation()]; // big in Shirase's roll
-        const pal = game.palette; // piece type -> colour
-        const color = pal[game.getCurPiece_type()];
+        const color = game.getPieceColor(); // the piece in play's colour index
         // Also show the two rows above the well, where pieces spawn (not for GB: they spawn inside)
         const firstRow = game.firstDrawnRow;
         const col = game.getCurPiece_col();
@@ -2914,7 +2913,7 @@ class Engine {
                 const alpha = game.getCellAlpha(i, j); // TGM3 and TAP staff roll: blocks fade or vanish
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
-                this.drawBlock(pal[game.getCell(i, j)], this.cellX(j), y, CELL, "locked", this.options.tileset, false);
+                this.drawBlock(game.getCellColor(i, j), this.cellX(j), y, CELL, "locked", this.options.tileset, false);
             }
             r.globalAlpha = 1;
         }
@@ -2925,7 +2924,7 @@ class Engine {
                 const alpha = game.getCellAlpha(i, j);
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
-                this.drawLights(pal[game.getCell(i, j)], this.cellX(j), y, CELL);
+                this.drawLights(game.getCellColor(i, j), this.cellX(j), y, CELL);
                 if (game.getCellItem(i, j)) this.drawItemMark(this.cellX(j), y, CELL); // TAP Normal's item pieces
             }
             r.globalAlpha = 1;

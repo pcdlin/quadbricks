@@ -393,9 +393,25 @@ class RuleGame {
         return this.field[row - FIELD_TOP][col];
     }
 
-    // Opacity of a settled block (TGM's staff rolls fade or hide them)
+    // Opacity of a settled block: the rule set's (blockAlpha: TGM's staff rolls fade or hide them),
+    // and what the other side's versus items leave in view (itemAlpha)
     getCellAlpha(row, col) {
-        return 1;
+        return this.blockAlpha(row, col) * this.itemAlpha(row, col);
+    }
+    blockAlpha(row, col) { return 1; }
+    itemAlpha(row, col) {
+        let alpha = 1;
+        return alpha;
+    }
+
+    // The colour index a settled block is drawn in (its piece's, through the palette)
+    getCellColor(row, col) {
+        return this.palette[this.getCell(row, col)];
+    }
+
+    // The colour index the piece in play is drawn in
+    getPieceColor() {
+        return this.palette[this.curPiece_type];
     }
 
     // The item a settled block carries (item pieces), or null
