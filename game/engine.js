@@ -280,6 +280,7 @@ const SCROLLED_LISTS = {
     [MENU_SETUP]: { items: null, pos: "setuppos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
 };
 const SETUP_FIT = 6;
+const MENU_HINT_Y = 660; // the menus' key hint, at the bottom of every screen
 // Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
 const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
 const PREVIEW_GAP = 6;
@@ -2482,13 +2483,12 @@ class Engine {
         // The tagline under the wordmark, on the main screen only: it slides with the screen, and
         // its place holds the Visuals heading
         if (step === MENU_MAIN) this.text("WELCOME", cx, 228, { size: 12, weight: 600, color: INK_DIM, align: "center", spacing: 6 });
-        let hint, hintY = 660; // the bottom of the view, lower under a long list
+        let hint; // the key hint, always in the same place at the bottom (MENU_HINT_Y): every list ends above it
         switch (step) {
             case MENU_MAIN: {
                 // five cards during a game: from a little higher up, the hint under them
                 const items = this.mainItems(), top = items.length > 4 ? listTop - 20 : listTop;
                 this.drawMenuList(items, this.mainpos, top);
-                hintY = Math.max(hintY, top + menuListHeight(items, 64, 10) + 22);
                 hint = "ENTER  SELECT" + (this.game ? "      ESC  RESUME" : "");
                 break;
             }
@@ -2512,7 +2512,6 @@ class Engine {
                 this.drawMenuList(QUICK_PLAY, this.quickpos, top, rowH, gap);
                 const bottom = top + menuListHeight(QUICK_PLAY, rowH, gap);
                 this.drawBest(bottom + 22, this.quickArgs());
-                hintY = Math.max(hintY, bottom + 46);
                 hint = "ENTER  START      ESC  BACK";
                 break;
             }
@@ -2521,7 +2520,6 @@ class Engine {
                 const top = listTop - 20, rowH = 44, gap = 4;
                 heading("SINGLE PLAYER  ·  CHOOSE A RULE SET", INK_DIM, top - 26);
                 this.drawMenuList(RULESETS, this.rulesetpos, top, rowH, gap);
-                hintY = Math.max(hintY, top + menuListHeight(RULESETS, rowH, gap) + 22);
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
             }
@@ -2532,7 +2530,6 @@ class Engine {
                 this.drawMenuList(ruleset.modes, this.menupos, listTop, VISUALS_ROWS.rowH, VISUALS_ROWS.gap);
                 const bottom = listTop + menuListHeight(ruleset.modes, VISUALS_ROWS.rowH, VISUALS_ROWS.gap);
                 this.drawBest(bottom + 22); // with the mode's current setup choices
-                hintY = Math.max(hintY, bottom + 46);
                 hint = (this.chosenMode().setup ? "ENTER  SELECT" : "ENTER  START") + "      ESC  BACK";
                 break;
             }
@@ -2541,10 +2538,10 @@ class Engine {
                 const from = this.setupFrom === MENU_MULTI ? "Multiplayer" : RULESETS[this.rulesetpos].name;
                 heading(`${from}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase(), INK_DIM,
                     this.setupItems().length > SETUP_FIT ? 220 : listTop - 26);
-                // more than five cards (a versus rule set's, with the Bot card): the tighter cards of Visuals; more
-                // than SETUP_FIT, the Visuals screen's place for them, scrolled to keep the selected one in view
+                // five cards or more (a versus rule set's): the tighter cards of Visuals, so they end above the
+                // hint; more than SETUP_FIT, the Visuals screen's place for them, scrolled to keep the selected one in view
                 const items = this.settingCards(this.setupItems(), true);
-                const { rowH, gap } = items.length > 5 ? VISUALS_ROWS : { rowH: 64, gap: 10 };
+                const { rowH, gap } = items.length > 4 ? VISUALS_ROWS : { rowH: 64, gap: 10 };
                 let bottom;
                 if (items.length > SETUP_FIT) {
                     this.drawScrolledList(MENU_SETUP, items, 236);
@@ -2554,7 +2551,6 @@ class Engine {
                     bottom = listTop + menuListHeight(items, rowH, gap);
                 }
                 this.drawBest(bottom + 22);
-                hintY = Math.max(hintY, bottom + 46);
                 hint = `← →  CHANGE      ENTER  ${this.chosenMode().join ? "SELECT" : "START"}      ESC  BACK`;
                 break;
             }
@@ -2570,7 +2566,6 @@ class Engine {
                 // Tighter cards leave room for the hint; the list shows VISUALS_LIST_H of them,
                 // scrolled to keep the selection in view
                 this.drawScrolledList(MENU_VISUALS, items, top);
-                hintY = Math.max(hintY, top + VISUALS_LIST_H + 22);
                 hint = "← →  CHANGE      ESC  BACK";
                 break;
             }
@@ -2584,7 +2579,6 @@ class Engine {
                 const y = top + HANDLING_LIST_H + 14;
                 this.text(title.toUpperCase(), cx, y, { size: 11, weight: 700, color: INK, align: "center", spacing: 3 });
                 this.text(help, cx, y + 19, { size: 13, weight: 500, color: INK_DIM, align: "center" });
-                hintY = Math.max(hintY, y + 44);
                 hint = HANDLING_ITEMS[this.handlingpos].action ? "ENTER  RESET      ESC  BACK" : "← →  CHANGE      ESC  BACK";
                 break;
             }
@@ -2605,7 +2599,7 @@ class Engine {
         // Footer
         if (this.gamepad.active) hint = padWords(hint);
         else if (this.touch.enabled) hint = touchWords(hint);
-        this.text(hint, cx, hintY, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
+        this.text(hint, cx, MENU_HINT_Y, { size: 12, weight: 700, color: INK_DIM, align: "center", spacing: 3 });
     }
 
     // Options → Gamepad: a card choosing the connected gamepad to set up (with more than one, a dot per
