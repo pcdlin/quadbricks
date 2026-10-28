@@ -742,6 +742,96 @@ const TILESETS = {
         },
     },
 
+    // Folded paper: each square creased along a diagonal, one half to the light, matte grain
+    origami: {
+        name: "Origami",
+        face: [1.5, 0.04],
+        pad: (style) => style === "active" ? 10 : 0,
+        draw(g, col, size, style, index) {
+            const [inset, round] = this.face, a = inset, b = size - inset, w = b - a, r = size * round;
+            const flip = index % 2 === 0; // the crease's direction alternates by colour
+            // the crease from p to q; "lit" is the half towards the top left
+            const p = flip ? [a, a] : [b, a], q = flip ? [b, b] : [a, b];
+            const lit = flip ? [[a, a], [b, b], [a, b]] : [[b, a], [a, b], [a, a]];
+            const shaded = flip ? [[a, a], [b, a], [b, b]] : [[b, a], [b, b], [a, b]];
+            const poly = (points) => {
+                g.beginPath();
+                points.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+                g.closePath();
+            };
+            const path = () => { g.beginPath(); g.roundRect(a, a, w, w, r); };
+            if (style === "ghost") {
+                path();
+                g.fillStyle = col.base + "1c";
+                g.fill();
+                g.strokeStyle = col.light + "99";
+                g.lineWidth = 1.2;
+                g.stroke();
+                g.beginPath();
+                g.moveTo(...p);
+                g.lineTo(...q);
+                g.strokeStyle = col.light + "55";
+                g.stroke();
+                return;
+            }
+            const active = style === "active";
+            if (active) {
+                g.shadowColor = col.light;
+                g.shadowBlur = 12;
+            }
+            path();
+            g.fillStyle = col.base;
+            g.fill();
+            g.shadowBlur = 0;
+            g.save();
+            path();
+            g.clip();
+            poly(lit);
+            g.fillStyle = "rgba(255,255,255,0.16)";
+            g.fill();
+            poly(shaded);
+            g.fillStyle = "rgba(0,0,0,0.12)";
+            g.fill();
+            // the fold's shadow, fading away from the crease on the shaded side
+            const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2, nx = 1, ny = flip ? -1 : 1;
+            const fold = g.createLinearGradient(mx, my, mx + nx * w * 0.22, my + ny * w * 0.22);
+            fold.addColorStop(0, "rgba(0,0,0,0.22)");
+            fold.addColorStop(1, "rgba(0,0,0,0)");
+            poly(shaded);
+            g.fillStyle = fold;
+            g.fill();
+            // paper grain
+            const rnd = seededRandom(index * 71 + 5);
+            for (let i = 0; i < 60; i++) {
+                g.fillStyle = rnd() < 0.5 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.07)";
+                g.fillRect(a + rnd() * w, a + rnd() * w, 0.8, 0.8);
+            }
+            g.restore();
+            // the crease: a light line beside a dark one
+            g.beginPath();
+            g.moveTo(...p);
+            g.lineTo(...q);
+            g.strokeStyle = "rgba(0,0,0,0.25)";
+            g.lineWidth = 1;
+            g.stroke();
+            g.beginPath();
+            const oy = flip ? 0.7 : -0.7; // towards the lit half
+            g.moveTo(p[0] - 0.7, p[1] + oy);
+            g.lineTo(q[0] - 0.7, q[1] + oy);
+            g.strokeStyle = "rgba(255,255,255,0.22)";
+            g.stroke();
+            path();
+            g.strokeStyle = active ? "rgba(255,255,255,0.75)" : col.light + "55";
+            g.lineWidth = 1;
+            g.stroke();
+            if (!active) {
+                path();
+                g.fillStyle = "rgba(6,8,22,0.16)";
+                g.fill();
+            }
+        },
+    },
+
     // Monochrome: every piece in the same warm gallery white, soft rims, no colour at all
     mono: {
         name: "Mono",
