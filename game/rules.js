@@ -78,6 +78,7 @@ const VS_ITEMS = {
     "X-RAY": { weight: 150, attack: true, pieces: 4 }, // pieces: Heboris's
     "180° FIELD": { weight: 100, attack: true },
     "↓ DEL FIELD": { weight: 100 },
+    "DEATH BLOCK": { weight: 50, attack: true, pieces: 1, brief: true },
     "→ MOV FIELD": { weight: 50 },
     "SHOTGUN!": { weight: 5, attack: true },
     "DARK BLOCK": { weight: 5, attack: true, frames: 480 }, // frames: Heboris's
@@ -846,6 +847,7 @@ class RuleGame {
     spawn(type, fromHold) {
         const newPiece = !fromHold; // entered after ARE (IHS still counts as a new piece)
         this.beforeSpawn(newPiece);
+        this.deathBlock(this.hitting("DEATH BLOCK"));
 
         // IHS: hold button held while the piece enters
         const ihs = !fromHold && this.hasHold && this.ihs && this.held.hold;
@@ -914,6 +916,19 @@ class RuleGame {
         this.afterSpawn(newPiece);
         this.firstPiece = false;
         this.setShadow();
+    }
+
+    // Death Block: the piece entering (the next after the snipe, held or not) is a big one, as in the Big
+    // mode (the guide), unless every piece is
+    deathBlock(on) {
+        if (on && !this.big) {
+            this.setBig();
+            this.deathBig = true;
+        } else if (!on && this.deathBig) {
+            this.big = false;
+            this.curCells = this.pieceCells;
+            this.deathBig = false;
+        }
     }
 
     beforeSpawn(newPiece) {} // a piece is about to enter (newPiece: after ARE, not from hold)

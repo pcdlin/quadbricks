@@ -3037,6 +3037,20 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     check("  ...it rises when the next piece comes, after a clearing lock too", [waits, e.pendingGarbage(), e.takeRisenGarbage()], [1, 0, [1]]);
 }
 {
+    // Death Block: the other side's next piece is a big one; the attacker's gauge fills again after the cut-in (the guide)
+    const [a, d] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(d);
+    d.receiveGarbage({ item: "DEATH BLOCK" });
+    const sniped = d.curPiece_type;
+    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    const big = [d.big, d.curCells[d.curPiece_type][0].length, a.attacking()];
+    d.advanceFrame(SOFT_PUSH); // TAP's soft drop locks on the ground: falls first
+    for (let f = 0; f < 200 && d.phase === "active"; f++) d.advanceFrame(SOFT_PUSH);
+    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(SOFT_RELEASE);
+    check("Death Block: the other side's next piece is big, the one after it normal; the attacker's gauge fills after the cut-in",
+        [sniped, big, d.big, d.curCells[d.curPiece_type][0].length], [0, [true, 16, false], false, 4]);
+}
+{
     // Items (TAP, TGM3, ACE with the Items card)
     const [g] = versusPair(tgmTap, 5, 0, { items: true });
     const entered = () => { g.curPiece_type = 0; g.spawn(g.nextFromQueue(), false); };
