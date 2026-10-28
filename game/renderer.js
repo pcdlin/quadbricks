@@ -291,6 +291,13 @@ class GLRenderer {
         this.setTarget(t, this.width, this.height);
     }
 
+    // Back to a stand-in for the screen set before (t, as `screen` was), or the screen (null),
+    // without clearing it: for a setScreen() layer drawn inside another
+    resumeScreen(t) {
+        this.screen = t;
+        this.setTarget(null);
+    }
+
     // Binds a render target (allocating it at w×h if needed), or the canvas (null), and its viewport
     bindTarget(t, w, h) {
         const gl = this.gl;

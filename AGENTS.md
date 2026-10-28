@@ -411,10 +411,14 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
 - The READY countdown (`drawCountdown()`) shows each digit sliding in and fading out in its own
   colour (`COUNTDOWN_COLORS`); band and digit are gone on the first frame that takes input.
   It is drawn as part of the field (end of `drawBoard()`), so it tilts and flies in with it.
-  Meanwhile the field flies in from afar (`flyIn()`, `FLY_*`): it starts `FLY_DEPTH` behind its place,
+  Meanwhile each player's whole board group (field, HOLD, NEXT, stats, meters, tags; the user's request)
+  flies in from afar (`flyIn()`, `FLY_*`): it starts `FLY_DEPTH` behind its place,
   turned (`FLY_TURN`, either way, `flySide`) and faded out, and eases into place by `FLY_FRAMES`. It is
-  part of `boardMotion()` (`dz`, `alpha`; drawn through `drawBoardInMotion()`), the board glow scales
-  and fades with it (`flyScale()`); none with effects Off.
+  `boardMotion()`'s `fly`: while it moves (`flying()`), `drawSide()` draws the group (`drawGroup()`, the
+  field still tilting in its own layer) into a screen-sized layer (`groupLayer`, `GLRenderer.setScreen()`,
+  then `resumeScreen()` back to whatever stood in for the screen) and projects that about the board's
+  centre (`projector()`, shared with `drawBoardInMotion()`); the board glow scales and fades with it
+  (`flyScale()`), the sheen and lamp follow its turn; none with effects Off.
 - Font: Archivo from Google Fonts with a system fallback (only network dependency).
 - The backdrop pass (`backdrop.js`) draws the large soft effects per pixel in shaders:
   the static backdrop picture (the theme's `background()`, rendered by `renderBackground()` and uploaded on

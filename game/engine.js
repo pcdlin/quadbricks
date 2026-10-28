@@ -991,7 +991,8 @@ class Engine {
         const r = this.r;
         if (!r.begin()) return; // WebGL context lost: nothing to draw on until it's restored
         this.motion = this.boardMotion();
-        this.updateSheen(this.motion);
+        const m = this.motion, fly = m.fly; // the blocks' sheen and lamp follow the fly-in's turn too
+        this.updateSheen(this.flying(fly) ? { rx: m.rx + fly.rx, ry: m.ry + fly.ry } : m);
         // Clear ripples: the frame is drawn into a layer, then onto the screen through them
         const mode = this.ringMode();
         const ripples = mode === "ripple" && this.rings.length ? this.rippleShapes() : null;
@@ -1044,7 +1045,7 @@ class Engine {
                 // blur given like canvas shadowBlur: twice the Gaussian's sigma
                 sigma: (BOARD_GLOW_BLUR[0] + (BOARD_GLOW_BLUR[1] - BOARD_GLOW_BLUR[0]) * Math.min(1, this.pulse)) / 2 * fs,
                 rgb: glowRgb,
-                a: this.boardGlowAlpha() * m.alpha * m.alpha,
+                a: this.boardGlowAlpha() * m.fly.alpha * m.fly.alpha,
             };
         });
         const rings = this.ringMode() === "rings" ? this.ringShapes().map(r => ({
@@ -1215,7 +1216,8 @@ class Engine {
     }
 
     // A board's field: its tilt now (radians about the x and y axes; the drift is shared, the
-    // second player's mirrored) and its shake offset (logical units)
+    // second player's mirrored) and its shake offset (logical units); fly, the whole board
+    // group's fly-in (flyIn())
     boardMotion(view = this.ownBoard) {
         const t = (this.clock - this.tiltStart) / 60 * TILT_SPEED;
         const k = this.options.tiltAngle * (view === this.ownBoard ? 1 : -1);
@@ -1224,33 +1226,55 @@ class Engine {
         const rad = Math.PI / 180;
         const s = view.shake;
         const dx = s.px + (s.x - s.px) * s.t, dy = s.py + (s.y - s.py) * s.t;
-        const fly = this.flyIn();
-        return {
-            rx: (ax + dy * SHAKE_TIP + fly.rx) * rad, ry: (ay + fly.ry) * rad, dx, dy,
-            dz: fly.dz, alpha: fly.alpha,
-        };
+        return { rx: (ax + dy * SHAKE_TIP) * rad, ry: ay * rad, dx, dy, dz: 0, fly: this.flyIn() };
     }
 
-    // The countdown's fly-in: the field starts FLY_DEPTH away, turned and faded out, and comes
-    // at the camera, slowing as it settles into place by FLY_FRAMES (none with effects off)
+    // The countdown's fly-in: the board group (field, panels, meters) starts FLY_DEPTH away,
+    // turned and faded out, and comes at the camera, slowing as it settles into place by
+    // FLY_FRAMES (none with effects off). Radians, like the field's motion
     flyIn() {
         const game = this.GAMESTATE === STATE_GAME && this.game;
-        if (!game || !game.inStartDelay() || !this.options.effects) return { rx: 0, ry: 0, dz: 0, alpha: 1 };
+        if (!game || !game.inStartDelay() || !this.options.effects) return { rx: 0, ry: 0, dx: 0, dy: 0, dz: 0, alpha: 1 };
         const p = Math.min(1, (game.startdelayCounter + this.tickPhase) / FLY_FRAMES);
-        const rest = Math.pow(1 - p, 4); // ease out: what is left of the way
+        const rest = Math.pow(1 - p, 4), rad = Math.PI / 180; // ease out: what is left of the way
         return {
-            rx: FLY_TURN[0] * rest, ry: FLY_TURN[1] * this.flySide * rest,
+            rx: FLY_TURN[0] * rest * rad, ry: FLY_TURN[1] * this.flySide * rest * rad, dx: 0, dy: 0,
             dz: -FLY_DEPTH * rest, alpha: Math.min(1, p / FLY_FADE),
         };
     }
 
-    // How big the field's centre is drawn at its depth in the motion m (1 in its place)
-    flyScale(m) {
-        return TILT_DISTANCE / (TILT_DISTANCE - m.dz);
+    // Whether the fly-in still moves the board group
+    flying(fly) {
+        return fly.rx || fly.ry || fly.dz || fly.alpha < 1;
     }
 
-    // The field drawn into a layer, then onto the screen in perspective: rotated about its
-    // centre (y first, then x) and seen from TILT_DISTANCE, plus the shake offset
+    // How big the board's centre is drawn at its depth in the fly-in (1 in its place)
+    flyScale(m) {
+        return TILT_DISTANCE / (TILT_DISTANCE - m.fly.dz);
+    }
+
+    // The board's centre, which the field turns and the group flies in about
+    boardCentre() {
+        return [BOARD_X + BOARD_W / 2, this.boardY + this.boardH / 2];
+    }
+
+    // A function taking a point (logical units) to where the motion m puts it: rotated about
+    // the board's centre (y first, then x), moved by dz and seen from TILT_DISTANCE, plus the
+    // offset dx, dy; [x, y, perspective scale]
+    projector(m) {
+        const [cx, cy] = this.boardCentre();
+        const cosX = Math.cos(m.rx), sinX = Math.sin(m.rx), cosY = Math.cos(m.ry), sinY = Math.sin(m.ry);
+        return (x, y) => {
+            const X = x - cx, Y = y - cy;
+            const z = -X * sinY;
+            const yr = Y * cosX - z * sinX, zr = Y * sinX + z * cosX + m.dz;
+            const f = TILT_DISTANCE / (TILT_DISTANCE - zr);
+            return [cx + X * cosY * f + m.dx, cy + yr * f + m.dy, f];
+        };
+    }
+
+    // The field drawn into a layer, then onto the screen in perspective (projector()), with the
+    // shake offset
     drawBoardInMotion(m) {
         const r = this.r, ps = this.pixelScale;
         const x0 = BOARD_X - 8 - BOARD_LAYER_MARGIN, y0 = this.boardY - 2 * CELL - BOARD_LAYER_MARGIN; // spawn rows too
@@ -1264,20 +1288,8 @@ class Engine {
         r.setTarget(null);
         r.restore();
 
-        const cx = BOARD_X + BOARD_W / 2, cy = this.boardY + this.boardH / 2;
-        const cosX = Math.cos(m.rx), sinX = Math.sin(m.rx), cosY = Math.cos(m.ry), sinY = Math.sin(m.ry);
-        const project = (x, y) => {
-            const X = x - cx, Y = y - cy;
-            const z = -X * sinY;
-            const yr = Y * cosX - z * sinX, zr = Y * sinX + z * cosX + m.dz;
-            const f = TILT_DISTANCE / (TILT_DISTANCE - zr);
-            return [cx + X * cosY * f + m.dx, cy + yr * f + m.dy, f];
-        };
-        const x1 = x0 + w / ps, y1 = y0 + h / ps;
-        r.save();
-        r.globalAlpha = m.alpha;
+        const project = this.projector(m), x1 = x0 + w / ps, y1 = y0 + h / ps;
         r.imageQuad(this.boardLayer, [project(x0, y0), project(x1, y0), project(x0, y1), project(x1, y1)]);
-        r.restore();
     }
 
     // -----------------------------------
@@ -2992,8 +3004,7 @@ class Engine {
 
     drawGame() {
         this.drawSide(this.ownBoard, this.motion, 0);
-        if (this.layout.mini) this.drawMiniBoard(this.match.view.game);
-        else if (this.match) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
+        if (this.match && !this.layout.mini) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
     }
 
     // The bot's field in the mini layout (touch controls): small at the foot of the right column,
@@ -3032,19 +3043,39 @@ class Engine {
 
     // A player's board group where its view is placed (view.gx): the field in its motion m, the
     // panels, in a match the garbage meter, the lines sent and (two players) whose it is, and the
-    // banners. side: 0 for player 1, 1 for player 2
+    // banners. side: 0 for player 1, 1 for player 2. While it flies in (m.fly), the whole group
+    // is drawn into a layer the size of the screen and that is projected
     drawSide(view, m, side) {
-        const r = this.r, game = view.game, match = this.match;
+        const r = this.r;
         this.board = view;
         r.save();
         r.translate(view.gx, 0); // left of the other board in a versus match
+        if (this.flying(m.fly)) {
+            const screen = r.screen;
+            this.groupLayer = this.groupLayer || r.renderTarget();
+            r.setScreen(this.groupLayer);
+            this.drawGroup(view, m, side);
+            r.resumeScreen(screen);
+            // the layer's corners, in logical units under the current transform
+            const x0 = -r.x / r.s, y0 = -r.y / r.s, x1 = x0 + r.width / r.s, y1 = y0 + r.height / r.s;
+            const project = this.projector(m.fly);
+            r.globalAlpha = m.fly.alpha;
+            r.imageQuad(this.groupLayer, [project(x0, y0), project(x1, y0), project(x0, y1), project(x1, y1)]);
+        } else this.drawGroup(view, m, side);
+        r.restore();
+        this.board = this.ownBoard;
+    }
 
-        if (m.rx || m.ry || m.dx || m.dy || m.dz) this.drawBoardInMotion(m);
+    // What drawSide() draws, in place
+    drawGroup(view, m, side) {
+        const game = view.game, match = this.match;
+        if (m.rx || m.ry || m.dx || m.dy) this.drawBoardInMotion(m);
         else this.drawBoard(); // straight onto the screen, pixel-sharp
         this.drawParticles();  // confetti flies off the field: never tilted
         if (view.itemBursts.length) this.drawItemBursts();
         if (this.layout.compact) this.drawCompactPanels();
         else this.drawSidePanels();
+        if (this.layout.mini && side === 0) this.drawMiniBoard(match.view.game); // the bot's, under NEXT
         if (match) {
             if (game.sendsGarbage) this.drawGarbageMeter(game);
             if (game.itemsOn) this.drawItemGauge(view);
@@ -3068,8 +3099,6 @@ class Engine {
             const sub = game.endSub || "ESC — BACK TO MENU";
             this.boardBanner(title, this.gamepad.active ? padWords(sub) : this.touch.enabled ? touchWords(sub) : sub, 1, accent, this.recordNote, this.recordNew, game.endNotes());
         }
-        r.restore();
-        this.board = this.ownBoard;
     }
 
     // Under a decided round's banner: how this side's game ended (TIME UP, LEVEL 200, ...), and in a
