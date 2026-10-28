@@ -903,6 +903,92 @@ const TILESETS = {
         },
     },
 
+    // Stained wood: grain running across each block, a bevel and a coat of varnish
+    wood: {
+        name: "Wood",
+        face: [1, 0.08],
+        pad: (style) => style === "active" ? 10 : 0,
+        draw(g, col, size, style, index) {
+            const [inset, round] = this.face, w = size - inset * 2, r = size * round;
+            const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
+            if (style === "ghost") {
+                path();
+                g.fillStyle = col.base + "1c";
+                g.fill();
+                g.strokeStyle = col.light + "99";
+                g.lineWidth = 1.2;
+                g.stroke();
+                return;
+            }
+            const active = style === "active";
+            if (active) {
+                g.shadowColor = col.light;
+                g.shadowBlur = 12;
+            }
+            path();
+            g.fillStyle = col.base;
+            g.fill();
+            g.shadowBlur = 0;
+            g.save();
+            path();
+            g.clip();
+            // the stain is darker in the late wood: bands of grain, wavy, one knot in some colours
+            const rnd = seededRandom(index * 37 + 23);
+            const knot = index % 3 === 0 ? [inset + w * (0.3 + rnd() * 0.4), inset + w * (0.3 + rnd() * 0.4)] : null;
+            for (let y = inset - 2; y < inset + w + 2; y += 1.6 + rnd() * 2.4) {
+                const amp = size * (0.015 + rnd() * 0.03), phase = rnd() * Math.PI * 2;
+                g.beginPath();
+                for (let x = inset; x <= inset + w; x += 1) {
+                    let yy = y + Math.sin(phase + x / size * 4) * amp;
+                    if (knot) { // grain swerves round the knot
+                        const dx = x - knot[0], dy = yy - knot[1], d2 = dx * dx + dy * dy;
+                        yy += Math.sign(dy || 1) * size * 0.9 * Math.exp(-d2 / (size * size * 0.02)) * 0.12;
+                    }
+                    x === inset ? g.moveTo(x, yy) : g.lineTo(x, yy);
+                }
+                const dark = rnd() < 0.6;
+                g.strokeStyle = dark ? col.dark : col.light;
+                g.globalAlpha = dark ? 0.55 + rnd() * 0.35 : 0.2 + rnd() * 0.15;
+                g.lineWidth = 0.5 + rnd() * 1.1;
+                g.stroke();
+            }
+            g.globalAlpha = 1;
+            if (knot) {
+                for (let k = 3; k > 0; k--) {
+                    g.beginPath();
+                    g.ellipse(knot[0], knot[1], size * 0.03 * k, size * 0.018 * k, 0, 0, Math.PI * 2);
+                    g.strokeStyle = col.dark;
+                    g.globalAlpha = 0.5;
+                    g.lineWidth = 0.8;
+                    g.stroke();
+                }
+                g.globalAlpha = 1;
+            }
+            // bevel and varnish
+            const e = size * 0.07;
+            g.fillStyle = "rgba(255,255,255,0.2)";
+            g.fillRect(inset, inset, w, e);
+            g.fillRect(inset, inset, e, w);
+            g.fillStyle = "rgba(0,0,0,0.28)";
+            g.fillRect(inset, inset + w - e, w, e);
+            g.fillRect(inset + w - e, inset + e, e, w - e);
+            const varnish = g.createLinearGradient(0, inset, 0, inset + w);
+            varnish.addColorStop(0, "rgba(255,255,255,0.16)");
+            varnish.addColorStop(0.45, "rgba(255,255,255,0)");
+            g.fillStyle = varnish;
+            g.fillRect(inset, inset, w, w);
+            g.fillStyle = active ? "rgba(255,255,255,0.1)" : "rgba(6,8,22,0.2)";
+            g.fillRect(inset, inset, w, w);
+            g.restore();
+            if (active) {
+                path();
+                g.strokeStyle = "rgba(255,255,255,0.7)";
+                g.lineWidth = 1.2;
+                g.stroke();
+            }
+        },
+    },
+
     // Monochrome: every piece in the same warm gallery white, soft rims, no colour at all
     mono: {
         name: "Mono",
