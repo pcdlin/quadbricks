@@ -1278,9 +1278,12 @@ class RuleGame {
         this.scoreClear(n, rows);
         if (this.gameover) return;
         if (this.itemsAtClear) this.fireItems(true);
-        if (n === 0) this.takeItems(); // the other side's items (after a clear: afterClear)
+        // The other side's items and versus garbage come now after a lock that fills no rows, else once
+        // the clear is done (afterClear): a big piece filling one row clears nothing (n 0) but its row
+        // still collapses, so rising garbage before that would move the rows under the collapse
+        if (full === 0) this.takeItems();
         if (this.gameover) return;
-        const risen = this.riseAfterLock(n); // versus garbage pushes the stack up
+        const risen = full === 0 ? this.riseAfterLock(n) : 0; // versus garbage pushes the stack up
         if (this.gameover) return;
 
         const collapseNow = full > 0 && this.lineClearDelay === 0;

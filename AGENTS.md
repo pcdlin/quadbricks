@@ -588,7 +588,8 @@ settles is listed as an assumption below.
   them twice; singles and clears that set an item off send nothing. At most 8 rows wait (`TGM_VS_GARBAGE_MAX`, the guide;
   Heboris keeps 21); nothing cancels them (Heboris neither). It rises once the receiving side's piece has locked and its
   clear is done, before the next piece, whatever the lock cleared (`garbageEveryLock`: `riseAfterLock()` after a lock
-  that clears nothing, `afterClear()` after one that does; Heboris at the end of the ARE after every lock, "like the
+  that fills no row, `afterClear()` after one that does, a big piece's single row included, which clears no line but still
+  collapses; Heboris at the end of the ARE after every lock, "like the
   original"). Rows it pushes out of the top are lost, not a top out (the guide: "forgotten"; Heboris wipes the top row).
 - The Garbage card (`VERSUS_GARBAGE_SETUP`, `options.garbage`): Off is TAP's Cement Mode (tetris.wiki: both players hold A+B
   as versus begins, "garbage is turned off completely"): no garbage either way, Free Fall's included (`sendsGarbage` false).

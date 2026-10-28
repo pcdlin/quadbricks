@@ -3294,6 +3294,31 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         [sniped, big, d.big, d.curCells[d.curPiece_type][0].length], [0, [true, 16, false], false, 4]);
 }
 {
+    // A big piece filling one row clears no line, but the row still collapses: the garbage waiting rises only after
+    // that, and the lasting items count the piece once
+    const [d] = versusPair(tgmTap, 3);
+    clearField(d);
+    d.setBig();
+    d.deathBig = true;
+    fill(d, ["#########.", "#########."]);
+    d.sonicDrop();
+    const cells = d.curPieceCells(), at = new Set(cells.map(p => p.row * WIDTH + p.col));
+    const low = Math.max(...cells.map(p => p.row));
+    for (let c = 0; c < WIDTH; c++) if (!at.has(low * WIDTH + c)) d.setCell(low, c, 2); // fills the piece's lowest row
+    for (let c = 0; c < WIDTH - 1; c++) if (!at.has((low - 1) * WIDTH + c)) d.setCell(low - 1, c, 2); // the one above keeps a hole
+    const garbage = Array(WIDTH).fill(tetGARBAGE).map((v, c) => c ? v : 0);
+    d.receiveGarbage({ lines: 2, rows: [garbage, garbage] });
+    d.itemEffects["X-RAY"] = 2;
+    d.lock();
+    const waited = d.pendingGarbage();
+    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    const stack = [];
+    for (let r = d.stackTop(); r < HEIGHT; r++) stack.push(rowOf(d, r).some(v => v));
+    check("Big piece filling one row: the row collapses before the garbage rises (no gap left in the stack)",
+        [cells.every(p => p.col < WIDTH - 1), waited, rowOf(d, HEIGHT - 3), rowOf(d, HEIGHT - 1), stack.every(Boolean), d.itemEffects["X-RAY"]],
+        [true, 2, [1, 1, 1, 1, 1, 1, 1, 1, 1, 0], garbage, true, 1]);
+}
+{
     // Items (TAP, TGM3, ACE with the Items card)
     const [g] = versusPair(tgmTap, 5, 0, { items: true });
     const entered = () => { g.curPiece_type = 0; g.spawn(g.nextFromQueue(), false); };
