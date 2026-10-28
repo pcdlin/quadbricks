@@ -341,7 +341,7 @@ class RuleGame {
         this.hardDropCells = [];
         this.bumps = [];
         this.wallBumped = false;
-        this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "clear1".."clear4" (+ "c<chain>" in a combo)
+        this.sounds = []; // "move", "rotate", "lock", "harddrop", "sonic", "zap" (an item used), "clear1".."clear4" (+ "c<chain>" in a combo)
         this.fireworks = 0; // fireworks fired since the engine last looked (TGM3 Easy)
         this.holds = 0; // holds (IHS included) since the engine last looked
         // Item pieces (TAP Normal): the item the next piece to enter carries (queue[0]), and the
@@ -1614,6 +1614,7 @@ class RuleGame {
     // another item piece keep their item as they move; those an item removes take it with them. Rows
     // an item fills clear at once, without score or lines (only the player's clears set items off).
     useItem(item, received = false) {
+        this.sounds.push("zap");
         if (!received || !VS_ITEMS[item].attack) this.addAction(item, "grade"); // a hit one has its cut-in
         if (!received && VS_ITEMS[item].attack) {
             this.sendAttack({ lines: 0, item });

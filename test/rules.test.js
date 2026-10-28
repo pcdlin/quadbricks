@@ -757,6 +757,9 @@ for (const [rs, name] of [[guideline, "Guideline"], [arika, "TGM3 World"], [tgmC
     place(g, tetT, 0, 5, 3); g.rotate(1);
     place(g, tetO, 0, 5, 7); g.hardDrop();
     check("Sound events: move per successful shift, rotate, hard drop, line clear", g.takeSounds(), ["move", "move", "move", "move", "rotate", "harddrop", "clear1"]);
+    g.takeSounds();
+    g.useItem("DEL EVEN");
+    check("Sound events: an item used zaps", g.takeSounds().includes("zap"), true);
 }
 
 // ---------------------------------------------------------------- Hard drop cells (landing flash and trail)

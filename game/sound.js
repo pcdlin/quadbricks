@@ -4,6 +4,7 @@
 
 const SOUND_VOLUME = 0.5;
 const SOUND_MOVE_GAP = 0.035; // s between move ticks, so auto-repeat doesn't buzz
+const SOUND_ZAP_GAP = 0.05; // s between zaps: an attack item zaps on both sides of a two-player match
 const SOUND_MUTE_KEY = "quadbricks.muted";
 // A minor 7th chord tones over three octaves; a clear plays lines+1 of them, starting
 // one chord tone higher for every step of a combo
@@ -14,6 +15,7 @@ class Sound {
     constructor() {
         this.ctx = null;
         this.lastMove = 0;
+        this.lastZap = 0;
         this.muted = false;
         try { this.muted = localStorage.getItem(SOUND_MUTE_KEY) === "1"; } catch (e) { /* storage unavailable */ }
     }
@@ -77,6 +79,13 @@ class Sound {
             case "attack": // versus: lines sent to the other side, a quick rising whoosh
                 this.noise(t, 0.16, "bandpass", 2400, 0.035);
                 this.tone(t, 500, 1100, 0.12, 0.03, "triangle");
+                break;
+            case "zap": // an item used: an electric zap, a fast falling buzz with a crackle
+                if (t - this.lastZap < SOUND_ZAP_GAP) return;
+                this.lastZap = t;
+                this.tone(t, 2200, 140, 0.18, 0.03, "sawtooth");
+                this.tone(t, 2330, 150, 0.18, 0.02, "square"); // detuned against it: the buzz
+                this.noise(t, 0.1, "highpass", 2500, 0.035);
                 break;
             case "ko": // versus: the other side topped out
                 this.tone(t, 990, 990, 0.12, 0.06, "sine");
