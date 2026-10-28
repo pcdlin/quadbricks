@@ -293,7 +293,7 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   shakes and sends clear bursts and backdrop hue (`own`).
 - Layout: the bot's match is laid out as two players' (below, `duoFitted()`; the user's request): both board groups whole
   and the same size, the player's at `groupX`, the bot's tagged BOT and its level (`drawPlayerTag()`). Garbage meters beside the wells
-  (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" (or the item's name) for each attack sent (`drawAttackPopups()`): in the full
+  (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" for each attack sent (an item sent has none: its clear message names it) (`drawAttackPopups()`): in the full
   layout in the right column under the clear message that sent it (`drawClearMessage()` returns its bottom,
   `BoardView.popupTop`; the user's request), in the compact one over the well; sounds
   `"garbage"`, `"attack"`, `"ko"`. An attack item's cut-in on the side it hit (`game.cutIn`): a band opening across the well in the

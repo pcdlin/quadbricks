@@ -922,7 +922,8 @@ class Engine {
             games.forEach((game, side) => {
                 for (const attack of game.takeAttacks()) {
                     games[1 - side].receiveGarbage({ ...attack, hole: hole() });
-                    m.popups[side].push({ lines: attack.lines, item: attack.item, life: ATTACK_LIFE });
+                    // an item sent has no "+lines": its clear message names it (and the other side's cut-in)
+                    if (!attack.item) m.popups[side].push({ lines: attack.lines, life: ATTACK_LIFE });
                     if (side === 0 || m.duo) this.sound.play("attack");
                 }
             });
@@ -3021,10 +3022,8 @@ class Engine {
     drawAttackPopups(popups) {
         const r = this.r, compact = this.layout.compact;
         for (const p of popups) {
-            // an item sent shows its name, shrunk to the column (or the well)
-            const text = p.item || "+" + p.lines, room = compact ? BOARD_W - 16 : SIDE_W;
-            const k = 1 - p.life / ATTACK_LIFE, size = p.item ? Math.min(24, Math.floor(24 * room / this.measureText(text, 24, 900, 2)))
-                : 34 + 4 * Math.min(p.lines, 6);
+            const text = "+" + p.lines;
+            const k = 1 - p.life / ATTACK_LIFE, size = 34 + 4 * Math.min(p.lines, 6);
             const style = { size, weight: 900, color: MESSAGE_GOLD, align: compact ? "center" : "left", spacing: 2 };
             r.save();
             r.globalAlpha = Math.min(1, p.life / 15);
