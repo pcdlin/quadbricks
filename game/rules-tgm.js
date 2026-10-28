@@ -554,7 +554,7 @@ class TgmGame extends RuleGame {
     }
 
     onCollapse(rows) {
-        if (this.lockTime) this.lockTime = this.dropRows(this.lockTime, rows, () => new Array(WIDTH).fill(0));
+        if (this.lockTime) this.lockTime = this.dropRows(this.lockTime, rows, () => new Array(this.width).fill(0));
     }
 
     // After a line clear: the next piece, or the staff roll once the timer has stopped
@@ -669,7 +669,7 @@ class TgmGame extends RuleGame {
         for (const row of this.field) row.fill(0); // the buffer rows too
         this.roll = this.nextRoll;
         this.rollFrames = 0;
-        this.lockTime = this.field.map(() => new Array(WIDTH).fill(0));
+        this.lockTime = this.field.map(() => new Array(this.width).fill(0));
         this.onRollBegin();
         this.addAction(this.roll === "invisible" ? this.invisibleRollName : "STAFF ROLL", "grade");
         this.spawn(this.nextFromQueue(), false);

@@ -254,8 +254,9 @@ class RuleGame {
         this.bag = [];
         this.bagNoSzoFirst = false; // the 7-bag never deals S, Z or O first (ACE)
 
+        this.width = WIDTH; // columns of the well (TAP Doubles: 14)
         this.field = [];
-        for (let r = FIELD_TOP; r < HEIGHT; r++) this.field.push(new Array(WIDTH).fill(0));
+        for (let r = FIELD_TOP; r < HEIGHT; r++) this.field.push(new Array(this.width).fill(0));
 
         this.startLevel = 0;
         this.height = 0;
@@ -407,7 +408,7 @@ class RuleGame {
     rnd_get_queue(i) { return this.queue[i]; }
 
     getCell(row, col) {
-        if (row > HEIGHT - 1 || col < 0 || col > WIDTH - 1) return 10;
+        if (row > HEIGHT - 1 || col < 0 || col > this.width - 1) return 10;
         if (row < FIELD_TOP) return 0;
         return this.field[row - FIELD_TOP][col];
     }
@@ -444,7 +445,7 @@ class RuleGame {
     }
 
     setCell(row, col, val) {
-        if (row > HEIGHT - 1 || col < 0 || col > WIDTH - 1 || row < FIELD_TOP) return;
+        if (row > HEIGHT - 1 || col < 0 || col > this.width - 1 || row < FIELD_TOP) return;
         this.field[row - FIELD_TOP][col] = val;
     }
 
@@ -583,7 +584,7 @@ class RuleGame {
 
     // A block can't go to (r, c): outside the well, above the highest row for pieces, or taken
     blocked(r, c) {
-        return c < 0 || c >= WIDTH || r >= HEIGHT || r < this.pieceTop || this.field[r - FIELD_TOP][c] !== 0;
+        return c < 0 || c >= this.width || r >= HEIGHT || r < this.pieceTop || this.field[r - FIELD_TOP][c] !== 0;
     }
 
     movePossible(row, col, rotation, type = this.curPiece_type) {
@@ -776,7 +777,7 @@ class RuleGame {
             this.deferredPush = input & (LEFT_PUSH | RIGHT_PUSH | HARD_PUSH);
         } else if ((shiftPushed || (autoShift && !this.dcdWait)) && this.canShift()) {
             // ARR 0: the auto-shift goes straight to the wall
-            let steps = autoShift && this.arr === 0 ? WIDTH : 1, moved = false;
+            let steps = autoShift && this.arr === 0 ? this.width : 1, moved = false;
             while (steps-- > 0 && this.shift(this.shiftDir, !moved)) moved = true; // one move sound
             if (!moved) this.onShiftBlocked();
         }
@@ -1155,7 +1156,7 @@ class RuleGame {
 
     // Would shifting by dir push a block through the left or right border?
     hitsWall(dir) {
-        return this.curPieceCells().some(({ col }) => col + dir < 0 || col + dir >= WIDTH);
+        return this.curPieceCells().some(({ col }) => col + dir < 0 || col + dir >= this.width);
     }
 
     // Soft drop held, and the piece may soft drop this frame
@@ -1251,7 +1252,7 @@ class RuleGame {
                     rows.push(r);
                     this.clearedRows.push(line.slice());
                 }
-                for (let c = 0; c < WIDTH; c++) {
+                for (let c = 0; c < this.width; c++) {
                     if (line[c] & HARD_BIT) {
                         line[c] &= ~HARD_BIT;
                         continue;
@@ -1313,7 +1314,7 @@ class RuleGame {
     // Remove emptied rows and let everything above fall (naive gravity)
     collapse(rows) {
         if (rows.length === 0) return;
-        this.field = this.dropRows(this.field, rows, () => new Array(WIDTH).fill(0));
+        this.field = this.dropRows(this.field, rows, () => new Array(this.width).fill(0));
         if (this.itemCells) this.itemCells = this.dropRows(this.itemCells, rows, () => new Array(WIDTH).fill(null));
         this.onCollapse(rows);
     }
