@@ -135,9 +135,9 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `initial`: the label chosen at first (Sprint 40, Ultra 2:00), else the first.
   Choices are remembered per mode for the session (`setupChoices`, keyed by rule set, mode and card;
   `menuAction()` turns them into arguments). The mode lists use the Visuals screen's
-  tighter cards (`VISUALS_ROWS`, as the setup screen does with five cards or more, and with more than six, `SETUP_FIT`, in the
-  Visuals screen's place, scrolled to keep the selected card in view: `SCROLLED_LISTS`), the rule set list (seven) tighter still, a little higher.
-  The key hint is always in the same place at the bottom (`MENU_HINT_Y`, the user's request): every screen's list ends above it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds"), `MENU_CONTROLS2` (player 2's, "Keybinds P2"),
+  tighter cards (`VISUALS_ROWS`, as the setup screen does with more than five cards, and with more than six, `SETUP_FIT`, in the
+  Visuals screen's place, scrolled to keep the selected card in view: `SCROLLED_LISTS`), the rule set list (seven) tighter still, a little higher, with its
+  hint under it. Options → `MENU_OPTIONS` (`OPTIONS_ITEMS`) → `MENU_CONTROLS` (key bindings, card "Keybinds"), `MENU_CONTROLS2` (player 2's, "Keybinds P2"),
   `MENU_GAMEPAD` (gamepad bindings), `MENU_VISUALS` or `MENU_HANDLING` (card "Guideline"). Esc goes back one screen and, on the main screen, resumes a
   paused game. Leaving a game with Esc opens `MENU_MAIN`.
 - Visuals and Guideline handling are setting screens (`SETTING_ITEMS`: `VISUAL_ITEMS`, `HANDLING_ITEMS`),
