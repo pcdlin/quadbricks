@@ -280,6 +280,9 @@ const SCROLLED_LISTS = {
     [MENU_SETUP]: { items: null, pos: "setuppos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
 };
 const SETUP_FIT = 6;
+// Top of the lists too long for the usual place (Visuals, Guideline handling, Gamepad, scrolled setup cards), their
+// heading in the tagline's place over them: as low as leaves room for the hint, clear of the wordmark
+const TALL_TOP = 250;
 // Block style preview at the right of its card: a block per style, in colour indices (red, green, cyan)
 const PREVIEW_BLOCKS = [["active", 6], ["locked", 5], ["ghost", 1]];
 const PREVIEW_GAP = 6;
@@ -2546,12 +2549,12 @@ class Engine {
                 // place for them, scrolled to keep the selected one in view
                 const scrolled = versus || items.length > SETUP_FIT;
                 heading(`${versus ? "Multiplayer" : RULESETS[this.rulesetpos].name}  ·  ${this.chosenMode().name}  ·  CHOOSE SETTINGS`.toUpperCase(),
-                    INK_DIM, scrolled ? 220 : listTop - 26);
+                    INK_DIM, scrolled ? TALL_TOP - 16 : listTop - 26);
                 const { rowH, gap } = scrolled || items.length > 5 ? VISUALS_ROWS : { rowH: 64, gap: 10 };
                 let bottom;
                 if (scrolled) {
-                    this.drawScrolledList(MENU_SETUP, items, 236);
-                    bottom = 236 + VISUALS_LIST_H;
+                    this.drawScrolledList(MENU_SETUP, items, TALL_TOP);
+                    bottom = TALL_TOP + VISUALS_LIST_H;
                 } else {
                     this.drawMenuList(items, this.setuppos, listTop, rowH, gap);
                     bottom = listTop + menuListHeight(items, rowH, gap);
@@ -2567,8 +2570,8 @@ class Engine {
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
             case MENU_VISUALS: {
-                const top = 236; // heading in the tagline's place: leaves room for the hint
-                heading("OPTIONS  ·  VISUALS", INK_DIM, 220);
+                const top = TALL_TOP; // heading in the tagline's place: leaves room for the hint
+                heading("OPTIONS  ·  VISUALS", INK_DIM, top - 16);
                 const items = this.settingCards(VISUAL_ITEMS);
                 // Tighter cards leave room for the hint; the list shows VISUALS_LIST_H of them,
                 // scrolled to keep the selection in view
@@ -2580,8 +2583,8 @@ class Engine {
             case MENU_HANDLING: {
                 // Compact cards like Visuals, scrolling the same way, heading in the tagline's place; below
                 // them what the selected setting does, with its abbreviation spelled out
-                const top = 236;
-                heading("OPTIONS  ·  GUIDELINE HANDLING", INK_DIM, 220);
+                const top = TALL_TOP;
+                heading("OPTIONS  ·  GUIDELINE HANDLING", INK_DIM, top - 16);
                 this.drawScrolledList(MENU_HANDLING, this.settingCards(HANDLING_ITEMS), top);
                 const [title, help] = HANDLING_ITEMS[this.handlingpos].help;
                 const y = top + HANDLING_LIST_H + 14;
@@ -2615,8 +2618,8 @@ class Engine {
     // pad, lit while it is pressed, tells them apart), then its bindings; with none connected, a card
     // saying so. Returns the hint
     drawGamepadScreen(heading) {
-        const gp = this.gamepad, pad = this.configPad(), top = 236;
-        heading("OPTIONS  ·  GAMEPAD", INK_DIM, 220);
+        const gp = this.gamepad, pad = this.configPad(), top = TALL_TOP;
+        heading("OPTIONS  ·  GAMEPAD", INK_DIM, top - 16);
         if (pad === null) {
             this.drawMenuList([{ name: "No gamepad", desc: "Connect a gamepad and press a button on it", accent: tetI, noArrow: true }], 0, top);
             this.text("BROWSERS SHOW A GAMEPAD ONLY ONCE ONE OF ITS BUTTONS IS PRESSED", VIEW_W / 2, top + 64 + 28,
