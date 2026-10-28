@@ -2961,6 +2961,7 @@ class Engine {
         this.drawDropFlashes();
         this.drawFlashes();
         if (game.inStartDelay()) this.drawCountdown(game); // part of the field: flies in with it
+        if (game.cutIn > 0) this.drawCutIn(game);
     }
 
     // TGM-style border: a light line along every side of the settled stack that faces an empty
@@ -3235,6 +3236,21 @@ class Engine {
         r.globalAlpha = fadeIn * fadeOut;
         const slide = (1 - fadeIn) * (1 - fadeIn) * -14;
         this.text(String(digit), BOARD_X + BOARD_W / 2, cy + slide, { size: 64, weight: 900, color: accent, align: "center" });
+        r.restore();
+    }
+
+    // A versus attack item's cut-in on the side it hit, while that side stands still: the item's name
+    // sliding in on a band across the well in gold, then fading
+    drawCutIn(game) {
+        const r = this.r, cy = this.bandY();
+        const t = clamp(1 - (game.cutIn - this.tickPhase) / VS_CUTIN_FRAMES, 0, 1);
+        const fadeIn = Math.min(1, t / 0.2), fadeOut = Math.min(1, (1 - t) / 0.2);
+        const gold = PIECE_COLORS[tetO].light;
+        r.save();
+        r.globalAlpha = Math.min(fadeIn, fadeOut);
+        this.drawBand(cy, 70, gold);
+        const slide = (1 - fadeIn) * (1 - fadeIn) * 90; // from the right
+        this.text(game.cutInItem || "", BOARD_X + BOARD_W / 2 + slide, cy, { size: 28, weight: 900, color: gold, align: "center", spacing: 2 });
         r.restore();
     }
 

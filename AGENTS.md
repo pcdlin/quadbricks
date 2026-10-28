@@ -292,7 +292,8 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" (or the item's name) for each attack sent (`drawAttackPopups()`): in the full
   layout in the right column under the clear message that sent it (`drawClearMessage()` returns its bottom,
   `BoardView.popupTop`; the user's request), in the compact one over the well; sounds
-  `"garbage"`, `"attack"`, `"ko"`.
+  `"garbage"`, `"attack"`, `"ko"`. An attack item's cut-in on the side it hit (`game.cutIn`): its name sliding in on a gold
+  band across the well (`drawCutIn()`), in place of its clear message there.
 - Two players (Multiplayer → Versus Player): the join screen (`MENU_JOIN`, `drawJoin()`) takes a rotate press (`JOIN_ACTIONS`)
   on an input device for player 1, then another device for player 2 (`joinDevice()`, `joined`): `"keys1"` (player 1's
   keys, and the touch controls), `"keys2"` (player 2's keys) or `"pad:N"` (`deviceName()`). Then it asks to confirm (the
@@ -598,7 +599,10 @@ settles is listed as an assumption below.
   - Roll Roll: for 3 pieces, each turns counter-clockwise by itself right after it enters and every 30 frames after, in
     grey (the guide; `getPieceColor()`).
   - Mirror Block: the field turned left to right now and after each of the next two pieces (`mirrorPieces`); garbage sent
-    meanwhile waits for its end (`mirrorGarbage`), and a perfect clear ends it (the guide).
+    meanwhile waits for its end (`mirrorGarbage`), and a perfect clear ends it (the guide). Each turn is animated: the field
+    goes dark and its columns come back one at a time from the right (`mirrorField()`, `mirrorAlpha()`, Heboris), and the next
+    piece waits for it (`VS_MIRROR_FRAMES`, `flipWait`: the guide's "flipping animation takes time"); the active time lasts
+    until the last turn is done.
   - 180° Field: the top row of the stack swapped with the bottom one, and so on.
   - X-Ray: the stack dark but where a beam sweeping from left to right lights it, each column fading behind it, every
     36 frames, for 4 pieces (Heboris's period and length; the guide: "illuminated one column at a time"; `itemAlpha()`).

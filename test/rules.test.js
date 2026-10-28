@@ -2884,6 +2884,24 @@ const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c))
     check("  ...topping out loses; a match is won with two rounds", [c.versusOutcome(), d.versusOutcome(), c.versusWins], ["win", "lose", 2]);
 }
 {
+    // Mirror Block's turns are animated: the field goes dark and comes back a column at a time from the right, and the
+    // side waits for it (VS_MIRROR_FRAMES) before its next piece; the cut-in covers the first turn
+    const { VS_MIRROR_FRAMES, VS_MIRROR_DARK } = vm.runInThisContext("({ VS_MIRROR_FRAMES, VS_MIRROR_DARK })");
+    const [, m] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(m);
+    fill(m, ["#........."]);
+    m.receiveGarbage({ item: "MIRROR BLOCK" });
+    const seen = () => Array.from({ length: WIDTH }, (_, c) => m.getCellAlpha(21, c)).join("");
+    const first = [seen(), m.flipWait];
+    for (let f = 0; f < 200 && m.phase !== "active"; f++) m.advanceFrame(0);
+    place(m, tetO, 0, 18, 3);
+    m.advanceFrame(SOFT_PUSH);
+    const turned = [m.phase, m.phaseLength, seen()];
+    for (let f = 0; f < VS_MIRROR_DARK + 3; f++) m.advanceFrame(0);
+    check("Mirror Block: each turn of the field blanks it and brings its columns back from the right; the next piece waits for it",
+        [first, turned, seen()], [["0000000000", 0], ["are", m.are + VS_MIRROR_FRAMES, "0000000000"], "0000000011"]);
+}
+{
     const [a, b] = versusPair(nesTetris, 9, 18);
     const [c] = versusPair(nesTetris, 10, 18);
     const deal = g => [g.curPiece_type, ...piecesOf(g)].join("");

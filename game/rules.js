@@ -94,6 +94,9 @@ const VS_ITEMS = {
 // Heboris's wait after a snipe)
 const VS_CUTIN_FRAMES = 60;
 const VS_MIRROR_PIECES = 3; // Mirror Block turns the field after each of the next 3 pieces (Heboris)
+// Frames each turn of the field takes: the field goes dark, its columns come back one at a time, mirrored,
+// then it rests (Heboris: about 50 frames); the side waits for it before its next piece
+const VS_MIRROR_FRAMES = 40, VS_MIRROR_DARK = 10, VS_MIRROR_COLUMN = 2;
 
 // Handling without the player's options (only the Guideline has them): no DAS cut, ghost shown
 // where the rule set has one, no hard drop guard
@@ -339,6 +342,8 @@ class RuleGame {
         this.itemTimers = {}; // and frames left
         this.waitingItems = []; // own items set off while this side's attack is active, waiting for its end
         this.mirrorGarbage = []; // garbage received during Mirror Block, waiting for its end
+        this.mirroredAt = -Infinity; // the frame Mirror Block last turned the field (its animation)
+        this.flipWait = 0; // frames the next ARE waits for that turn
         this.garbageEveryLock = false; // versus garbage rises after every lock (TGM, GB), else the rule set's riseAfterLock()
         this.garbageTopsOut = false; // blocks garbage pushes out of the top top this side out (Guideline), else they are lost
         this.incomingItems = []; // the other side's items, taking effect after this side's next lock
@@ -408,7 +413,7 @@ class RuleGame {
     // Opacity of a settled block: the rule set's (blockAlpha: TGM's staff rolls fade or hide them),
     // and what the other side's versus items leave in view (itemAlpha)
     getCellAlpha(row, col) {
-        return this.blockAlpha(row, col) * this.itemAlpha(row, col);
+        return this.blockAlpha(row, col) * this.itemAlpha(row, col) * this.mirrorAlpha(col);
     }
     blockAlpha(row, col) { return 1; }
     itemAlpha(row, col) {
@@ -851,6 +856,8 @@ class RuleGame {
     }
 
     startAre(length) {
+        length += this.flipWait; // Mirror Block's turn of the field runs first
+        this.flipWait = 0;
         this.setPhase("are", length);
         if (length <= 0) this.spawn(this.nextFromQueue(), false);
     }
@@ -1491,7 +1498,7 @@ class RuleGame {
     // An attack item is active on this side: its cut-in, Mirror Block's flips, or the pieces or
     // frames it lasts (not those of a brief one)
     attackActive() {
-        if (this.cutIn > 0 || this.mirrorPieces > 0) return true;
+        if (this.cutIn > 0 || this.mirrorPieces > 0 || this.frames - this.mirroredAt < VS_MIRROR_FRAMES) return true;
         return Object.keys(VS_ITEMS).some(item => !VS_ITEMS[item].brief && this.hitting(item));
     }
 
@@ -1508,7 +1515,7 @@ class RuleGame {
         if (this.mirrorPieces > 0) {
             this.mirrorPieces--;
             if (this.fieldEmpty()) this.mirrorPieces = 0; // a perfect clear ends it (the guide)
-            else this.remapField(grid => grid.map(row => row.reverse()));
+            else this.mirrorField();
         }
         // garbage sent during Mirror Block comes once it ends (the guide)
         if (!this.mirrorPieces && this.mirrorGarbage.length) this.incoming.push(...this.mirrorGarbage.splice(0));
@@ -1546,7 +1553,7 @@ class RuleGame {
     // another item piece keep their item as they move; those an item removes take it with them. Rows
     // an item fills clear at once, without score or lines (only the player's clears set items off).
     useItem(item, received = false) {
-        this.addAction(item, "grade");
+        if (!received || !VS_ITEMS[item].attack) this.addAction(item, "grade"); // a hit one has its cut-in
         if (!received && VS_ITEMS[item].attack) {
             this.sendAttack({ lines: 0, item });
             return;
@@ -1593,7 +1600,8 @@ class RuleGame {
                 break;
             }
             case "MIRROR BLOCK":
-                this.remapField(grid => grid.map(row => row.reverse()));
+                this.mirrorField();
+                this.flipWait = 0; // the cut-in covers the first turn
                 this.mirrorPieces = VS_MIRROR_PIECES - 1;
                 break;
             case "SHOTGUN!": // a column picked at random in every row of the stack: an empty cell is a miss
@@ -1654,6 +1662,21 @@ class RuleGame {
         let r = 0;
         while (r < this.field.length && this.field[r].every(v => !v)) r++;
         return r + FIELD_TOP;
+    }
+
+    // Mirror Block turns the field left to right, animated (mirrorAlpha) while the next ARE waits for it
+    mirrorField() {
+        this.remapField(grid => grid.map(row => row.reverse()));
+        this.mirroredAt = this.frames;
+        this.flipWait = VS_MIRROR_FRAMES;
+    }
+
+    // The field just turned by Mirror Block: dark, then its columns back one at a time from the right
+    // (the left one's blocks first, mirrored; Heboris)
+    mirrorAlpha(col) {
+        const age = this.frames - this.mirroredAt;
+        if (age >= VS_MIRROR_FRAMES) return 1;
+        return age >= VS_MIRROR_DARK + (WIDTH - 1 - col) * VS_MIRROR_COLUMN ? 1 : 0;
     }
 
     // The field as [type, item] cells (rows from the top of the buffer), rewritten by fn and put back
