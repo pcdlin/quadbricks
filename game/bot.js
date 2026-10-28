@@ -16,7 +16,8 @@
 //  - Hands: turns the chosen route into one input bitmap per frame, closed loop (the route is found
 //    again from where the piece actually is after every action), with a level's reaction time, key
 //    interval, DAS use, mistakes and noise; the upper levels also choose during the entry delay how
-//    the next piece should enter and hold that rotation key through it (IRS).
+//    the next piece should enter and hold that rotation key through it (IRS), and hold Hold when the
+//    piece it brings in plays better (IHS).
 //
 // Left out for now: T-spin triples and minis on purpose, IHS, DAS pre-charged during ARE, finesse.
 
@@ -738,31 +739,69 @@ class Bot {
         }
     }
 
-    // During the entry delay: holds the turn the next piece should enter with (IRS)
+    // During the entry delay: holds the turn the next piece should enter with (IRS), and hold when
+    // the piece hold would bring in plays better (IHS)
     preSpawn(game) {
         if (!game.irs || game.gameover || game.curPiece_type) return;
         if (game.phase !== "are" && game.phase !== "lineclear" && game.phase !== "ready" && game.phase !== "rollstart") return;
+        const turnKey = start => start === 1 ? "rotr" : start === 3 ? "rotl" : start === 2 ? "rot180" : null;
         if (!this.irsDone && game.nextCount > 0 && game.rnd_get_queue(0)) {
             this.irsDone = true;
             this.irsKey = null;
+            this.ihsHold = false;
+            this.ihsNext = null;
             const type = game.rnd_get_queue(0), visible = [];
             for (let i = 1; i < game.nextCount; i++) if (game.rnd_get_queue(i)) visible.push(game.rnd_get_queue(i));
             if (!this.weights) return;
-            const [row0, col] = game.big ? game.bigSpawnPosition(type) : game.spawnPosition(type);
-            const starts = [];
-            for (const rot of game.rot180 ? [0, 1, 3, 2] : [0, 1, 3]) {
-                if (rot && (type === tetO || !game.movePossible(row0, col, rot, type))) continue;
-                let row = row0;
-                if (game.dropsOnSpawn && game.movePossible(row + 1, col, rot, type)) row++;
-                for (let n = Math.floor(game.gravity); n > 0 && game.movePossible(row + 1, col, rot, type); n--) row++;
-                starts.push({ row, col, rot });
+            const held = game.getHeldPiece(), other = held || visible[0];
+            if (other && this.ihsAllowed(game)) {
+                // the same pieces looked ahead on either side, or the scores wouldn't compare; the piece
+                // hold would bring in is weighed on the next frame, so no frame does two searches
+                const rest = held ? visible : visible.slice(1), n = Math.min(visible.length, rest.length);
+                const stay = this.entryChoice(game, type, visible.slice(0, n), true);
+                if (stay) {
+                    this.irsKey = turnKey(stay.start);
+                    this.ihsNext = { other, rest: rest.slice(0, n), stay };
+                }
+            } else {
+                const best = this.entryChoice(game, type, visible);
+                if (best) this.irsKey = turnKey(best.start);
             }
-            if (starts.length > 1 && game.movePossible(row0, col, 0, type)) {
-                const best = this.decide(game, { type, starts, visible });
-                if (best && best.start) this.irsKey = best.start === 1 ? "rotr" : best.start === 3 ? "rotl" : "rot180";
+        } else if (this.ihsNext) {
+            const { other, rest, stay } = this.ihsNext;
+            this.ihsNext = null;
+            const swap = this.entryChoice(game, other, rest, true);
+            if (swap && swap.score - this.hands.hold > stay.score) {
+                this.ihsHold = true;
+                this.irsKey = turnKey(swap.start);
             }
         }
+        if (this.ihsHold) this.want.hold = 1;
         if (this.irsKey) this.want[this.irsKey] = 1;
+    }
+
+    // IHS: hold held as a piece enters swaps it, where the game has it, for the levels with IRS that
+    // hold at all (not during READY, which TGM3 Sakura gives to Hold of its own)
+    ihsAllowed(game) {
+        return game.hasHold && game.ihs && game.phase !== "ready" && this.hands.hold < Infinity;
+    }
+
+    // The best way for the piece of `type` about to enter to play, as decide() gives it for the
+    // turns it can enter with ({ start, score, col, rot }); null when it can't enter. With one turn
+    // only there's nothing to choose ({ start: 0 }), unless `scored`.
+    entryChoice(game, type, visible, scored = false) {
+        const [row0, col] = game.big ? game.bigSpawnPosition(type) : game.spawnPosition(type);
+        if (!game.movePossible(row0, col, 0, type)) return null;
+        const starts = [];
+        for (const rot of game.rot180 ? [0, 1, 3, 2] : [0, 1, 3]) {
+            if (rot && (type === tetO || !game.movePossible(row0, col, rot, type))) continue;
+            let row = row0;
+            if (game.dropsOnSpawn && game.movePossible(row + 1, col, rot, type)) row++;
+            for (let n = Math.floor(game.gravity); n > 0 && game.movePossible(row + 1, col, rot, type); n--) row++;
+            starts.push({ row, col, rot });
+        }
+        if (starts.length < 2 && !scored) return { start: 0 };
+        return this.decide(game, { type, starts, visible });
     }
 
     // Presses the first key of the route; returns whether that was one action (not a held key)
@@ -981,7 +1020,7 @@ class Bot {
         roots.sort((a, b) => b.score - a.score);
         let pick = this.pick(roots);
         if (this.hands.misdrop && this.rng() < this.hands.misdrop) pick = this.misdrop(roots, pick);
-        if (pre) return { start: pick.start };
+        if (pre) return { start: pick.start, score: pick.score, col: pick.col, rot: pick.rot };
         if (pick.hold) return { hold: true, goal: null };
         return { hold: false, goal: { col: pick.col, rot: pick.rot, land: pick.row, spin: !!pick.spin, item: pick.hold ? null : pick.item } };
     }
