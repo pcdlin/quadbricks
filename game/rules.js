@@ -59,18 +59,32 @@ const CLEAR_NAMES = ["", "SINGLE", "DOUBLE", "TRIPLE", "QUAD"];
 // fills the item gauge, and after VS_ITEM_PIECES the next carries an item (all its blocks). A line
 // clear that takes an item block sets off the highest such item (the rightmost of a row), turns the
 // field's other item blocks into normal ones and sends no garbage. Items come from a bag per round
-// with one of each, drawn by TAP's weights without replacement (VS_ITEM_WEIGHTS, refilled when
-// empty). VS_OWN_ITEMS act on the side setting them off, after the clear; VS_ATTACK_ITEMS on the
-// other side at once, knocking its piece in play out (a "snipe": the next comes VS_SNIPE_DELAY frames
-// later, Heboris's wait), or after its line clear. Items that change only what a player sees (X-Ray,
-// Dark Block, Color Block), the piece in play (Roll Roll, Death Block, Hard Block, Transform) or swap
-// the fields aren't here.
+// with one of each, drawn by TAP's weights without replacement (VS_ITEMS, refilled when empty).
+// Attack items act on the other side at once, knocking its piece in play out (a "snipe") and holding
+// it still for a cut-in (VS_CUTIN_FRAMES), or after its line clear; the others on the side setting
+// them off, after the clear. While an attack is active on the other side (its cut-in, and the pieces
+// or frames the item lasts: attackActive()), the attacker's gauge doesn't fill and its own items wait
+// for the attack to end (the guide).
 const VS_ITEM_PIECES = 20;
-const VS_ITEM_WEIGHTS = { "LASER": 250, "↑ DEL FIELD": 250, "↓ DEL FIELD": 100, "180° FIELD": 100, "MIRROR BLOCK": 150,
-    "DEL EVEN": 150, "→ MOV FIELD": 50, "SHOTGUN!": 5, "FREE FALL": 3, "← MOV FIELD": 3, "NEGA FIELD": 1 };
-const VS_OWN_ITEMS = ["FREE FALL", "DEL EVEN", "↑ DEL FIELD", "↓ DEL FIELD", "← MOV FIELD", "→ MOV FIELD"];
-const VS_ATTACK_ITEMS = ["MIRROR BLOCK", "SHOTGUN!", "LASER", "NEGA FIELD", "180° FIELD"];
-const VS_SNIPE_DELAY = 60;
+// TAP's items, in the guide's table's order: weight (the whole bag's add up to 1970), whether it attacks
+// the other side, and for an attack that lasts: the pieces (locks) or frames it lasts there (itemEffects,
+// itemTimers), brief when the attacker's gauge fills again after its cut-in all the same (the guide)
+const VS_ITEMS = {
+    "LASER": { weight: 250, attack: true },
+    "↑ DEL FIELD": { weight: 250 },
+    "DEL EVEN": { weight: 150 },
+    "MIRROR BLOCK": { weight: 150, attack: true },
+    "180° FIELD": { weight: 100, attack: true },
+    "↓ DEL FIELD": { weight: 100 },
+    "→ MOV FIELD": { weight: 50 },
+    "SHOTGUN!": { weight: 5, attack: true },
+    "FREE FALL": { weight: 3 },
+    "← MOV FIELD": { weight: 3 },
+    "NEGA FIELD": { weight: 1, attack: true },
+};
+// Frames an attack item holds the other side still (its cut-in; the arcade's length isn't known:
+// Heboris's wait after a snipe)
+const VS_CUTIN_FRAMES = 60;
 const VS_MIRROR_PIECES = 3; // Mirror Block turns the field after each of the next 3 pieces (Heboris)
 
 // Handling without the player's options (only the Guideline has them): no DAS cut, ghost shown
@@ -303,10 +317,16 @@ class RuleGame {
         this.itemsOn = false; // versus: items are dealt (the Items card, useItems())
         this.itemGauge = 0; // pieces towards the next item
         this.itemInterval = VS_ITEM_PIECES; // pieces that fill the gauge (TGM3's styles change it)
-        this.itemSet = Object.keys(VS_ITEM_WEIGHTS); // the items the game has (TGM1: no Mirror Block)
+        this.itemSet = Object.keys(VS_ITEMS); // the items the game has (TGM1: no Mirror Block)
         this.itemsAtClear = false; // attack items go off with the clear, not after its delay (TGM3, ACE)
         this.itemBag = []; // the items left in this round's bag
         this.mirrorPieces = 0; // Mirror Block: locks left that turn the field
+        this.cutIn = 0; // frames this side stands still for the other side's attack item (its cut-in)
+        this.cutInItem = null; // and that item, for the engine
+        this.itemEffects = {}; // attack items lasting on this side: pieces left, by item
+        this.itemTimers = {}; // and frames left
+        this.waitingItems = []; // own items set off while this side's attack is active, waiting for its end
+        this.mirrorGarbage = []; // garbage received during Mirror Block, waiting for its end
         this.garbageEveryLock = false; // versus garbage rises after every lock (TGM, GB), else the rule set's riseAfterLock()
         this.garbageTopsOut = false; // blocks garbage pushes out of the top top this side out (Guideline), else they are lost
         this.incomingItems = []; // the other side's items, taking effect after this side's next lock
@@ -665,6 +685,11 @@ class RuleGame {
 
         if (!this.timerStopped) this.frames++;
         if (!this.onClock()) return;
+        if (this.cutIn > 0) { // the other side's attack item: this side waits for its cut-in
+            if (--this.cutIn === 0) this.cutInItem = null;
+            return;
+        }
+        for (const item in this.itemTimers) if (this.itemTimers[item] > 0) this.itemTimers[item]--;
 
         if (this.phase === "lineclear") {
             if (++this.phaseCounter >= this.phaseLength) {
@@ -846,7 +871,8 @@ class RuleGame {
         if (newPiece) { // the item waiting comes with the piece entering; a full gauge brings the next
             this.pieceItem = this.nextItem;
             this.nextItem = null;
-            if (this.itemsOn && !ihs && ++this.itemGauge >= this.itemInterval) { // an IHS piece doesn't count (TGM3)
+            // an IHS piece doesn't count (TGM3), nor any while this side's attack item is active (the guide)
+            if (this.itemsOn && !ihs && !this.attacking() && ++this.itemGauge >= this.itemInterval) {
                 this.itemGauge = 0;
                 this.nextItem = this.drawItem();
             }
@@ -1232,13 +1258,13 @@ class RuleGame {
         if (attack.lines > room) {
             attack = attack.rows ? { lines: room, rows: attack.rows.slice(0, room) } : { ...attack, lines: room };
         }
-        this.incoming.push(attack);
+        (this.mirrorPieces > 0 ? this.mirrorGarbage : this.incoming).push(attack);
     }
 
     maxIncoming() { return Infinity; } // rows of garbage that may wait
 
     pendingGarbage() {
-        return this.incoming.reduce((sum, g) => sum + g.lines, 0);
+        return [...this.incoming, ...this.mirrorGarbage].reduce((sum, g) => sum + g.lines, 0);
     }
 
     // Lines sent since the last call, one entry per clear
@@ -1292,8 +1318,8 @@ class RuleGame {
     // The next item from the round's bag, by weight without replacement (refilled when empty)
     drawItem() {
         if (!this.itemBag.length) this.itemBag = [...this.itemSet];
-        let x = this.random() * this.itemBag.reduce((sum, item) => sum + VS_ITEM_WEIGHTS[item], 0), k = 0;
-        while (k < this.itemBag.length - 1 && (x -= VS_ITEM_WEIGHTS[this.itemBag[k]]) >= 0) k++;
+        let x = this.random() * this.itemBag.reduce((sum, item) => sum + VS_ITEMS[item].weight, 0), k = 0;
+        while (k < this.itemBag.length - 1 && (x -= VS_ITEMS[this.itemBag[k]].weight) >= 0) k++;
         return this.itemBag.splice(k, 1)[0];
     }
 
@@ -1313,15 +1339,19 @@ class RuleGame {
     }
 
     // The items a clear set off take effect; attacksOnly: only those for the other side (TGM3's go at
-    // once, the rest after the clear)
+    // once, the rest after the clear). The side's own items wait while its attack is active.
     fireItems(attacksOnly = false) {
-        const fire = this.firingItems.filter(item => !attacksOnly || VS_ATTACK_ITEMS.includes(item));
+        const fire = this.firingItems.filter(item => !attacksOnly || VS_ITEMS[item].attack);
         this.firingItems = this.firingItems.filter(item => !fire.includes(item));
-        for (const item of fire) this.useItem(item);
+        for (const item of fire) {
+            if (!VS_ITEMS[item].attack && this.attacking()) this.waitingItems.push(item);
+            else this.useItem(item);
+        }
     }
 
-    // An item from the other side: at once, knocking the piece in play out (a snipe), or after the
-    // line clear running (takeItems)
+    // An attack item from the other side: at once, knocking the piece in play out (a snipe), or
+    // after the line clear running (takeItems); the side stands still for its cut-in. A new attack
+    // ends the last one's effects (Heboris).
     receiveItem(item) {
         if (this.phase === "lineclear" || this.phase === "rollstart") {
             this.incomingItems.push(item);
@@ -1331,19 +1361,55 @@ class RuleGame {
             this.curPiece_type = 0;
             this.shadowRow = -100;
             this.pieceItem = null;
-            this.setPhase("are", VS_SNIPE_DELAY);
+            this.setPhase("are", this.are);
         }
         this.useItem(item, true);
     }
 
+    // An attack item hits this side: its cut-in, the end of the effects of the last one
+    hitBy(item) {
+        this.itemEffects = {};
+        this.itemTimers = {};
+        this.mirrorPieces = 0;
+        this.incoming.push(...this.mirrorGarbage.splice(0));
+        this.cutIn = VS_CUTIN_FRAMES;
+        this.cutInItem = item;
+        const { pieces, frames } = VS_ITEMS[item];
+        if (pieces) this.itemEffects[item] = pieces;
+        if (frames) this.itemTimers[item] = frames;
+    }
+
+    // An attack item lasts on this side (pieces or frames left)
+    hitting(item) {
+        return this.itemEffects[item] > 0 || this.itemTimers[item] > 0;
+    }
+
+    // An attack item is active on this side: its cut-in, Mirror Block's flips, or the pieces or
+    // frames it lasts (not those of a brief one)
+    attackActive() {
+        if (this.cutIn > 0 || this.mirrorPieces > 0) return true;
+        return Object.keys(VS_ITEMS).some(item => !VS_ITEMS[item].brief && this.hitting(item));
+    }
+
+    // This side's attack item is active on the other side
+    attacking() {
+        return !!this.rival && this.rival.attackActive();
+    }
+
     // After a lock (a clear's: once it has collapsed): the items the other side sent during the
-    // clear, and Mirror Block turning the field
+    // clear, Mirror Block turning the field, the lasting items counting the piece, and the side's own
+    // items once its attack is over
     takeItems() {
         for (const item of this.incomingItems.splice(0)) this.useItem(item, true);
         if (this.mirrorPieces > 0) {
             this.mirrorPieces--;
-            this.remapField(grid => grid.map(row => row.reverse()));
+            if (this.fieldEmpty()) this.mirrorPieces = 0; // a perfect clear ends it (the guide)
+            else this.remapField(grid => grid.map(row => row.reverse()));
         }
+        // garbage sent during Mirror Block comes once it ends (the guide)
+        if (!this.mirrorPieces && this.mirrorGarbage.length) this.incoming.push(...this.mirrorGarbage.splice(0));
+        for (const item in this.itemEffects) if (this.itemEffects[item] > 0) this.itemEffects[item]--;
+        if (!this.attacking()) for (const item of this.waitingItems.splice(0)) this.useItem(item);
     }
 
     // Items in a match (the Items card): dealt every VS_ITEM_LINES lines, their blocks marked
@@ -1375,10 +1441,11 @@ class RuleGame {
     // an item fills clear at once, without score or lines (only the player's clears set items off).
     useItem(item, received = false) {
         this.addAction(item, "grade");
-        if (!received && VS_ATTACK_ITEMS.includes(item)) {
+        if (!received && VS_ITEMS[item].attack) {
             this.sendAttack({ lines: 0, item });
             return;
         }
+        if (VS_ITEMS[item].attack) this.hitBy(item);
         const top = this.stackTop() - FIELD_TOP; // the stack's rows: top to the end of the field
         const empty = [0, null];
         switch (item) {

@@ -577,19 +577,33 @@ settles is listed as an assumption below.
 - Items (the Items card, Off at first; TGM1, TAP, TGM3, ACE): every piece fills the gauge, and after `VS_ITEM_PIECES`
   (20) the next carries an item (the guide: the 21st piece; Heboris: `item_interval` 20; `itemGauge`, `nextItem`,
   `pieceItem`). They come from a bag per round with one of each, drawn by TAP's weights
-  without replacement (`VS_ITEM_WEIGHTS`, the guide's table; `drawItem()`, refilled when empty). A clear that takes item
+  without replacement (`VS_ITEMS`, the guide's table, in its order; `drawItem()`, refilled when empty). A clear that takes item
   blocks sets off the highest (the rightmost in its row) and turns the field's other item blocks normal, the one in the
   preview too (the guide;
-  `collectItems()`, `fireItems()`, `useItem()`, RuleGame's, which TAP Normal's two items use too). For the side setting it
-  off: Free Fall (its rows clear and 2+ of them go to the other side as garbage with one hole, the guide and Heboris), Del
-  Even, ↑ / ↓ Del Field, ← / → Mov Field; for the other side, at once (`receiveItem()`), knocking its piece in play out (a
-  snipe, not in ARE; the next comes `VS_SNIPE_DELAY` frames later, Heboris's wait), or after the clear it is in: Mirror
-  Block (the field turned left to right now and after each of its next two pieces, `mirrorPieces`), Shotgun! (a random
-  column in every row of the stack, a miss on an empty cell), Laser (a column), Nega Field (blocks and holes swapped up
-  to the stack's top), 180° Field (the top row swapped with the bottom one, and so on). The Del Fields take half the
-  stack, rounded up. TGM1's set has no Mirror Block (TAP added it, tetris.wiki). Items that change only what a player
-  sees (X-Ray, Dark Block, Color Block), the piece in play (Roll Roll, Death Block, Hard Block, Transform) or swap fields
-  (Exchg Field) aren't there. Item draws come from the match seed (`seedVersus()`, `random()`).
+  `collectItems()`, `fireItems()`, `useItem()`, RuleGame's, which TAP Normal's two items use too). Items for the side setting
+  them off act after the clear; attack items (`attack` in `VS_ITEMS`) act on the other side at once (`receiveItem()`), knocking
+  its piece in play out (a snipe, not in ARE) and holding it still for a cut-in (`VS_CUTIN_FRAMES`, `cutIn`; Heboris's
+  60-frame wait after a snipe), or after the clear it is in. A new attack ends the last one's effects (`hitBy()`, Heboris's
+  `statusClear`). While an attack is active (`attackActive()`: its cut-in, Mirror Block's flips, the pieces or frames an
+  item lasts, `itemEffects`) the attacker's gauge doesn't fill and its own items wait (`attacking()`, `waitingItems`; the
+  guide). The items, in the guide's table order:
+  - Laser: a column deleted.
+  - ↑ Del Field: the stack's upper half deleted (half its rows, rounded up, as ↓ Del Field).
+  - Del Even: every other row from the bottom deleted (the second, fourth, ...).
+  - Mirror Block: the field turned left to right now and after each of the next two pieces (`mirrorPieces`); garbage sent
+    meanwhile waits for its end (`mirrorGarbage`), and a perfect clear ends it (the guide).
+  - 180° Field: the top row of the stack swapped with the bottom one, and so on.
+  - ↓ Del Field: the stack's lower half deleted.
+  - → Mov Field: every row's blocks pushed to the right wall.
+  - Shotgun!: a random column in every row of the stack shot out, a miss on an empty cell.
+  - Free Fall: every block drops down its column; its rows clear and 2+ of them go to the other side as garbage with one
+    hole (the guide and Heboris).
+  - ← Mov Field: every row's blocks pushed to the left wall.
+  - Nega Field: blocks and holes swapped up to the stack's top.
+
+  TGM1's set (`TGM1_VS_ITEMS`, tetris.wiki's TGM1 page) has no Mirror Block, Color Block or Dark Block (TAP added them), and
+  its Spin Field and Press Field (gone in TAP) aren't there. Item draws come from the match seed (`seedVersus()`,
+  `random()`).
 - Stats: LEVEL (/ 200; TGM1's plain), TIME, SENT, SCORE; ACE: LINES (/ 20), TIME, SENT, LEVEL; TGM3's mode line names the
   style.
 
@@ -863,8 +877,8 @@ settles is listed as an assumption below.
   deleted rows taken from the bottom of the stack after the clear; TGM3's items going off with the clear's end like TAP's
   (the wiki: at once in TGM3); the GB hole's piece drawn from the match seed (the GB takes the last of its 256-piece list);
   GB garbage pushed out of the top lost, as in TAP; the GB's starting rows taken from the bottom of its pattern; the
-  snipe's wait (Heboris's 60 frames: the arcade shows a cut-in); attack items take effect at once rather than over their
-  animation (the guide: Mirror Block's three flips and the meter not charging while an attack runs); TAP's Cement Mode
+  cut-in's length (Heboris's 60-frame wait after a snipe); attack items take effect at once rather than over their
+  animation (the guide: Mirror Block's three flips); TAP's Cement Mode
   (no garbage) and the service menu's round count aren't there; the Goal card stops at 900 (the arcade's upper limit isn't
   given); the Guideline's perfect clear +10 (tetris.wiki *Garbage*; NullpoMino gives +6).
 - TGM1: the GM checkpoints' limits are inclusive (NullpoMino; the wiki says "<"); the staff roll

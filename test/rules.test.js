@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // the rules: game.js, then the files of game/index.html that define them, in its order
 const RULE_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "rules-ace.js", "rules-1989.js"];
 vm.runInThisContext(RULE_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY, TGM_VS_FRAMES, TGM1_VS_FRAMES, VS_ITEM_PIECES, VS_SNIPE_DELAY, TGM_VS_GARBAGE_MAX});");
+    "\n;Object.assign(globalThis, {RuleGame, createGame, TGM_GRADE_LABELS, COUNTDOWN_STEPS, COUNTDOWN_STEP_FRAMES, TiRandomizer, TapRandomizer, Tgm1Randomizer, GbRandomizer, NesRandomizer, guideline, arika, tgmClassic, tgmTap, gbTetris, tgmOriginal, nesTetris, tgmAce, aceArs, aceArs2, ARS_SHAPES, guidelineGravity, shapes, tetI, tetT, tetO, tetL, tetJ, tetS, tetZ, WIDTH, HEIGHT, LEFT_PUSH, LEFT_RELEASE, RIGHT_PUSH, RIGHT_RELEASE, ROTL_PUSH, ROTR_PUSH, ROTR_RELEASE, SOFT_PUSH, SOFT_RELEASE, HARD_PUSH, HOLD_PUSH, HOLD_RELEASE, ROT180_PUSH, ROT180_RELEASE, GB_GRAVITY, versusAttack, tetGARBAGE, FIELD_TOP, tgm3ExamFor, tgm3ExamAfter, tgm3PromotionGrade, TGM3_EXAM_HISTORY, TGM_VS_FRAMES, TGM1_VS_FRAMES, VS_ITEM_PIECES, VS_ITEMS, VS_CUTIN_FRAMES, TGM_VS_GARBAGE_MAX});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -3047,15 +3047,15 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     entered();
     check("Versus items: the item gauge fills with 20 pieces and the 21st carries an item (tetris.wiki, Heboris)",
         [before, !!item, g.pieceItem === item, g.nextItem], [null, true, true, null]);
-    check("  ...none without the card; TGM1 has them too, but Mirror Block (which TAP added)",
+    check("  ...none without the card; TGM1 has them too, but not Mirror Block (which TAP added)",
         [versusPair(tgmTap)[0].itemsOn, versusPair(tgmOriginal, 5, 0, { items: true })[0].itemsOn, versusPair(tgmOriginal, 5, 0, { items: true })[0].itemSet.includes("MIRROR BLOCK")],
         [false, true, false]);
-    const bag = versusPair(tgmTap, 5, 0, { items: true })[0], drawn = Array.from({ length: 11 }, () => bag.drawItem());
-    check("  ...from a bag with one of each, drawn without replacement", [new Set(drawn).size, bag.itemBag.length], [11, 0]);
-    const counts = {};
+    const bag = versusPair(tgmTap, 5, 0, { items: true })[0], drawn = bag.itemSet.map(() => bag.drawItem());
+    check("  ...from a bag with one of each, drawn without replacement", [new Set(drawn).size === bag.itemSet.length, bag.itemBag.length], [true, 0]);
+    const counts = {}, total = bag.itemSet.reduce((sum, it) => sum + VS_ITEMS[it].weight, 0), near = (it, n) => Math.abs(n / 4000 - VS_ITEMS[it].weight / total) < 0.04;
     for (let k = 0; k < 4000; k++) { bag.itemBag = []; const it = bag.drawItem(); counts[it] = (counts[it] || 0) + 1; }
-    check("  ...by TAP's weights (Laser and Up Del Field 250 of 1312 here, Nega Field 1)",
-        [counts["LASER"] > 600 && counts["LASER"] < 900, counts["↑ DEL FIELD"] > 600, (counts["NEGA FIELD"] || 0) < 15], [true, true, true]);
+    check("  ...by TAP's weights (Laser and Up Del Field 250 of all the bag's, Nega Field 1)",
+        [near("LASER", counts["LASER"]), near("↑ DEL FIELD", counts["↑ DEL FIELD"]), (counts["NEGA FIELD"] || 0) < 15], [true, true, true]);
 
     const [s] = versusPair(tgmTap, 5, 0, { items: true });
     clearField(s);
@@ -3074,13 +3074,13 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     clearField(r);
     fill(r, ["###......."]);
     r.receiveGarbage({ item: "MIRROR BLOCK", hole: 0 });
-    const sniped = [rowText(r, 21), r.curPiece_type, r.phase, r.phaseLength];
+    const sniped = [rowText(r, 21), r.curPiece_type, r.phase, r.cutIn];
     for (let f = 0; f < 100 && r.phase !== "active"; f++) r.advanceFrame(0);
     place(r, tetO, 0, 19, 0); // columns 1-2 in ARS
     r.advanceFrame(SOFT_PUSH);
     const second = rowText(r, 21);
     check("  ...an attack item hits at once and knocks the piece in play out (a snipe); Mirror Block turns the field again after the next pieces",
-        [sniped, second], [[".......###", 0, "are", VS_SNIPE_DELAY], "###....##."]);
+        [sniped, second], [[".......###", 0, "are", VS_CUTIN_FRAMES], "###....##."]);
 
     const own = (item, rows) => {
         const [o] = versusPair(tgmTap, 5, 0, { items: true });
@@ -3110,6 +3110,38 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     const sent = f.takeAttacks();
     check("  ...Free Fall's rows clear, and 2 or more of them go to the other side as garbage with one hole",
         [sent.map(a => [a.lines, a.rows.length, new Set(a.rows.map(r => r.indexOf(0))).size, a.rows[0].filter(v => !v).length])], [[[2, 2, 1, 1]]]);
+}
+{
+    // an attack item's active time: the other side stands still for its cut-in; the attacker's gauge doesn't fill and its
+    // own items wait until the attack is over (the guide); garbage sent during Mirror Block waits for its end, which a
+    // perfect clear brings
+    const [a, d] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(d);
+    fill(d, ["###......."]);
+    d.receiveGarbage({ item: "LASER" });
+    const counter = d.phaseCounter;
+    for (let f = 0; f < VS_CUTIN_FRAMES - 1; f++) d.advanceFrame(0);
+    const still = [d.phase, d.phaseCounter === counter, d.cutIn, a.attacking()];
+    const gauge = a.itemGauge;
+    a.curPiece_type = 0;
+    a.spawn(a.nextFromQueue(), false);
+    a.firingItems = ["DEL EVEN"];
+    a.fireItems();
+    const waiting = [a.itemGauge === gauge, a.waitingItems];
+    check("Versus items: an attack holds the other side still for its cut-in; meanwhile the attacker's gauge doesn't fill and its own items wait",
+        [still, waiting], [["are", true, 1, true], [true, ["DEL EVEN"]]]);
+    d.advanceFrame(0);
+    a.takeItems();
+    check("  ...until the attack is over", [a.attacking(), a.waitingItems, a.actions.map(x => x.text)], [false, [], ["DEL EVEN"]]);
+    const [m] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(m);
+    fill(m, ["###......."]);
+    m.receiveGarbage({ item: "MIRROR BLOCK" });
+    m.receiveGarbage({ lines: 2, rows: [rowOf(m, 21), rowOf(m, 21)] });
+    const held = [m.incoming.length, m.pendingGarbage()];
+    clearField(m);
+    m.takeItems();
+    check("  ...garbage sent during Mirror Block waits for its end, which a perfect clear brings at once", [held, m.mirrorPieces, m.incoming.length], [[0, 2], 0, 1]);
 }
 {
     // setting an item off turns the one in the preview normal too; a held item piece loses its item; an IHS piece

@@ -2824,7 +2824,7 @@ class Engine {
         const r = this.r, x = BOARD_X - 8 - METER_GAP - METER_W;
         r.shape(x, this.boardY, METER_W, this.boardH, { radius: 3, fill: "rgba(244,236,220,0.06)" });
         let y = this.boardY + this.boardH;
-        for (const g of game.incoming) {
+        for (const g of [...game.incoming, ...game.mirrorGarbage]) {
             const h = Math.min(g.lines * CELL, y - this.boardY);
             if (h <= 2) break;
             r.shape(x, y - h + 1, METER_W, h - 2, { radius: 3, fill: GARBAGE_METER });

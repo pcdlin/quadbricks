@@ -64,6 +64,10 @@ const TGM_VS_GARBAGE_MAX = 8; // rows of garbage that may wait ("capped at the f
 // The goal can be set in steps of 100 levels, the time limit 1:20 longer or shorter for each (tetris.wiki, TAP)
 const TGM_VS_GOAL_STEP = 100, TGM_VS_GOAL_MAX = 900, TGM_VS_STEP_FRAMES = 80 * 60;
 const TGM1_VS_FRAMES = 5 * 60 * 60; // TGM1: a round not decided in 5:00 is a draw (tetris.wiki)
+// TGM1's items that TAP has too (tetris.wiki's TGM1 page; TAP added Mirror Block, Color Block and Dark Block, and
+// dropped TGM1's Spin Field and Press Field)
+const TGM1_VS_ITEMS = ["DEATH BLOCK", "NEGA FIELD", "180° FIELD", "SHOTGUN!", "HARD BLOCK", "LASER", "ROLL ROLL", "TRANSFORM",
+    "X-RAY", "↑ DEL FIELD", "↓ DEL FIELD", "→ MOV FIELD", "← MOV FIELD", "DEL EVEN", "FREE FALL", "EXCHG FIELD"];
 // TGM3's versus styles: the pieces between items, and the name the stats show
 const TGM3_VS_STYLES = { attack: { items: 40, name: "ATTACK" }, defence: { items: 20, name: "DEFENCE" }, item: { items: 10, name: "ITEM" } };
 const TGM_TORIKAN_LEVEL = 500, TGM_TORIKAN_FRAMES = 7 * 60 * 60; // ends at 500 if slower than 7:00
@@ -1574,8 +1578,8 @@ class TiShiraseGame extends TiGame {
 // wait (the guide's cap), nothing cancels it, and it rises once the receiving side's piece has locked
 // (and its clear is done), before the next piece: Heboris does so "like the original", whatever the
 // lock cleared; rows pushed out of the top are lost ("forgotten", the guide), they don't top a side
-// out. Items with the Items card (RuleGame's). TGM1 (tetris.wiki): the same items but Mirror Block
-// (which TAP added), no goal but the game's end, and a round not decided in 5:00 is a draw. TGM3
+// out. Items with the Items card (RuleGame's). TGM1 (tetris.wiki): TGM1's items (TGM1_VS_ITEMS), no
+// goal but the game's end, and a round not decided in 5:00 is a draw. TGM3
 // (tetris.wiki): each side plays a style (TiVersusGame).
 
 // The versus side of a TGM game (TiGame, TapGame, Tgm1Game; ACE's AceGame too)
@@ -1771,7 +1775,7 @@ class TapVersusGame extends tgmVersus(TapGame) {
     }
 }
 
-// TGM1: Master's speed or its hidden 20G mode's (options.speed: "20g"); items but Mirror Block (TAP's);
+// TGM1: Master's speed or its hidden 20G mode's (options.speed: "20g"); its own items (TGM1_VS_ITEMS);
 // the end of the game (level 999) is the only goal, and a round not decided in 5:00 is a draw
 class Tgm1VersusGame extends tgmVersus(Tgm1Game) {
     constructor(mode, variant) {
@@ -1783,7 +1787,7 @@ class Tgm1VersusGame extends tgmVersus(Tgm1Game) {
     setOptions(options = {}) {
         this.speed20g = options.speed === "20g";
         super.setOptions(options);
-        this.itemSet = this.itemSet.filter(item => item !== "MIRROR BLOCK");
+        this.itemSet = this.itemSet.filter(item => TGM1_VS_ITEMS.includes(item));
     }
 
     statsName() {
