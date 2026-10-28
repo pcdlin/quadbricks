@@ -102,6 +102,21 @@ const VS_MIRROR_FRAMES = 40, VS_MIRROR_DARK = 10, VS_MIRROR_COLUMN = 2;
 // where the rule set has one, no hard drop guard
 const NO_HANDLING = { dcd: 0, ghost: true, dropGuard: false };
 
+// The debug menu's setups (debugSetups): "near the end" leaves this many frames of a time limit,
+// the preset fields (rows from the bottom, X a block) and the piece each needs next
+const DEBUG_LEAD = 10 * 60;
+const DEBUG_FIELD_IDS = ["empty", "tetris", "tsd", "pc", "top"];
+const DEBUG_FIELD_LABELS = ["Empty", "Tetris ready", "T-spin double", "Perfect clear", "Near the top"];
+const DEBUG_FIELDS = {
+    empty: [],
+    tetris: Array(4).fill("XXXXXXXXX."),
+    tsd: ["XXX..XXXXX", "XXX...XXXX", "XXXX.XXXXX"], // a T turned clockwise into the slot from the left (SRS kick 3)
+    pc: ["XXX....XXX"],
+};
+const DEBUG_FIELD_PIECES = { tetris: tetI, tsd: tetT, pc: tetI };
+const DEBUG_PIECES = [tetI, tetT, tetL, tetJ, tetS, tetZ, tetO], DEBUG_PIECE_LABELS = ["I", "T", "L", "J", "S", "Z", "O"];
+const DEBUG_GARBAGE = [1, 2, 4, 8]; // rows of garbage the debug menu sends
+
 // ----------------------------------------------------------
 // SRS kick data: tests 2-5 per transition, (x right, y up)
 
@@ -265,6 +280,8 @@ class RuleGame {
         this.score = 0;
         this.frames = 0;
         this.timerStopped = false; // the clock stops (TGM: at the end level, for the staff roll)
+        this.tested = false; // a hidden test setup or the debug menu changed the game: it sets no record
+        this.debugGravity = true; // false: the debug menu turned gravity off
         this.gameover = false;
         this.endTitle = null;
         this.endSub = null;
@@ -557,6 +574,7 @@ class RuleGame {
             this.gravity = 20;
             this.softGravity = 20;
         }
+        if (!this.debugGravity) this.gravity = 0;
     }
 
     // Sets are, lineAre, das, arr, lockDelayMax, lineClearDelay, gravity and softGravity (rows per frame)
@@ -1499,13 +1517,17 @@ class RuleGame {
             this.incomingItems.push(item);
             return;
         }
-        if (this.phase === "active" && this.curPiece_type) {
-            this.curPiece_type = 0;
-            this.shadowRow = -100;
-            this.pieceItem = null;
-            this.setPhase("are", this.are);
-        }
+        this.knockOut();
         this.useItem(item, true);
+    }
+
+    // The piece in play leaves without locking, the next to come after an ARE (a snipe, the debug menu)
+    knockOut() {
+        if (this.phase !== "active" || !this.curPiece_type) return;
+        this.curPiece_type = 0;
+        this.shadowRow = -100;
+        this.pieceItem = null;
+        this.setPhase("are", this.are);
     }
 
     // An attack item hits this side: its cut-in, the end of the effects of the last one
@@ -1686,12 +1708,7 @@ class RuleGame {
             this.field[r][c] = type;
             this.itemCells[r][c] = item;
         }
-        if (other.phase === "active" && other.curPiece_type
-            && !other.movePossible(other.curPiece_row, other.curPiece_col, other.curPiece_rotation)) {
-            other.curPiece_type = 0;
-            other.pieceItem = null;
-            other.setPhase("are", other.are);
-        }
+        if (other.curPiece_type && !other.movePossible(other.curPiece_row, other.curPiece_col, other.curPiece_rotation)) other.knockOut();
         other.setShadow();
         this.hitBy("EXCHG FIELD");
     }
@@ -1749,5 +1766,90 @@ class RuleGame {
     // Hidden test setups (the engine's Ctrl+Shift+digit keys); TGM only. Returns whether one applied.
     testSetup(name) {
         return false;
+    }
+
+    // ----------------------------------------------------------
+    // Debug menu (the engine's, with ?debug=1): states otherwise hard to reach or left to chance
+
+    // The setups the game has now, its mode's first: { id, values, labels, current } (values: what
+    // debugSetup() takes, labels: how the menu shows them, current: the one chosen at first)
+    debugSetups() {
+        if (this.gameover) return [];
+        const setups = this.modeSetups();
+        const levels = this.debugLevels();
+        if (levels) {
+            let current = 0;
+            while (current + 1 < levels.length && levels[current + 1] <= this.level) current++;
+            setups.push({ id: "level", values: levels, labels: this.debugLevelLabels(levels), current });
+        }
+        setups.push({ id: "next", values: DEBUG_PIECES, labels: DEBUG_PIECE_LABELS },
+            { id: "field", values: DEBUG_FIELD_IDS, labels: DEBUG_FIELD_LABELS },
+            { id: "gravity", values: [true, false], labels: ["Normal", "Off"], current: this.debugGravity ? 0 : 1 });
+        if (this.versus && this.sendsGarbage) {
+            setups.push({ id: "garbage", values: DEBUG_GARBAGE }, { id: "garbagerival", values: DEBUG_GARBAGE });
+        }
+        if (!this.versus) setups.push({ id: "end", values: ["over", "complete"], labels: ["Game over", "Complete"] });
+        return setups;
+    }
+
+    modeSetups() { return []; } // the rule set's and mode's own setups (debugSetups)
+    debugLevels() { return null; } // the levels the debug menu can jump to (none: no such entry)
+    debugLevelLabels(levels) { return levels.map(String); }
+    debugLevel(level) { return false; } // jump to a level, at its speed
+    onDebugField() {} // the debug menu set the field (debugField)
+
+    // Applies a setup (one of debugSetups()) with one of its values; returns whether it could. The game
+    // then sets no record (tested)
+    debugSetup(id, value) {
+        if (this.gameover || !this.applyDebug(id, value)) return false;
+        this.tested = true;
+        return true;
+    }
+
+    applyDebug(id, value) {
+        switch (id) {
+            case "level": return this.debugLevel(value);
+            case "next": this.queue[0] = value; return true;
+            case "field": return this.debugField(value);
+            case "gravity":
+                this.debugGravity = value;
+                this.updateTimings();
+                return true;
+            case "garbage": case "garbagerival": {
+                const side = id === "garbage" ? this : this.rival;
+                if (!side || side.gameover) return false;
+                // not from the match's generator: both sides' items would no longer come alike
+                side.receiveGarbage({ lines: value, hole: Math.floor(Math.random() * WIDTH) });
+                return true;
+            }
+            case "end":
+                this.curPiece_type = 0;
+                this.shadowRow = -100;
+                if (value === "complete") this.endGame("COMPLETE", this.formatTime());
+                else this.endGame("GAME OVER", "DEBUG — ESC FOR MENU");
+                return true;
+        }
+        return this.testSetup(id);
+    }
+
+    // A preset field (DEBUG_FIELDS; "top": every row of the well but the top three, with a hole each),
+    // blocks in random colours; the piece in play goes and the one the field needs comes next
+    debugField(kind) {
+        if (this.phase === "rollstart" || this.phase === "stageend") return false;
+        const rows = kind !== "top" ? DEBUG_FIELDS[kind] : Array.from({ length: HEIGHT - this.wellTop - 3 }, () => {
+            const hole = Math.floor(Math.random() * WIDTH);
+            return Array.from({ length: WIDTH }, (_, c) => c === hole ? "." : "X").join("");
+        });
+        for (const row of this.field) row.fill(0);
+        if (this.itemCells) for (const marks of this.itemCells) marks.fill(null);
+        rows.forEach((line, k) => [...line].forEach((ch, c) => {
+            if (ch === "X") this.setCell(HEIGHT - rows.length + k, c, 1 + Math.floor(Math.random() * 7));
+        }));
+        this.pendingRows = []; // a line clear running clears nothing more
+        this.knockOut();
+        if (DEBUG_FIELD_PIECES[kind]) this.queue.unshift(DEBUG_FIELD_PIECES[kind]);
+        this.onDebugField();
+        this.setShadow();
+        return true;
     }
 }

@@ -134,6 +134,37 @@ class AceGame extends RuleGame {
         this.scoreAce(n);
     }
 
+    // Debug menu: a line short of 150, the level's clock near up, a level (its lines, its clock anew)
+    modeSetups() {
+        return this.versus ? [] : [{ id: "nearend" }, { id: "clock" }];
+    }
+
+    debugLevels() {
+        return this.versus ? null : Array.from({ length: ACE_LEVELS }, (_, i) => i + 1);
+    }
+
+    debugLevel(level) {
+        this.lines = (level - 1) * ACE_LINES_PER_LEVEL;
+        this.level = level;
+        this.aceTimer = this.aceLimit();
+        this.updateTimings();
+        this.setShadow();
+        return true;
+    }
+
+    applyDebug(id, value) {
+        if (id === "nearend") {
+            this.debugLevel(ACE_LEVELS);
+            this.lines = ACE_LEVELS * ACE_LINES_PER_LEVEL - 1;
+            return true;
+        }
+        if (id === "clock") {
+            this.aceTimer = Math.min(this.aceTimer, DEBUG_LEAD);
+            return true;
+        }
+        return super.applyDebug(id, value);
+    }
+
     // No score; a level every 10 lines (its clock starts over with the next piece), done at 150
     scoreAce(n) {
         if (n === 0) return;

@@ -173,6 +173,41 @@ class TiSakuraGame extends TiGame {
     endNotes() { return [`CLEAR ${this.clearRate()}%  ·  TOTAL ${this.formatTime()}`]; }
     secretGradeLabels() { return null; }
     testSetup() { return false; }
+    testSetupIds() { return []; }
+
+    // Debug menu: any stage (the EX ones too), the stage cleared now, its stage or limit time near up;
+    // no level (each stage starts its own) or preset field (the stage's jewels)
+    modeSetups() {
+        const stages = SAKURA_STAGES.map((_, i) => i);
+        const setups = [{ id: "stage", values: stages, labels: stages.map(stage => this.stageName(stage)), current: this.stage }, { id: "stageclear" }];
+        if (this.stage < SAKURA_NORMAL_STAGES) setups.push({ id: "stagetime" });
+        return [...setups, { id: "limit" }];
+    }
+
+    debugSetups() { return super.debugSetups().filter(s => s.id !== "field"); }
+    debugLevels() { return null; }
+
+    applyDebug(id, value) {
+        switch (id) {
+            case "stage":
+                this.lastStage = Math.max(this.lastStage, value);
+                this.pendingRows = [];
+                this.loadStage(value);
+                return true;
+            case "stageclear":
+                if (this.phase === "lineclear" || this.phase === "stageend") return false;
+                this.jewels = 0;
+                this.endStage("CLEAR");
+                return true;
+            case "stagetime":
+                this.stageFrames = Math.max(this.stageFrames, SAKURA_STAGE_FRAMES - DEBUG_LEAD);
+                return true;
+            case "limit":
+                this.limit = Math.min(this.limit, DEBUG_LEAD);
+                return true;
+        }
+        return super.applyDebug(id, value);
+    }
 
     delayRow(speedLevel) { return tableLookup(SAKURA_DELAYS, speedLevel); }
     gravityAt(speedLevel) { return tableLookup(SAKURA_GRAVITY, speedLevel)[1] / 256; }

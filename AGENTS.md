@@ -55,7 +55,7 @@ when WebGL is unavailable).
 | `game/items.js` | Versus items' graphics, drawn with canvas paths (the engine renders them once into textures): `ITEM_ART`, per item (`VS_ITEMS`) a glyph in a 100 box and its cut-in colour; `drawItemIcon()`, the icon on an item block and in NEXT (the white glyph on a dark plate in a frame of its kind's colour, `ITEM_KIND_COLORS`, `itemKind()`: attack red, the side's own blue, Exchg Field green, as Heboris has them after the arcade); `drawItemEmblem()`, the cut-in's emblem (the glyph in the item's colour on a dark medallion). Heboris's own pictures (unknown licence) were looked at, not copied. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for the rule sets (~515 checks). |
+| `test/rules.test.js` | Spec checks for the rule sets (~575 checks; the debug menu's setups too, every one in every mode). |
 | `test/options.test.js` | The options: `Options.bind()` keeps every key one player's and every action with a key. |
 | `test/bot.test.js` | The bot: the probe leaves the game alone, plans are carried out as planned, every level plays every rule set without sticking. Each check is a `job()` (seeding its own games), run in worker threads heaviest first (`cost`), its output printed in file order; checks over several jobs' results go in a `summary()`, run once they are all done. |
 | `tools/bot-bench.js` | Not in the test run: `node tools/bot-bench.js [level] [games] [mode filter] [profile]` plays modes headless (seeded) and prints each one's own result (`record()`), for tuning the bot. |
@@ -102,6 +102,26 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   `RuleGame.testSetup()`, which refuses during READY, after game over, in the Guideline, and for
   setups a mode doesn't have (TAP Death: only 1 and 4; TGM1: 1 and 3 go to the GM roll, and 4; TGM+,
   TAP Normal and Shirase: 1 and 4; Easy: 1, 4, 5 and 6; 5 is TGM3 Master's and Easy's only).
+- Debug menu (the user's request), only with `?debug=1` in the URL (`DEBUG`): a Debug card in the main menu during a
+  game (after Continue and Restart; six cards draw tighter) and Ctrl+Shift+D (from the game or a menu, `openDebug()`) open
+  `MENU_DEBUG` (`drawDebugScreen()`, scrolled like the handling cards). Its entries are the game's (`debugItems()`; names and
+  descriptions in `DEBUG_ENTRIES`): the rule set's (`RuleGame.debugSetups()`, `{ id, values, labels, current }`: the mode's
+  own first, `modeSetups()`, then a level, `debugLevels()` / `debugLevel()`, the next piece, a preset field, `DEBUG_FIELDS`
+  (Tetris ready, T-spin double, perfect clear, near the top; the piece it needs comes next), gravity off (`debugGravity`),
+  versus garbage to either side, the game ended), the match's (`matchDebug()`: the round decided, `match.forced`; match
+  point; the bot paused, `match.botPaused`, or at another level) and the presentation's (`viewDebug()`: clear messages,
+  `DEBUG_MESSAGES`; a Quad's burst; firework bursts; Deep Space's bright and shooting stars, the theme's `showSun()` /
+  `showMeteor()`; the fly-in again, `flyReplay`; a WebGL context loss). The modes' own: TGM's test setups (above) and
+  internal grade; TGM3 Master's COOL, REGRET, level stop and promotional or demotional exam; Shirase's REGRET and level
+  stops; TAP Death's level 500 in time or late, Normal's item pieces, TGM+'s next rising row; TGM1's GM checkpoints met or
+  missed; Sakura's stage (EX ones too), stage cleared, stage and limit time; ACE's near the end and level clock; the
+  Guideline's near the end (`debugNearEnd()`); NES's and GB's B-Type near the end and score near the cap, NES versus's
+  other side topping out; TGM versus's items on either side as if the other side had set them off (`debugItem()`), in the
+  next piece or the gauge filled (with the Items card), and the time near up. "Near the end" leaves `DEBUG_LEAD` (10 s) of
+  a time limit. ← → choose a value, Enter applies it (`RuleGame.debugSetup()` → `applyDebug()`, which the families extend
+  and which falls back to `testSetup()`; the engine's own, `engineDebug()`) and goes back to the game; one that can't apply
+  now leaves NOT AVAILABLE RIGHT NOW under the list. A game a setup changed is `tested`, as with the test keys: it sets no
+  record (its banner says TEST GAME — NOT RECORDED) and stays out of TGM3's exam history.
 - Game keys come from `options.keys` (rebindable; player 2's from `options.keys2`, `PLAYER2_ACTIONS`: the same but the sound key, which works for both; defaults `DEFAULT_KEYS2`, ESDF to move and drop, W/R turn, Q 180°, left Shift hold, clear of player 1's): each action has a list of one or two key codes
   (`MAX_KEYS_PER_ACTION`). On the Keybinds screen, Enter then a new key adds it (a third replaces
   the action's oldest); a key the action already has is removed, unless it is its only one
@@ -239,7 +259,8 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   By family: the score (default; Marathon, Ultra, NES, GB, TAP Normal), Sprint/Dig time, Guideline
   Master lines then time, TGM grade (`gradeRank()`: M and GM above every grade) then level then time,
   TGM+ level then time, Easy fireworks, ACE lines then time. The engine submits it once when the game
-  ends (`submitRecord()`, key `recordKey()` from the game's arguments and the options that are on),
+  ends (`submitRecord()`, key `recordKey()` from the game's arguments and the options that are on; not for a game a test
+  setup or the debug menu changed, `tested`),
   shows FIRST RECORD / NEW BEST / BEST … in the game over banner, the best for the current choices
   under the mode list and setup cards (`drawBest()`), and in a game the best for its setup
   (`recordSetup`) at the foot of the NEXT column, its parts stacked when the line doesn't fit

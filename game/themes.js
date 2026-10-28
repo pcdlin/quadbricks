@@ -341,6 +341,15 @@ const THEMES = {
                 this.sunIn = SPACE_SUN_EVERY[0] + Math.random() * (SPACE_SUN_EVERY[1] - SPACE_SUN_EVERY[0]);
             }
         },
+        // the debug menu's: the bright star, or a shooting star, from the next update
+        showSun() {
+            this.sun = null;
+            this.sunIn = 0;
+        },
+        showMeteor() {
+            this.meteor = null;
+            this.meteorIn = 0;
+        },
         ambient(e) {
             const t = e.clock / 60, h = e.hue;
             const swell = (SPACE_NEBULA_ALPHA + 0.2 * e.pulse) * e.softEffectScale();

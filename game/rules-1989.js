@@ -78,6 +78,7 @@ const GB_DAS = 23, GB_ARR = 9; // the disassembly's counter: $17 on the press, 9
 const GB_ARE = 2, GB_LINE_CLEAR = 91; // ARE 2; ARE and line clear together 93
 const GB_LINE_SCORES = [0, 40, 100, 300, 1200]; // x (level + 1); NES too
 const GB_MAX_SCORE = 999999; // NES too
+const DEBUG_NEAR_MAX_SCORE = 990000; // the debug menu's score near the cap
 const GB_B_LINES = 25; // B-Type: 25 lines; NES too
 const GB_B_HEIGHTS = 6, GB_ROWS_PER_HEIGHT = 2; // B-Type height 0-5: 0 to 10 rows of garbage
 const GB_GARBAGE_FILL = 0.5; // chance of a block in each garbage cell
@@ -253,6 +254,43 @@ class Game1989 extends RuleGame {
     }
 
     levelForLines() { return this.level; }
+
+    // Debug menu: B-Type a line short of 25, the score near its cap (not in versus: none there), any level
+    modeSetups() {
+        const setups = [];
+        if (this.btype) setups.push({ id: "nearend" });
+        if (!this.versus) setups.push({ id: "maxscore" });
+        return setups;
+    }
+
+    debugLevels() {
+        return Array.from({ length: this.nes ? NES_GRAVITY.length : GB_MAX_LEVEL + 1 }, (_, i) => i);
+    }
+
+    // The level-ups count on from it, as from a start level
+    debugLevel(level) {
+        this.startLevel = this.level = level;
+        this.updateTimings();
+        return true;
+    }
+
+    // Gravity off: its timer never runs out (only the soft drop moves and locks the piece)
+    updateTimings() {
+        super.updateTimings();
+        if (!this.debugGravity) this.gbFrames = this.lockDelayMax = Infinity;
+    }
+
+    applyDebug(id, value) {
+        if (id === "nearend") {
+            this.lines = Math.max(this.lines, GB_B_LINES - 1);
+            return true;
+        }
+        if (id === "maxscore") {
+            this.score = Math.max(this.score, DEBUG_NEAR_MAX_SCORE);
+            return true;
+        }
+        return super.applyDebug(id, value);
+    }
 }
 
 // ----------------------------------------------------------
@@ -307,6 +345,22 @@ class NesGame extends Game1989 {
     onBlockOut() {
         if (this.versus) this.endGame("TOPPED OUT", `SCORE ${this.scoreText()} TO BEAT`);
         else super.onBlockOut();
+    }
+
+    // Debug menu, versus: the other side tops out, leaving its score to beat
+    modeSetups() {
+        const setups = super.modeSetups();
+        if (this.versus) setups.push({ id: "rivaltop" });
+        return setups;
+    }
+
+    applyDebug(id, value) {
+        if (id !== "rivaltop") return super.applyDebug(id, value);
+        const other = this.rival;
+        if (!other || other.gameover) return false;
+        other.curPiece_type = 0;
+        other.onBlockOut();
+        return true;
     }
 
     garbageRows() { return NES_B_ROWS[this.height]; }

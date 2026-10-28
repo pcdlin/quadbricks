@@ -372,7 +372,6 @@ class TgmGame extends RuleGame {
         this.rollHide = TGM_ROLL_HIDE; // frames until locked blocks hide, by roll
         this.lockTime = null; // per cell, rollFrames when it locked (during the roll)
         this.secretGrade = null; // judged when the game ends (secretGradeLabels), if high enough to show
-        this.tested = false; // a hidden test setup was used (testSetup)
     }
 
     // ----------------------------------------------------------
@@ -746,6 +745,71 @@ class TgmGame extends RuleGame {
         return name === "roll";
     }
 
+    // ----------------------------------------------------------
+    // Debug menu (RuleGame.debugSetups): the test setups above, and the internal grade
+
+    modeSetups() {
+        const setups = this.testSetupIds().map(id => ({ id }));
+        if (this.internalGrading && !this.roll) {
+            setups.push({ id: "grade", values: TGM_GRADES.map((_, i) => i), current: this.internalGrade,
+                labels: TGM_GRADES.map(([boosts], i) => `${i}  ·  ${TGM_GRADE_LABELS[boosts]}`) });
+        }
+        return setups;
+    }
+
+    // The test setups the mode has (testSetup)
+    testSetupIds() {
+        const ids = ["roll", ...this.testRolls(), "rollend"];
+        if (this.hasKill) ids.push("kill");
+        if (this.secretGradeLabels()) ids.push("secret");
+        return ids;
+    }
+
+    testRolls() { return []; } // the rolls besides the one earned (prepareTestRoll)
+
+    // Every 10th level below the end, and the one before it
+    debugLevels() {
+        if (this.roll || this.phase === "rollstart") return null;
+        const levels = [];
+        for (let level = 0; level < this.maxLevel - 1; level += 10) levels.push(level);
+        return [...levels, this.maxLevel - 1];
+    }
+
+    debugLevel(level) {
+        if (this.roll || this.phase === "rollstart") return false;
+        this.level = level;
+        this.debugSection();
+        this.updateTimings();
+        this.setShadow();
+        return true;
+    }
+
+    // A level the debug menu set starts its section over, so the jump isn't judged as one
+    debugSection() {
+        const section = Math.floor(this.level / 100);
+        if (section === this.section) return;
+        this.section = section;
+        this.sectionStart = this.frames;
+        this.coolPending = this.coolChecked = this.coolShown = false;
+        this.sectionTetrises = 0;
+    }
+
+    // To 10 levels before a level stop or checkpoint, the clock at frames
+    debugBefore(stop, frames) {
+        if (this.level >= stop) return false;
+        this.frames = frames;
+        return this.debugLevel(stop - 10);
+    }
+
+    applyDebug(id, value) {
+        if (id === "grade") {
+            this.internalGrade = value;
+            this.gradePoints = this.gradeDecay = 0;
+            return true;
+        }
+        return super.applyDebug(id, value);
+    }
+
     // Survived the roll
     endRoll() {
         this.rollCleared = true;
@@ -835,6 +899,24 @@ class Tgm1Game extends TgmGame {
         if (name === "invisible") return false;
         this.gmQualified = true;
         this.finalGrade = "GM";
+        return true;
+    }
+
+    testRolls() { return ["gm"]; }
+
+    // Debug menu: level 990 with the GM checkpoints met (the last one's score, a minute to spare) or missed
+    modeSetups() {
+        const setups = super.modeSetups();
+        if (!this.versus && !this.roll) setups.push({ id: "gmchecks", values: [true, false], labels: ["Met", "Missed"] });
+        return setups;
+    }
+
+    applyDebug(id, value) {
+        if (id !== "gmchecks") return super.applyDebug(id, value);
+        const [level, score, frames] = TGM1_GM_CHECKS[TGM1_GM_CHECKS.length - 1];
+        if (!this.debugBefore(level + 1, value ? Math.min(this.frames, frames - 60 * 60) : this.frames)) return false;
+        this.gmQualified = value;
+        if (value) this.score = Math.max(this.score, score);
         return true;
     }
 
@@ -1040,6 +1122,36 @@ class TapGame extends TgmGame {
     rollKind() {
         if (this.death || this.tapPlus || this.normal) return "visible";
         return this.mrollEarned() ? "invisible" : "fading";
+    }
+
+    testRolls() { return this.death || this.tapPlus || this.normal ? [] : ["invisible"]; } // Master: the M-roll
+
+    // Debug menu: Death's level 500 in time for M (a minute to spare) or too late (the credits), Normal's
+    // items, TGM+'s rising garbage; Death has no grade points to set
+    modeSetups() {
+        const setups = super.modeSetups().filter(s => !(this.death && s.id === "grade"));
+        if (this.versus || this.roll) return setups;
+        if (this.death) setups.push({ id: "death500", values: [true, false], labels: ["In time (M)", "Too late (credits)"] });
+        if (this.normal) setups.push({ id: "itemnext", values: Object.values(TAP_NORMAL_ITEMS) });
+        if (this.tapPlus) setups.push({ id: "plusrow" });
+        return setups;
+    }
+
+    applyDebug(id, value) {
+        switch (id) {
+            case "death500":
+                return this.debugBefore(TAP_DEATH_M_LEVEL, value ? Math.min(this.frames, TAP_DEATH_M_FRAMES - 60 * 60) : Math.max(this.frames, TAP_DEATH_M_FRAMES + 1));
+            case "itemnext":
+                this.nextItem = value;
+                return true;
+            case "plusrow": // the pattern's next row now; the piece in play is pushed up with the stack
+                this.garbageCount = Infinity;
+                this.tapPlusGarbage();
+                if (this.curPiece_type && !this.movePossible(this.curPiece_row, this.curPiece_col, this.curPiece_rotation)) this.curPiece_row--;
+                this.setShadow();
+                return true;
+        }
+        return super.applyDebug(id, value);
     }
 
     prepareTestRoll(name) {
@@ -1267,6 +1379,55 @@ class TiGame extends TgmGame {
         return invisible ? "invisible" : "fading";
     }
 
+    testRolls() { return ["invisible", "gm"]; }
+
+    // Debug menu, Master: a COOL or a REGRET for this section, the level stop at 500, an exam at a grade
+    modeSetups() {
+        const setups = super.modeSetups();
+        if (this.variant !== "standard" || this.roll) return setups;
+        if (!this.bigMode) setups.push({ id: "cool" });
+        setups.push({ id: "regret" }, { id: "levelstop" });
+        if (!this.big) {
+            const grades = TGM_GRADE_LABELS.map((_, i) => i);
+            setups.push({ id: "exam", values: grades.slice(1), labels: TGM_GRADE_LABELS.slice(1), current: Math.min(grades.length - 2, this.qualified) },
+                { id: "demotion", values: grades, labels: TGM_GRADE_LABELS, current: this.qualified });
+        }
+        return setups;
+    }
+
+    // Seconds over which this section ends in a REGRET
+    regretTime() { return TGM_REGRET_TIME[this.section]; }
+
+    applyDebug(id, value) {
+        switch (id) {
+            case "cool": // judged earned at *70, shown now
+                if (this.section >= TGM_COOL_TIME.length) return false;
+                this.coolPending = this.coolChecked = true;
+                if (!this.coolShown) {
+                    this.coolShown = true;
+                    this.addAction("COOL!!", "grade");
+                }
+                return true;
+            case "regret": // the section already past its REGRET time
+                this.sectionStart = Math.min(this.sectionStart, this.frames - (this.regretTime() + 1) * 60);
+                return true;
+            case "levelstop":
+                if (this.exam && this.exam.kind === "promotion") return false; // exams have none
+                return this.debugBefore(TGM_TORIKAN_LEVEL, Math.max(this.frames, TGM_TORIKAN_FRAMES + 1));
+            case "exam": // a promotional exam, announced as at the first piece
+                this.exams = true;
+                this.exam = { kind: "promotion", grade: value };
+                this.addAction(`EXAM ${TGM_GRADE_LABELS[value]}`, "grade");
+                return true;
+            case "demotion": // a demotional exam at the qualified grade
+                this.exams = true;
+                this.qualified = value;
+                this.exam = { kind: "demotion", grade: value };
+                return true;
+        }
+        return super.applyDebug(id, value);
+    }
+
     prepareTestRoll(name) {
         if (name === "invisible") {
             this.cools = TGM_INVISIBLE_COOLS;
@@ -1369,6 +1530,9 @@ class TiEasyGame extends TiGame {
     prepareTestRoll(name) {
         return name === "roll";
     }
+
+    testRolls() { return []; }
+    testSetupIds() { return [...super.testSetupIds(), "fireworks"]; }
 
     finishRoll() {
         this.fire(EASY_COMPLETE);
@@ -1558,6 +1722,24 @@ class TiShiraseGame extends TiGame {
         return true;
     }
 
+    testRolls() { return []; }
+
+    // Debug menu: a REGRET for this section, and the level stops at 500 and 1000 (TiGame's)
+    modeSetups() {
+        const setups = super.modeSetups();
+        if (this.roll) return setups;
+        const stops = SHIRASE_TORIKAN[this.ars ? "classic" : "world"].map(([stop]) => stop);
+        return [...setups, { id: "regret" }, { id: "levelstop", values: stops, current: Math.max(0, stops.findIndex(stop => stop > this.level)) }];
+    }
+
+    regretTime() { return SHIRASE_REGRET_TIME(this.section); }
+
+    applyDebug(id, value) {
+        if (id !== "levelstop") return super.applyDebug(id, value);
+        const [stop, frames] = SHIRASE_TORIKAN[this.ars ? "classic" : "world"].find(([level]) => level === value);
+        return this.debugBefore(stop, Math.max(this.frames, frames + 1));
+    }
+
     finishRoll() {
         this.endGame("COMPLETE", `GRADE ${this.gradeLabel()} — ORANGE LINE — ${this.formatTime()}`);
     }
@@ -1631,6 +1813,43 @@ function tgmVersus(Base) {
         record() { return null; }
         secretGradeLabels() { return null; }
         testSetup() { return false; }
+        testSetupIds() { return []; }
+
+        // Debug menu: any of the items, on either side as if the other had set it off, or with the Items
+        // card in the next piece or the gauge filled; the round's time near up for both
+        modeSetups() {
+            const setups = super.modeSetups(), items = this.itemSet;
+            if (this.itemsOn) setups.push({ id: "itemnext", values: items }, { id: "gauge" });
+            setups.push({ id: "itemself", values: items }, { id: "itemrival", values: items }, { id: "vstime" });
+            return setups;
+        }
+
+        applyDebug(id, value) {
+            switch (id) {
+                case "itemnext":
+                    this.nextItem = value;
+                    return true;
+                case "gauge":
+                    this.itemGauge = 0;
+                    this.nextItem = this.drawItem();
+                    return true;
+                case "itemself": return this.debugItem(this, value);
+                case "itemrival": return this.debugItem(this.rival, value);
+                case "vstime":
+                    for (const g of [this, this.rival]) g.frames = Math.max(g.frames, g.versusFrames - DEBUG_LEAD);
+                    return true;
+            }
+            return super.applyDebug(id, value);
+        }
+
+        // An item on a side (this one or the other) as if the other side had set it off: an attack with
+        // its cut-in, Exchg Field swapping the fields, the others taking effect on that side
+        debugItem(side, item) {
+            if (!side || side.gameover || side.phase === "lineclear") return false;
+            if (VS_ITEMS[item].attack) side.receiveItem(item);
+            else side.useItem(item, item === "EXCHG FIELD");
+            return true;
+        }
 
         onClock() {
             if (this.frames >= this.versusFrames) {

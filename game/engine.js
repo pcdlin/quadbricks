@@ -21,12 +21,82 @@ const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELE
 
 // Menu screens
 const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8, MENU_QUICK = 9,
-    MENU_SINGLE = 10, MENU_MULTI = 11, MENU_JOIN = 12;
-const MENU_DEPTH = [0, 2, 3, 1, 2, 2, 2, 4, 2, 2, 1, 1, 2];   // by screen; deeper = slide in from the right
+    MENU_SINGLE = 10, MENU_MULTI = 11, MENU_JOIN = 12, MENU_DEBUG = 13;
+const MENU_DEPTH = [0, 2, 3, 1, 2, 2, 2, 4, 2, 2, 1, 1, 2, 1];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
 const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", accent: tetI, resume: true };
 const RESTART_ITEM = { name: "Restart", desc: "Start the current game over", accent: tetL, restart: true };
+
+// The debug menu (?debug=1 in the URL): a Debug card in the menu during a game, and Ctrl+Shift+D,
+// open MENU_DEBUG, whose entries put the game in states otherwise hard to reach or left to chance.
+// The rule set's (RuleGame.debugSetups), the match's and the presentation's (matchDebug(), viewDebug()),
+// by id: name, and what it does (on its card, or under the list for one with values to choose from)
+const DEBUG = /[?&]debug=1\b/.test(location.search);
+const DEBUG_ITEM = { name: "Debug", desc: "Special states, items, rolls and effects", accent: tetZ, debug: true };
+const DEBUG_ENTRIES = {
+    // the rule set's
+    roll: { name: "Staff roll", desc: "Straight to the roll this game has earned" },
+    invisible: { name: "Invisible roll", desc: "To the invisible roll (TAP: the M-roll)" },
+    gm: { name: "GM roll", desc: "To a roll that ends in Grand Master if survived" },
+    rollend: { name: "End of the roll", desc: "In the roll: to its last 5 seconds" },
+    kill: { name: "15-minute speed-up", desc: "10 seconds before 20G at 15:00" },
+    fireworks: { name: "Fireworks", desc: "Five fireworks for the count" },
+    secret: { name: "Secret grade", desc: "The full > pattern, and the game over that shows it" },
+    grade: { name: "Internal grade", desc: "Grade points start over at the internal grade chosen" },
+    cool: { name: "COOL", desc: "This section earns a COOL" },
+    regret: { name: "REGRET", desc: "This section ends in a REGRET" },
+    levelstop: { name: "Level stop", desc: "10 levels before the stop, too late for it" },
+    exam: { name: "Promotional exam", desc: "This game becomes the exam for the grade chosen" },
+    demotion: { name: "Demotional exam", desc: "An exam at the qualified grade chosen" },
+    death500: { name: "Level 500", desc: "Level 490, in time for M or too late (the credits)" },
+    gmchecks: { name: "GM checkpoints", desc: "Level 990, the checks for GM met or missed" },
+    plusrow: { name: "Rising garbage", desc: "The pattern's next row rises now" },
+    stage: { name: "Stage", desc: "Go to the stage chosen, the EX stages too" },
+    stageclear: { name: "Clear the stage", desc: "The stage is cleared now" },
+    stagetime: { name: "Stage time", desc: "The stage time down to 10 seconds" },
+    limit: { name: "Limit time", desc: "The limit time down to 10 seconds" },
+    clock: { name: "Level clock", desc: "The level's time limit down to 10 seconds" },
+    nearend: { name: "Near the end", desc: "One clear, or 10 seconds, from the end of the mode" },
+    maxscore: { name: "Score near the cap", desc: "990,000 points, close to 999,999" },
+    itemnext: { name: "Item piece", desc: "The next piece carries the item chosen" },
+    gauge: { name: "Item gauge", desc: "The gauge fills: the next piece brings an item" },
+    itemself: { name: "Item on you", desc: "The item chosen takes effect on your side" },
+    itemrival: { name: "Item on the other side", desc: "The item chosen takes effect on the other side" },
+    vstime: { name: "Time near up", desc: "Both sides 10 seconds from the round's time limit" },
+    rivaltop: { name: "Other side tops out", desc: "Leaving its score for you to beat" },
+    level: { name: "Level", desc: "Jump to the level chosen, at its speed" },
+    next: { name: "Next piece", desc: "The next piece is the one chosen" },
+    field: { name: "Field", desc: "A preset field; the piece it needs comes next" },
+    gravity: { name: "Gravity", desc: "Off: a piece stays where it is until dropped" },
+    garbage: { name: "Garbage to you", desc: "Rows of garbage wait to rise on your side" },
+    garbagerival: { name: "Garbage to the other side", desc: "Rows of garbage wait to rise on the other side" },
+    end: { name: "End the game", desc: "Game over, or complete, now" },
+    // the match's
+    round: { name: "Round", desc: "Decide the round now, for player 1" },
+    matchpoint: { name: "Match point", desc: "A round from winning the match" },
+    botpause: { name: "Bot", desc: "Paused: the bot's side stands still" },
+    botlevel: { name: "Bot level", desc: "The bot plays at the level chosen from now on" },
+    // the presentation's
+    messages: { name: "Clear message", desc: "Shows the message chosen" },
+    burst: { name: "Clear burst", desc: "A Quad's confetti, flash and burst, without the clear" },
+    bursts: { name: "Firework bursts", desc: "Six bursts of fireworks round the view" },
+    sun: { name: "Bright star", desc: "Deep Space: the bright star starts across now" },
+    meteor: { name: "Shooting star", desc: "Deep Space: a shooting star now" },
+    flyin: { name: "Fly-in", desc: "The board group flies in again" },
+    context: { name: "WebGL context loss", desc: "The context is lost, then restored a second later" },
+};
+// The clear messages the debug menu shows: a name, and the actions ([text, kind, value]) that make it
+const DEBUG_MESSAGES = [
+    ["T-spin double", [["T-SPIN DOUBLE", "tspin", 2]]],
+    ["Back-to-back", [["QUAD", "clear", 4], ["BACK-TO-BACK", "b2b"]]],
+    ["10 combo", [["DOUBLE", "clear", 2], ["10 COMBO", "combo", 10]]],
+    ["Perfect clear", [["QUAD", "clear", 4], ["PERFECT CLEAR", "pc"]]],
+    ["Bravo", [["QUAD", "clear", 4], ["BRAVO", "pc"]]],
+    ["COOL", [["COOL!!", "grade"]]],
+    ["REGRET", [["REGRET!!", "grade"]]],
+];
+const DEBUG_NOTE_FRAMES = 120; // how long "not available" shows under the list
 const MAIN_ITEMS = [
     { name: "Single Player", desc: "Quick play or a custom game on your own", accent: tetT, screen: MENU_SINGLE },
     { name: "Multiplayer", desc: "Versus the bot, or two players side by side", accent: tetI, screen: MENU_MULTI },
@@ -296,6 +366,8 @@ const SCROLLED_LISTS = {
     // a mode's setup cards (items: null, they depend on the mode and the cards' choices), when there are more than
     // SETUP_FIT of them, and always for versus's
     [MENU_SETUP]: { items: null, pos: "setuppos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
+    // the debug menu's entries (items: null, they depend on the game), its note under them as the handling help
+    [MENU_DEBUG]: { items: null, pos: "debugpos", ...HANDLING_ROWS, listH: HANDLING_LIST_H },
 };
 const SETUP_FIT = 6;
 // Top of the lists too long for the usual place (Visuals, Guideline handling, Gamepad, scrolled setup cards), their
@@ -581,6 +653,10 @@ class Engine {
         this.padpos = 0;      // the gamepad chosen, then its actions (from 1), then "reset" after the last one
         this.padConfig = null; // the gamepad the Gamepad screen sets up, a pad index (configPad())
         this.padCapturing = null; // action waiting for a button of that gamepad (GamepadControls.poll() binds it)
+        this.debugpos = 0;    // the debug menu's entry
+        this.debugChoices = {}; // and the value chosen on each, by id (afresh each time it opens)
+        this.debugNote = null; // { text, pos, at }: why an entry didn't apply, shown under the list a while
+        this.flyReplay = null; // the debug menu's fly-in again: game frames into it, null when not flying
         this.options = new Options();
         this.records = new Records();
         this.exams = new Exams(); // TGM3 Master's qualified grades
@@ -738,6 +814,18 @@ class Engine {
         if (this.padCapturing) {
             e.preventDefault();
             if (down && !e.repeat && e.code === "Escape") this.padCapturing = null;
+            return;
+        }
+        // The debug menu (?debug=1): Ctrl+Shift+D opens it during a game, from the game or a menu
+        if (DEBUG && e.ctrlKey && e.shiftKey && e.code === "KeyD") {
+            e.preventDefault();
+            if (down && !e.repeat && this.game) {
+                if (this.GAMESTATE === STATE_GAME) {
+                    this.GAMESTATE = STATE_MENU;
+                    this.menuShown = null; // no slide when the menu opens
+                }
+                this.openDebug();
+            }
             return;
         }
         // Hidden TGM3 test keys: Ctrl+Shift+1..5 (see RuleGame.testSetup)
@@ -943,7 +1031,7 @@ class Engine {
         const hole = () => Math.floor(Math.random() * WIDTH);
         if (m.result) m.decided++;
         else {
-            if (!games[1].isGameOver()) games[1].advanceFrame(m.duo ? this.inputs[1] : m.bot.input(games[1]));
+            if (!games[1].isGameOver() && !m.botPaused) games[1].advanceFrame(m.duo ? this.inputs[1] : m.bot.input(games[1]));
             games.forEach((game, side) => {
                 for (const attack of game.takeAttacks()) {
                     games[1 - side].receiveGarbage({ ...attack, hole: hole() });
@@ -952,7 +1040,7 @@ class Engine {
                     if (side === 0 || m.duo) this.sound.play("attack");
                 }
             });
-            const result = games[0].versusOutcome();
+            const result = m.forced || games[0].versusOutcome(); // forced: the debug menu's
             if (result) {
                 m.result = result;
                 if (result !== "draw") m.wins[result === "win" ? 0 : 1]++;
@@ -980,6 +1068,7 @@ class Engine {
     // Moves the animations on by dt game frames (fractional above 60 Hz), once per refresh
     animate(dt) {
         this.clock += dt;
+        if (this.flyReplay !== null && (this.flyReplay += dt) >= FLY_FRAMES) this.flyReplay = null;
         this.updateAmbient(dt);
         if (this.GAMESTATE === STATE_GAME) {
             this.updateParticles(dt);
@@ -1075,10 +1164,11 @@ class Engine {
     }
 
     // The main menu's items: Continue and Restart come first while there is a game
-    // (no Continue once it is over)
+    // (no Continue once it is over), then Debug with ?debug=1
     mainItems() {
         if (this.game === null) return MAIN_ITEMS;
-        return this.gameGoesOn() ? [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS] : [RESTART_ITEM, ...MAIN_ITEMS];
+        const debug = DEBUG ? [DEBUG_ITEM] : [];
+        return this.gameGoesOn() ? [CONTINUE_ITEM, RESTART_ITEM, ...debug, ...MAIN_ITEMS] : [RESTART_ITEM, ...debug, ...MAIN_ITEMS];
     }
 
     // The Multiplayer items: no Versus Player with the touch controls
@@ -1233,9 +1323,9 @@ class Engine {
     // turned and faded out, and comes at the camera, slowing as it settles into place by
     // FLY_FRAMES (none with effects off). Radians, like the field's motion
     flyIn() {
-        const game = this.GAMESTATE === STATE_GAME && this.game;
-        if (!game || !game.inStartDelay() || !this.options.effects) return { rx: 0, ry: 0, dx: 0, dy: 0, dz: 0, alpha: 1 };
-        const p = Math.min(1, (game.startdelayCounter + this.tickPhase) / FLY_FRAMES);
+        const game = this.GAMESTATE === STATE_GAME && this.game, replay = this.flyReplay !== null; // the debug menu's
+        if (!game || !(game.inStartDelay() || replay) || !this.options.effects) return { rx: 0, ry: 0, dx: 0, dy: 0, dz: 0, alpha: 1 };
+        const p = Math.min(1, (replay ? this.flyReplay : game.startdelayCounter + this.tickPhase) / FLY_FRAMES);
         const rest = Math.pow(1 - p, 4), rad = Math.PI / 180; // ease out: what is left of the way
         return {
             rx: FLY_TURN[0] * rest * rad, ry: FLY_TURN[1] * this.flySide * rest * rad, dx: 0, dy: 0,
@@ -1389,6 +1479,7 @@ class Engine {
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
             [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: this.setupFrom },
+            [MENU_DEBUG]: { pos: "debugpos", count: () => this.debugItems().length, back: MENU_MAIN },
         };
         while (this.events.length) {
             // repeat: the key is held. Lists and values then stop at their ends instead of wrapping
@@ -1424,6 +1515,9 @@ class Engine {
                 this.stepConfigPad(code === "ArrowLeft" ? -1 : 1, !repeat);
             } else if ((code === "ArrowLeft" || code === "ArrowRight") && this.menuStep === MENU_CONTROLS) {
                 this.controlscol = code === "ArrowLeft" ? 0 : 1; // player 1's column or player 2's
+            } else if ((code === "ArrowLeft" || code === "ArrowRight") && this.menuStep === MENU_DEBUG) {
+                const item = this.debugItems()[pos];
+                if (item.values) this.debugChoices[item.id] = stepIndex(this.debugIndex(item), code === "ArrowLeft" ? -1 : 1, item.values.length, !repeat);
             } else if ((code === "ArrowLeft" || code === "ArrowRight") && settings && !settings[pos].action) {
                 this.changeOption(settings[pos].id, code === "ArrowLeft" ? -1 : 1, !repeat);
             } else if (code === "Enter") {
@@ -1435,6 +1529,14 @@ class Engine {
                     this.initGame(...this.lastGameArgs);
                     this.GAMESTATE = STATE_GAME;
                     return;
+                } else if (this.menuStep === MENU_MAIN && this.mainItems()[pos].debug) {
+                    this.openDebug();
+                } else if (this.menuStep === MENU_DEBUG) { // done: back to the game to see it
+                    if (this.applyDebug(this.debugItems()[pos])) {
+                        this.GAMESTATE = STATE_GAME;
+                        this.syncKeys = true;
+                        return;
+                    }
                 } else if (this.menuStep === MENU_MULTI && this.multiItems()[pos].modeItem) { // its setup cards
                     this.setupFrom = MENU_MULTI;
                     this.menuStep = MENU_SETUP;
@@ -1617,6 +1719,122 @@ class Engine {
     }
 
     // -----------------------------------
+    // DEBUG MENU (?debug=1)
+
+    // Opens it on its first entry, each entry at the value the game has
+    openDebug() {
+        this.menuStep = MENU_DEBUG;
+        this.debugpos = 0;
+        this.debugChoices = {};
+        this.debugNote = null;
+        this.menuScroll[MENU_DEBUG] = { at: 0, target: 0 };
+    }
+
+    // The entries for the game in progress (DEBUG_ENTRIES): the rule set's, the match's, the presentation's
+    debugItems() {
+        if (!this.game) return [];
+        const entries = (setups, accent, engine) => setups.map(s => ({ ...DEBUG_ENTRIES[s.id], ...s, accent, engine }));
+        return [...entries(this.game.debugSetups(), tetT, false), ...entries(this.matchDebug(), tetZ, true), ...entries(this.viewDebug(), tetI, true)];
+    }
+
+    // The match's, while a round is played: its result, a match point, the bot paused or at another level
+    matchDebug() {
+        const m = this.match;
+        if (!m || m.result) return [];
+        const sides = m.duo ? ["Player 1", "Player 2"] : ["You", "The bot"];
+        const entries = [{ id: "round", values: ["win", "lose", "draw"], labels: [`${sides[0]} win${m.duo ? "s" : ""}`, `${sides[1]} wins`, "Draw"] }];
+        if (this.game.versusWins > 1) entries.push({ id: "matchpoint", values: [[true, false], [false, true], [true, true]], labels: [...sides, "Both"] });
+        if (m.bot) {
+            entries.push({ id: "botpause", values: [false, true], labels: ["Playing", "Paused"], current: m.botPaused ? 1 : 0 },
+                { id: "botlevel", values: BOT_LEVELS.map((_, i) => i), labels: BOT_LEVELS.map((_, i) => "Level " + i), current: m.level });
+        }
+        return entries;
+    }
+
+    // The presentation's, in every game (the bright and shooting stars with Deep Space)
+    viewDebug() {
+        const entries = [{ id: "messages", values: DEBUG_MESSAGES.map((_, i) => i), labels: DEBUG_MESSAGES.map(([name]) => name) },
+            { id: "burst" }, { id: "bursts" }];
+        if (this.theme.showSun) entries.push({ id: "sun" }, { id: "meteor" });
+        return [...entries, { id: "flyin" }, { id: "context" }];
+    }
+
+    // The value chosen on an entry with values: an index into them
+    debugIndex(item) {
+        return clamp(this.debugChoices[item.id] ?? item.current ?? 0, 0, item.values.length - 1);
+    }
+
+    // The entries as the menu's cards: the value chosen, or what the entry does
+    debugCards() {
+        return this.debugItems().map(item => {
+            const card = { name: item.name, accent: item.accent, desc: item.desc };
+            if (item.values) card.value = `◀  ${(item.labels || item.values.map(String))[this.debugIndex(item)]}  ▶`;
+            return card;
+        });
+    }
+
+    // Enter on an entry: it applies with the value chosen; when it can't now, a note says so
+    applyDebug(item) {
+        const value = item.values ? item.values[this.debugIndex(item)] : undefined;
+        if (item.engine ? this.engineDebug(item.id, value) : this.game.debugSetup(item.id, value)) return true;
+        this.debugNote = { text: "NOT AVAILABLE RIGHT NOW", pos: this.debugpos, at: this.clock };
+        return false;
+    }
+
+    // The match's and the presentation's entries; the effects need effects on (the stars the backdrop too)
+    engineDebug(id, value) {
+        const m = this.match, fx = !!this.options.effects;
+        switch (id) {
+            case "round": // decided in the next frame, as by the rule set
+                m.forced = value;
+                return true;
+            case "matchpoint":
+                value.forEach((on, side) => { if (on) m.wins[side] = this.game.versusWins - 1; });
+                return true;
+            case "botpause":
+                m.botPaused = value;
+                return true;
+            case "botlevel":
+                m.level = value;
+                m.bot.setLevel(value);
+                return true;
+            case "messages":
+                for (const [text, kind, n] of DEBUG_MESSAGES[value][1]) this.game.addAction(text, kind, n);
+                return true;
+            case "burst": { // the bottom four rows' confetti, flash and burst; the field stays as it is
+                if (!fx) return false;
+                const cells = [];
+                for (let row = HEIGHT - 4; row < HEIGHT; row++) for (let col = 0; col < WIDTH; col++) cells.push({ row, col, type: 1 + (row + col) % 7 });
+                this.explodeCells(cells);
+                if (this.options.shakeScale) this.clearShake(cells, 0);
+                this.sound.play("clear4");
+                return true;
+            }
+            case "bursts":
+                if (!fx) return false;
+                for (let n = 0; n < FIREWORK_MAX_BURSTS; n++) this.launchFirework();
+                return true;
+            case "sun": case "meteor":
+                if (!fx || !this.options.backdrop) return false;
+                if (id === "sun") this.theme.showSun();
+                else this.theme.showMeteor();
+                return true;
+            case "flyin":
+                if (!fx) return false;
+                this.flyReplay = 0;
+                return true;
+            case "context": {
+                const lose = this.r.gl.getExtension("WEBGL_lose_context");
+                if (!lose) return false;
+                lose.loseContext();
+                setTimeout(() => lose.restoreContext(), 1000);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // -----------------------------------
     // PERSONAL RECORDS
 
     // A game setup's key in the records: initGame's arguments, the options that are on in order
@@ -1640,6 +1858,10 @@ class Engine {
         }
         const result = game.record();
         if (!result) return;
+        if (game.tested) { // a test setup or the debug menu changed it
+            this.recordNote = "TEST GAME — NOT RECORDED";
+            return;
+        }
         const old = this.records.get(this.recordSetup);
         this.recordNew = this.records.submit(this.recordSetup, result);
         this.recordNote = this.recordNew ? (old ? "NEW BEST" : "FIRST RECORD") : `BEST  ${old.text}`;
@@ -2655,10 +2877,11 @@ class Engine {
         let hint, hintY = 660; // the bottom of the view, lower under a long list
         switch (step) {
             case MENU_MAIN: {
-                // five cards during a game: from a little higher up, the hint under them
+                // five cards during a game: from a little higher up, the hint under them; six (Debug): tighter
                 const items = this.mainItems(), top = items.length > 4 ? listTop - 20 : listTop;
-                this.drawMenuList(items, this.mainpos, top);
-                hintY = Math.max(hintY, top + menuListHeight(items, 64, 10) + 22);
+                const [rowH, gap] = items.length > 5 ? [54, 6] : [64, 10];
+                this.drawMenuList(items, this.mainpos, top, rowH, gap);
+                hintY = Math.max(hintY, top + menuListHeight(items, rowH, gap) + 22);
                 hint = "ENTER  SELECT" + (this.game ? "      ESC  RESUME" : "");
                 break;
             }
@@ -2777,6 +3000,9 @@ class Engine {
             case MENU_GAMEPAD:
                 hint = this.drawGamepadScreen(heading);
                 break;
+            case MENU_DEBUG:
+                hint = this.drawDebugScreen(heading);
+                break;
         }
 
         // Footer
@@ -2819,6 +3045,22 @@ class Engine {
         if (this.padCapturing) return `NEW BUTTON ON GAMEPAD ${n + 1} ADDS · BOUND BUTTON REMOVES      START  CANCEL`;
         if (this.padpos === 0) return (many ? "← →  CHOOSE GAMEPAD" : "ONE GAMEPAD CONNECTED") + "      ESC  BACK";
         return "ENTER  CHANGE      ESC  BACK";
+    }
+
+    // The debug menu: its entries for the game in progress, scrolled like the handling cards, and under
+    // them what the selected one does (its card shows the value chosen) or why it didn't apply. Returns the hint
+    drawDebugScreen(heading) {
+        const top = TALL_TOP, items = this.debugItems(), item = items[this.debugpos] || items[0];
+        const [ruleSet, mode] = this.game.getStats()[0];
+        heading(`DEBUG  ·  ${ruleSet}  ${mode}`, INK_DIM, top - 16);
+        this.drawScrolledList(MENU_DEBUG, this.debugCards(), top);
+        const y = top + HANDLING_LIST_H + 14, note = this.debugNote;
+        if (note && note.pos === this.debugpos && this.clock - note.at < DEBUG_NOTE_FRAMES) {
+            this.text(note.text, VIEW_W / 2, y, { size: 11, weight: 800, color: MESSAGE_GOLD, align: "center", spacing: 3 });
+        } else if (item.values) {
+            this.text(item.desc, VIEW_W / 2, y, { size: 13, weight: 500, color: INK_DIM, align: "center" });
+        }
+        return `${item.values ? "← →  CHANGE      " : ""}ENTER  APPLY      ESC  BACK`;
     }
 
     // Multiplayer's join screen: a card per player with the device they picked, or the prompt for
@@ -2959,8 +3201,8 @@ class Engine {
     // Eases the scrolled lists toward keeping their selected card in view
     updateMenuScroll(dt) {
         for (const [step, { items: listed, pos: posField, rowH, gap, listH }] of Object.entries(SCROLLED_LISTS)) {
-            if (!listed && Number(step) !== this.menuStep) continue; // setup cards: only while they are shown
-            const items = listed || this.setupItems();
+            if (!listed && Number(step) !== this.menuStep) continue; // setup cards, debug entries: only while they are shown
+            const items = listed || (Number(step) === MENU_DEBUG ? this.debugCards() : this.setupItems());
             const s = this.menuScroll[step], pos = this[posField];
             const y = pos ? menuListHeight(items.slice(0, pos), rowH, gap) + gap : 0; // selected card's top
             const h = menuRowHeight(items[pos], rowH);

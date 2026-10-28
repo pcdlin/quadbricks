@@ -3607,5 +3607,103 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     check("TAP Death-speed versus: reaching the goal ends the round with the level, not GRADE GM",
         [a.level, a.endTitle, a.finalGrade, a.actions.map(x => x.text)], [100, "LEVEL 100", null, ["DOUBLE"]]);
 }
+
+// ---------------------------------------------------------------- Debug menu (RuleGame.debugSetups)
+// A game (a versus side with its rival) run to its first piece
+function inPlay(mode, variant, options = {}) {
+    if (variant === "versus") return versusPair(mode, 5, 0, options)[0];
+    const g = createGame(mode, variant, 0, 0, {}, options);
+    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    return g;
+}
+{
+    // Every setup of every mode, with each of its values, applies to a game in play, which plays on
+    const modes = [[guideline, ["standard", "marathon", "variable", "sprint", "ultra", "dig", "master", "versus"]],
+        [arika, ["standard", "easy", "shirase", "sakura", "versus"]], [tgmClassic, ["standard"]], [tgmTap, ["normal", "standard", "death", "plus", "versus"]],
+        [tgmOriginal, ["standard", "versus"]], [tgmAce, ["normal", "versus"]], [nesTetris, ["btype", "versus"]], [gbTetris, ["btype", "versus"]]];
+    const inputs = [0, LEFT_PUSH, ROTR_PUSH, SOFT_PUSH, HARD_PUSH, HOLD_PUSH];
+    const refused = [], thrown = [];
+    for (const [mode, variants] of modes) for (const variant of variants) {
+        for (const setup of inPlay(mode, variant, { items: true }).debugSetups()) {
+            for (const value of setup.values || [undefined]) {
+                const g = inPlay(mode, variant, { items: true }), name = `${mode} ${variant} ${setup.id} ${value}`;
+                try {
+                    if (!g.debugSetup(setup.id, value) && setup.id !== "rollend") refused.push(name);
+                    for (let f = 0; f < 200; f++) {
+                        g.advanceFrame(inputs[f % inputs.length]);
+                        if (g.rival) g.rival.advanceFrame(0);
+                    }
+                } catch (e) {
+                    thrown.push(`${name}: ${e.message}`);
+                }
+            }
+        }
+    }
+    check("Debug menu: every mode's setups apply in play (but the roll's end outside the roll)", refused, []);
+    check("  ...and play goes on after each", thrown, []);
+}
+{
+    const g = inPlay(arika, "standard");
+    const refused = g.debugSetup("rollend");
+    const applied = g.debugSetup("level", 300);
+    check("Debug menu: a setup that applies marks the game tested (no record), one refused doesn't", [refused, applied, g.tested], [false, true, true]);
+}
+{
+    // Tetris ready: the I comes next, and dropped into the well clears four lines
+    const g = inPlay(guideline, "marathon");
+    g.debugSetup("field", "tetris");
+    for (let f = 0; f < 20 && g.phase !== "active"; f++) g.advanceFrame(0);
+    const next = g.curPiece_type;
+    place(g, tetI, 1, 10, 7);
+    g.advanceFrame(HARD_PUSH);
+    check("Debug field Tetris ready: the I comes next and clears four lines", [next, g.lines], [tetI, 4]);
+}
+{
+    // T-spin double: a T turned clockwise from the left drops into the slot by SRS's third kick
+    const g = inPlay(guideline, "marathon");
+    g.debugSetup("field", "tsd");
+    for (let f = 0; f < 20 && g.phase !== "active"; f++) g.advanceFrame(0);
+    const next = g.curPiece_type;
+    place(g, tetT, 1, HEIGHT - 4, 2);
+    g.advanceFrame(ROTR_PUSH);
+    g.advanceFrame(HARD_PUSH);
+    check("Debug field T-spin double: the T comes next and its slot makes a T-spin double",
+        [next, g.lines, g.actions.map(a => a.text)[0]], [tetT, 2, "T-SPIN DOUBLE"]);
+}
+{
+    const g = inPlay(guideline, "marathon");
+    const row = g.curPiece_row;
+    g.debugSetup("gravity", false);
+    for (let f = 0; f < 120; f++) g.advanceFrame(0);
+    check("Debug gravity off: the piece stays where it is", g.curPiece_row, row);
+}
+{
+    const levels = inPlay(guideline, "marathon");
+    levels.debugSetup("level", 10);
+    const sprint = inPlay(guideline, "sprint");
+    sprint.debugSetup("nearend");
+    const nes = inPlay(nesTetris, "btype");
+    nes.debugSetup("nearend");
+    check("Debug level and near the end: a marathon at level 10 has its 90 lines, Sprint and B-Type a line to go",
+        [levels.level, levels.lines, sprint.lines, nes.lines], [10, 90, 39, 24]);
+}
+{
+    const g = inPlay(arika, "standard");
+    g.debugSetup("cool");
+    const cool = [g.coolPending, g.actions.map(a => a.text)];
+    g.debugSetup("levelstop");
+    check("Debug TGM3 Master: a COOL for the section, then 10 levels before the level stop, past 7:00",
+        [...cool, g.level, g.frames > 7 * 60 * 60], [true, ["COOL!!"], 490, true]);
+}
+{
+    const g = inPlay(arika, "sakura");
+    g.debugSetup("stage", 20);
+    check("Debug TGM3 Sakura: to stage EX1, which is then played to", [g.stageName(), g.lastStage >= 20, g.phase], ["EX1", true, "ready"]);
+}
+{
+    const a = inPlay(tgmTap, "versus", { items: true }), d = a.rival;
+    a.debugSetup("itemrival", "MIRROR BLOCK");
+    check("Debug versus: an attack item on the other side hits it with its cut-in", [d.cutIn, d.cutInItem], [VS_CUTIN_FRAMES, "MIRROR BLOCK"]);
+}
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

@@ -407,6 +407,86 @@ class GuidelineGame extends RuleGame {
         return this.riseGarbage(rising);
     }
 
+    // ----------------------------------------------------------
+    // Debug menu (RuleGame.debugSetups)
+
+    // One clear (Ultra: 10 seconds) from the end of the mode; Endless and versus have none
+    modeSetups() {
+        return this.variant === "standard" || this.versus ? [] : [{ id: "nearend" }];
+    }
+
+    // Master M1-M30, the marathons and versus (but at 20G) 1-15
+    debugLevels() {
+        if (this.master) return GUIDELINE_MASTER_DELAYS.map((_, i) => i + 1);
+        if (GUIDELINE_MARATHONS.includes(this.variant) || (this.versus && this.vsSpeed !== "20g")) {
+            return Array.from({ length: GUIDELINE_MAX_LEVEL }, (_, i) => i + 1);
+        }
+        return null;
+    }
+
+    debugLevelLabels(levels) {
+        return this.master ? levels.map(level => "M" + level) : super.debugLevelLabels(levels);
+    }
+
+    // The lines that bring the level (from the start level, lowered if need be); the variable goal
+    // starts over. Versus: the match's speed, on both sides (rising: the time it comes at)
+    debugLevel(level) {
+        if (this.versus) {
+            for (const g of [this, this.rival].filter(Boolean)) {
+                if (g.vsSpeed === "rising") g.frames = level === 1 ? 0 : GUIDELINE_VS_MARGIN + (level - 2) * GUIDELINE_VS_LEVEL_FRAMES;
+                else g.vsSpeed = level;
+                g.level = level;
+                g.updateTimings();
+                g.setShadow();
+            }
+            return true;
+        }
+        this.startLevel = Math.min(this.startLevel, level - 1);
+        if (this.variant === "variable") this.goalPoints = 0;
+        else this.lines = (level - 1 - (this.master ? this.startLevel : 0)) * GUIDELINE_LINES_PER_LEVEL;
+        this.level = level;
+        this.updateTimings();
+        this.setShadow();
+        return true;
+    }
+
+    applyDebug(id, value) {
+        return id === "nearend" ? this.debugNearEnd() : super.applyDebug(id, value);
+    }
+
+    debugNearEnd() {
+        if (this.ultraFrames) {
+            this.frames = Math.max(this.frames, this.ultraFrames - DEBUG_LEAD);
+            return true;
+        }
+        if (this.variant === "variable") { // a point short of level 15's goal
+            this.level = GUIDELINE_MAX_LEVEL;
+            this.goalPoints = GUIDELINE_VARIABLE_GOAL * GUIDELINE_MAX_LEVEL - 1;
+        } else if (this.dig) { // the lowest garbage row left
+            const rows = [];
+            for (let r = FIELD_TOP; r < HEIGHT; r++) if (this.isGarbage[r - FIELD_TOP]) rows.push(r);
+            if (!rows.length) return false;
+            this.deleteRows(rows.slice(0, -1));
+            this.digCleared = this.digRows - 1;
+        } else { // a line short of the goal, at the level those lines bring
+            const goal = GUIDELINE_LINE_GOALS[this.variant];
+            this.lines = Math.max(this.lines, goal - 1);
+            const fromLines = 1 + Math.floor(this.lines / GUIDELINE_LINES_PER_LEVEL);
+            if (this.master) this.level = Math.min(GUIDELINE_MASTER_DELAYS.length, this.startLevel + fromLines);
+            else if (!GUIDELINE_FIXED_LEVEL.includes(this.variant)) this.level = Math.min(GUIDELINE_MAX_LEVEL, Math.max(1 + this.startLevel, fromLines));
+        }
+        this.updateTimings();
+        this.setShadow();
+        return true;
+    }
+
+    // Dig: a preset field leaves no garbage, so the next clear completes the mode
+    onDebugField() {
+        if (!this.dig) return;
+        this.isGarbage = this.field.map(() => false);
+        this.digRows = this.digCleared;
+    }
+
     // Variable goal: the level goes up once its goal is met (the rest is lost), and meeting
     // level 15's ends the marathon
     addGoalPoints(points) {
