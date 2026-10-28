@@ -947,7 +947,7 @@ class TapGame extends TgmGame {
         }
         // Normal: its two items (RuleGame's item pieces)
         if (this.normal) this.itemCells = this.field.map(() => new Array(WIDTH).fill(null));
-        this.sonicTrail = !this.death; // TAP shows the drop trail for the sonic drop too (not Death)
+        this.sonicTrail = !this.death; // TAP shows the drop trail and knock for the sonic drop too (not Death)
         this.invisibleRollName = "M-ROLL";
         this.rollLength = this.tapPlus ? TAP_PLUS_ROLL_FRAMES : TAP_ROLL_FRAMES;
         this.rollHide = TAP_ROLL_HIDE;

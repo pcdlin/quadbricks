@@ -1011,6 +1011,7 @@ class Engine {
             if (own) this.sound.play(s);
             // from the event, not the dropped cells: those a clear removed aren't listed
             if (own && s === "harddrop" && this.options.shakeScale) this.kickShake(game.hardDropDistance);
+            if (own && s === "sonic" && game.sonicTrail && this.options.shakeScale) this.kickShake(game.sonicDistance);
             if (s === "lock" || s === "harddrop") view.enterGlow = 0; // the piece from hold is gone
         }
         if (!game.getCurPiece_type()) view.enterGlow = 0; // or knocked out by an item (a snipe), unlocked

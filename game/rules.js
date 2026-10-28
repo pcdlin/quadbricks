@@ -251,7 +251,7 @@ class RuleGame {
         this.plainArs = false; // ARS with only the basic kicks (TGM1, TAP)
         this.arsFloorKicks = ARS_FLOOR_KICKS; // ARS floor kicks per piece, for the I and the T
         this.floorKickZeroes = true; // rotating again after a floor kick zeroes the lock delay (TGM3)
-        this.sonicTrail = false; // the sonic drop leaves a drop trail (TAP Master)
+        this.sonicTrail = false; // the sonic drop leaves a drop trail and knocks the field like a hard drop (TAP)
         this.irs = true; // a rotation held as the piece enters turns it
         this.ihs = true; // hold held as the piece enters swaps it (where there is a hold)
         this.rot180 = false; // the 180° rotation key turns the piece (Guideline handling option)
@@ -1221,6 +1221,7 @@ class RuleGame {
         this.sonicMax = Math.max(this.sonicMax, distance);
         if (distance === 0) return;
         this.sounds.push("sonic");
+        this.sonicDistance = distance; // for the engine's knock (sonicTrail)
         if (this.sonicTrail) {
             for (const cell of this.curPieceCells()) this.hardDropCells.push({ ...cell, dist: distance, cleared: false });
         }
