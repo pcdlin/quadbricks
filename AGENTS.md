@@ -784,7 +784,8 @@ settles is listed as an assumption below.
 - After stage 20 the clear rate (cleared × 100 / tried) opens EX1-EX3 from 90 %, EX1-EX5 at 100 %, all seven at 100 % within
   5:00 of total time; the last stage played ends the game (COMPLETE, or ALL CLEAR for EX7 cleared).
 - The pieces come in the fixed sequence, the same every game, running on across stages; Hold during READY moves the next
-  piece into the hold box. Speed level from 0 at each stage: +1 per piece (stops at x99), +1 to +4 per clear;
+  piece into the hold box, as often as it is pressed, the held one lost each time (tetris.wiki: so the sequence can be moved
+  on to a better piece). Speed level from 0 at each stage: +1 per piece (stops at x99), +1 to +4 per clear;
   `SAKURA_GRAVITY` and `SAKURA_DELAYS` (tetris.wiki's: ARE 25, DAS 14 then 8 from 300, lock 30, line clear 40 then 25); the
   ghost below 100. No score.
 - Stage effects (`SAKURA_EFFECTS`): Mirror (stages 4 and 13: the field turned after every 3rd piece, `mirrorField()`), X-Ray

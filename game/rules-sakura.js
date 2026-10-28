@@ -177,7 +177,8 @@ class TiSakuraGame extends TiGame {
     delayRow(speedLevel) { return tableLookup(SAKURA_DELAYS, speedLevel); }
     gravityAt(speedLevel) { return tableLookup(SAKURA_GRAVITY, speedLevel)[1] / 256; }
 
-    // Hold pressed during READY: the next piece goes into the hold box (tetris.wiki)
+    // Hold pressed during READY: the next piece goes into the hold box, again with each press, the piece held before
+    // lost: a way to move the fixed sequence on to a better piece (tetris.wiki: "to clobber the previous piece being held")
     advanceFrame(input) {
         if (this.phase === "ready" && !this.gameover && (input & HOLD_PUSH) === HOLD_PUSH) {
             this.heldpiece = this.queue.shift();
