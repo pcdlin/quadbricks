@@ -600,6 +600,7 @@ settles is listed as an assumption below.
   - ↓ Del Field: the stack's lower half deleted.
   - → Mov Field: every row's blocks pushed to the right wall.
   - Shotgun!: a random column in every row of the stack shot out, a miss on an empty cell.
+  - Dark Block: the stack blinks for a second, then is hidden like in TAP's M-roll, for 8 seconds (480 frames, Heboris's).
   - Free Fall: every block drops down its column; its rows clear and 2+ of them go to the other side as garbage with one
     hole (the guide and Heboris).
   - ← Mov Field: every row's blocks pushed to the left wall.

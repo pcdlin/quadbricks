@@ -3215,5 +3215,19 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         [[[6], "#####....#", 40, "WORLD VS ATTACK"], [[3], "..........", 20, "WORLD VS DEFENCE"], [[4], "#####....#", 10, "WORLD VS ITEM"]]);
 }
 
+{
+    // Dark Block: the other side's stack blinks, then vanishes for the rest of 8 seconds (Heboris)
+    const [d] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(d);
+    fill(d, ["#########."]);
+    d.receiveGarbage({ item: "DARK BLOCK" });
+    const shown = [];
+    for (let f = 0; f < VS_CUTIN_FRAMES + 480; f++) {
+        d.advanceFrame(0);
+        if (f === VS_CUTIN_FRAMES + 1 || f === VS_CUTIN_FRAMES + 2 || f === VS_CUTIN_FRAMES + 100) shown.push(d.getCellAlpha(21, 0));
+    }
+    check("Dark Block: the other side's stack blinks for a second, then is hidden until 8 seconds are up",
+        [shown, d.getCellAlpha(21, 0)], [[1, 0, 0], 1]);
+}
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

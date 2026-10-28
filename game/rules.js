@@ -80,6 +80,7 @@ const VS_ITEMS = {
     "↓ DEL FIELD": { weight: 100 },
     "→ MOV FIELD": { weight: 50 },
     "SHOTGUN!": { weight: 5, attack: true },
+    "DARK BLOCK": { weight: 5, attack: true, frames: 480 }, // frames: Heboris's
     "FREE FALL": { weight: 3 },
     "← MOV FIELD": { weight: 3 },
     "NEGA FIELD": { weight: 1, attack: true },
@@ -403,6 +404,9 @@ class RuleGame {
     blockAlpha(row, col) { return 1; }
     itemAlpha(row, col) {
         let alpha = 1;
+        // Dark Block: the stack blinks for a second, then is gone like in TAP's M-roll (the guide; Heboris)
+        const dark = this.itemTimers["DARK BLOCK"];
+        if (dark > 0) alpha = dark > 420 && dark % 2 === 0 ? 1 : 0;
         return alpha;
     }
 
