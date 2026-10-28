@@ -174,7 +174,7 @@ const RULESETS = [
           { name: "Master", mode: arika, variant: "standard", setup: [RULE_SETUP, EXAMS_SETUP, BIG_SETUP], accent: tetL, desc: "Up to level 999, COOLs and REGRETs, grades to GM" },
           { name: "Easy", mode: arika, variant: "easy", setup: [RULE_SETUP, BIG_SETUP], accent: tetO, desc: "Up to level 200, scored in fireworks" },
           { name: "Shirase", mode: arika, variant: "shirase", setup: [RULE_SETUP, BIG_SETUP], accent: tetZ, desc: "20G to level 1300, rising garbage, a big staff roll" },
-          { name: "Sakura", mode: arika, variant: "sakura", setup: [RULE_SETUP], accent: tetS, desc: "Clear the jewels from 20 stages and more, against the clock" },
+          { name: "Sakura", mode: arika, variant: "sakura", setup: [RULE_SETUP], accent: tetS, desc: "Clear each stage's jewels, against the clock" },
       ] },
     { name: "ACE", accent: tetS, desc: "150 lines against the clock — SRS, ARS or ARS2, hold",
       modes: [
