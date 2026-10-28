@@ -669,6 +669,79 @@ const TILESETS = {
         },
     },
 
+    // Toy bricks seen from above: a bevelled body and a round stud
+    studs: {
+        name: "Studs",
+        face: [0.5, 0.08],
+        pad: (style) => style === "active" ? 10 : 0,
+        draw(g, col, size, style) {
+            const [inset, round] = this.face, w = size - inset * 2, r = size * round;
+            const cx = size / 2, cy = size / 2, sr = size * 0.24;
+            const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
+            const stud = (dx, dy, rad) => { g.beginPath(); g.arc(cx + dx, cy + dy, rad, 0, Math.PI * 2); };
+            if (style === "ghost") {
+                path();
+                g.fillStyle = col.base + "1c";
+                g.fill();
+                g.strokeStyle = col.light + "99";
+                g.lineWidth = 1.2;
+                g.stroke();
+                stud(0, 0, sr);
+                g.stroke();
+                return;
+            }
+            const active = style === "active";
+            if (active) {
+                g.shadowColor = col.light;
+                g.shadowBlur = 12;
+            }
+            path();
+            g.fillStyle = col.base;
+            g.fill();
+            g.shadowBlur = 0;
+            // the body's bevel: lit top and left, shaded bottom and right
+            g.save();
+            path();
+            g.clip();
+            const e = size * 0.08;
+            g.fillStyle = "rgba(255,255,255,0.28)";
+            g.fillRect(inset, inset, w, e);
+            g.fillRect(inset, inset, e, w);
+            g.fillStyle = "rgba(0,0,0,0.25)";
+            g.fillRect(inset, inset + w - e, w, e);
+            g.fillRect(inset + w - e, inset + e, e, w - e);
+            g.restore();
+            // the stud: its shadow, its side, its top
+            stud(size * 0.05, size * 0.07, sr);
+            g.fillStyle = "rgba(0,0,0,0.3)";
+            g.fill();
+            stud(0, 0, sr);
+            const side = g.createLinearGradient(cx - sr, cy - sr, cx + sr, cy + sr);
+            side.addColorStop(0, col.light);
+            side.addColorStop(1, col.dark);
+            g.fillStyle = side;
+            g.fill();
+            stud(-size * 0.015, -size * 0.02, sr * 0.82);
+            g.fillStyle = col.base;
+            g.fill();
+            g.beginPath();
+            g.arc(cx - size * 0.015, cy - size * 0.02, sr * 0.82, Math.PI * 0.95, Math.PI * 1.55);
+            g.strokeStyle = "rgba(255,255,255,0.65)";
+            g.lineWidth = 1;
+            g.stroke();
+            g.globalCompositeOperation = "source-atop";
+            g.fillStyle = active ? "rgba(255,255,255,0.14)" : "rgba(6,8,22,0.2)";
+            g.fillRect(0, 0, size, size);
+            g.globalCompositeOperation = "source-over";
+            if (active) {
+                path();
+                g.strokeStyle = "rgba(255,255,255,0.7)";
+                g.lineWidth = 1.2;
+                g.stroke();
+            }
+        },
+    },
+
     // Monochrome: every piece in the same warm gallery white, soft rims, no colour at all
     mono: {
         name: "Mono",
