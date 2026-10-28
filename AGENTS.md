@@ -487,9 +487,6 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
     lines (*Garbage*, Jstris; Tetris 99 +4, Puyo Puyo Tetris 10 in all).
   - The clients, against the general table: back-to-back +1 for every clear (Tetris 99, Puyo Puyo Tetris, Jstris; TETR.IO
     +1 per level of its streak), where *Garbage* gives +1 (minis, TSS), +2 (TSD, Tetris), +3 (TST) with no game named.
-  - Other references, not followed: NullpoMino's `VSBattleMode` sends 1 for a T-spin mini single and 4 for a mini double
-    (as a T-spin double), +2 back-to-back for a T-spin triple and +6 for a perfect clear (combos as here); harddrop.com's
-    *Garbage* gives a perfect clear +7 (the rest as tetris.wiki's table).
   - Left out (each client's own): caps (Tetris 99: 12 waiting, 20 per clear; TETR.IO splits attacks of 8+ into 4s), delays
     before garbage counts (Tetris 99, TETR.IO), messier holes (TETR.IO's Quick Play, Tetris Effect: Connected at high
     scores), Tetris 99's badges and targeting.
