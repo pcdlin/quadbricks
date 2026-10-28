@@ -90,9 +90,9 @@ OPTION_ARGS.push("rounds");
 const VERSUS_RULES_SETUP = { name: "Rules", accent: tetT, arg: "mode", labels: ["Guideline", "TGM1", "TAP", "TGM3", "ACE", "NES", "GB"],
     values: [guideline, tgmOriginal, tgmTap, arika, tgmAce, nesTetris, gbTetris] };
 const VERSUS_ACE_MODES = [tgmAce, aceArs, aceArs2];
-// TGM1, TAP and TGM3: a head start for one side (sides: the two sides' names), levels it starts on. Not TAP's (its versus has
-// no handicap that tetris.wiki or harddrop.com know of); Heboris gives each side its own speed, this the level and with it
-// the speed. options.handicap: { side (0: player 1), levels }
+// TGM1, TAP and TGM3: a head start for one side (sides: the two sides' names), levels it starts on. This game's own: TAP's
+// versus has no handicap that tetris.wiki or harddrop.com know of; Heboris gives each side its own speed, this the level and
+// with it the speed. options.handicap: { side (0: player 1), levels }
 const handicapSetup = sides => ({ name: "Handicap", accent: tetT, arg: "handicap", modes: [tgmOriginal, tgmTap, arika, tgmClassic],
     labels: ["Off", ...sides.flatMap(side => [`${side} start at 50`, `${side} start at 100`])],
     values: [null, { side: 0, levels: 50 }, { side: 0, levels: 100 }, { side: 1, levels: 50 }, { side: 1, levels: 100 }] });
