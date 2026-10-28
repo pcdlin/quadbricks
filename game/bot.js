@@ -17,9 +17,10 @@
 //    again from where the piece actually is after every action), with a level's reaction time, key
 //    interval, DAS use, mistakes and noise; the upper levels also choose during the entry delay how
 //    the next piece should enter and hold that rotation key through it (IRS), and hold Hold when the
-//    piece it brings in plays better (IHS).
+//    piece it brings in plays better (IHS), and a direction when that piece goes to a wall (DAS charged
+//    in ARE).
 //
-// Left out for now: T-spin triples and minis on purpose, IHS, DAS pre-charged during ARE, finesse.
+// Left out: building for T-spin triples and minis (tried, see AGENTS.md: no gain), finesse.
 
 const BOT_ROWS = HEIGHT - FIELD_TOP;
 const BOT_FULL = (1 << WIDTH) - 1;
@@ -697,12 +698,19 @@ class Bot {
         this.lastType = game.curPiece_type;
         this.lastActive = game.activeTime;
         if (fresh) {
-            const afterHold = this.afterHold;
+            const afterHold = this.afterHold, charged = this.preDas;
             this.resetPiece();
             this.lastType = game.curPiece_type;
             this.lastActive = game.activeTime;
             this.wait = afterHold ? 0 : this.hands.reaction;
             this.useHard = this.rng() < this.hands.hard;
+            this.preDas = null;
+            if (charged) { // DAS charged in the entry delay: keep the key held until the piece is at the wall
+                this.macro = { kind: "das", dir: charged.dir, stop: charged.col, start: game.curPiece_col, frames: 0,
+                    limit: game.das + WIDTH * Math.max(1, game.arr) + 12 };
+                this.want[charged.dir] = 1;
+                this.wait = 0;
+            }
         }
         if (this.wait > 0) { this.wait--; return; }
         if (this.macro && this.runMacro(game)) return;
@@ -750,6 +758,7 @@ class Bot {
             this.irsKey = null;
             this.ihsHold = false;
             this.ihsNext = null;
+            this.preDas = null;
             const type = game.rnd_get_queue(0), visible = [];
             for (let i = 1; i < game.nextCount; i++) if (game.rnd_get_queue(i)) visible.push(game.rnd_get_queue(i));
             if (!this.weights) return;
@@ -761,11 +770,15 @@ class Bot {
                 const stay = this.entryChoice(game, type, visible.slice(0, n), true);
                 if (stay) {
                     this.irsKey = turnKey(stay.start);
+                    this.preDas = this.dasCharge(game, type, stay);
                     this.ihsNext = { other, rest: rest.slice(0, n), stay };
                 }
             } else {
-                const best = this.entryChoice(game, type, visible);
-                if (best) this.irsKey = turnKey(best.start);
+                const best = this.entryChoice(game, type, visible, this.chargesInAre(game));
+                if (best) {
+                    this.irsKey = turnKey(best.start);
+                    this.preDas = this.dasCharge(game, type, best);
+                }
             }
         } else if (this.ihsNext) {
             const { other, rest, stay } = this.ihsNext;
@@ -774,10 +787,29 @@ class Bot {
             if (swap && swap.score - this.hands.hold > stay.score) {
                 this.ihsHold = true;
                 this.irsKey = turnKey(swap.start);
+                this.preDas = this.dasCharge(game, other, swap);
             }
         }
+        if (this.preDas) this.want[this.preDas.dir] = 1;
         if (this.ihsHold) this.want.hold = 1;
         if (this.irsKey) this.want[this.irsKey] = 1;
+    }
+
+    // DAS charged during the entry delay (levels with IRS and DAS, where the rule set charges DAS then:
+    // the Guideline and the TGM games, not NES or GB): for a piece whose best place is against a wall,
+    // in the turn it enters with, at least BOT_DAS_MIN columns away, the direction is held through the
+    // delay so the piece shoots there as it enters ({ dir, col }, carried out by think()'s DAS macro)
+    chargesInAre(game) {
+        return this.hands.das && this.hands.irs && (game.tgm || game.gamemode === guideline);
+    }
+
+    dasCharge(game, type, choice) {
+        if (!this.chargesInAre(game) || choice.col === undefined || choice.start !== choice.rot) return null;
+        const cells = game.curCells[type][choice.rot], cols = cells.map(([, j]) => j);
+        const spawn = (game.big ? game.bigSpawnPosition(type) : game.spawnPosition(type))[1];
+        const dir = choice.col + Math.min(...cols) === 0 ? -1 : choice.col + Math.max(...cols) === WIDTH - 1 ? 1 : 0;
+        if (!dir || Math.abs(choice.col - spawn) < BOT_DAS_MIN) return null;
+        return { dir: dir < 0 ? "left" : "right", col: choice.col };
     }
 
     // IHS: hold held as a piece enters swaps it, where the game has it, for the levels with IRS that
