@@ -137,6 +137,12 @@ const MULTI_ITEMS = [
       modeItem: { name: "Versus Bot", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, BOT_SETUP, ...versusSubSetup(["Your height", "Bot height"], ["You", "Bot"])] } },
     { name: "Versus Player", desc: "Two players side by side, on their own keys or gamepads", accent: tetT,
       modeItem: { name: "Versus Player", mode: guideline, variant: "versus", setup: [VERSUS_RULES_SETUP, ...versusSubSetup(["P1 height", "P2 height"], ["P1", "P2"])], join: true } },
+    // TAP's Doubles (rules-doubles.js): two players in one well 14 wide, with the bot or another player (no setup
+    // cards: straight to the join screen)
+    { name: "Doubles Bot", desc: "TAP's Doubles: one 14-wide well, you and the bot", accent: tetO,
+      modeItem: { name: "Doubles Bot", mode: tgmTap, variant: "doubles", setup: [BOT_SETUP] } },
+    { name: "Doubles Player", desc: "TAP's Doubles: one 14-wide well, two players", accent: tetS,
+      modeItem: { name: "Doubles Player", mode: tgmTap, variant: "doubles", setup: [], join: true } },
 ];
 // Input devices of a two-player game: "keys1" (player 1's keys, and the touch controls), "keys2"
 // (player 2's keys) or "pad:N" (the gamepad at index N)
@@ -816,6 +822,7 @@ class Engine {
                 // match that is decided stands still until a rematch
                 if (this.GAMESTATE === STATE_GAME) {
                     if (!(this.match && this.match.result)) this.game.advanceFrame(this.inputs[0]);
+                    if (this.doubles) this.doublesFrame();
                     this.takeGameEvents(this.ownBoard, true);
                     if (this.match) this.matchFrame();
                     if (this.game.isGameOver() && !this.recordDone) this.submitRecord();
@@ -931,6 +938,19 @@ class Engine {
         this.takeGameEvents(m.view, !!m.duo);
         for (const popups of m.popups) for (const p of popups) p.life--;
         m.popups = m.popups.map(popups => popups.filter(p => p.life > 0));
+    }
+
+    // TAP Doubles: the partner's frame, after player 1's (whose events it shares), on player 2's
+    // input or the bot's
+    doublesFrame() {
+        const partner = this.game.partner, d = this.doubles;
+        if (!partner.isGameOver()) partner.advanceFrame(d.devices ? this.inputs[1] : d.bot.input(partner));
+    }
+
+    // The two players' devices when two play (a versus match or Doubles), else null
+    playingDevices() {
+        if (this.match && this.match.duo) return this.match.devices;
+        return this.doubles && this.doubles.devices || null;
     }
 
     // Garbage rising pushes a field up a little
@@ -1074,6 +1094,9 @@ class Engine {
         this.match = !versus ? null : options.duo ? this.newDuo(mode, startLevel, height, gameOptions)
             : this.newMatch(mode, startLevel, height, gameOptions, options.bot ?? BOT_VERSUS_LEVEL);
         if (this.match) [this.game.rival, this.match.view.game.rival] = [this.match.view.game, this.game];
+        // TAP Doubles: the partner (game.partner) plays with player 2's device, or is the bot
+        this.doubles = variant !== "doubles" ? null : options.duo ? { devices: this.duoDevices }
+            : { bot: new Bot(options.bot ?? BOT_VERSUS_LEVEL, Math.floor(Math.random() * 0x7fffffff)), level: options.bot ?? BOT_VERSUS_LEVEL };
         this.rev = this.game.rev; // the well drawn upside down (cellY)
         const widened = this.layoutBoard(this.game.wellTop, this.game.width);
         this.clearEffects();
@@ -1240,7 +1263,7 @@ class Engine {
     // the touch controls and every gamepad; in a two-player game each player takes only their own
     // device's (duoDevices). Esc (or Start on any pad) opens the menu for both
     handleGameInput() {
-        const players = this.match && this.match.duo ? 2 : 1;
+        const players = this.playingDevices() ? 2 : 1;
         // Keys let go while the game wasn't listening (menu, another window) are released now
         if (this.syncKeys) {
             this.syncKeys = false;
@@ -1279,13 +1302,13 @@ class Engine {
     // The player (0 or 1, -1 for none) and game action of an input event: a key in the keys of a
     // player's device, or an action on a pad
     eventTarget(ev) {
-        if (!(this.match && this.match.duo)) {
+        const devices = this.playingDevices();
+        if (!devices) {
             if (ev.pad === undefined) return [0, this.options.actionFor(ev.code)];
             // one player's pads act as one: a press another pad already holds does nothing
             const elsewhere = ev.down && this.gamepad.pads.some(pad => pad !== ev.pad && this.gamepad.heldActions(pad).has(ev.action));
             return elsewhere ? [-1, null] : [0, ev.action];
         }
-        const devices = this.match.devices;
         if (ev.pad !== undefined) return [devices.indexOf("pad:" + ev.pad), ev.action];
         for (let p = 0; p < 2; p++) {
             const keys = devices[p] === "keys1" ? 1 : devices[p] === "keys2" ? 2 : 0;
@@ -1298,10 +1321,11 @@ class Engine {
     // A player still holds an action on their device (another key, or another pad, bound to it)
     actionHeld(p, action) {
         const keyHeld = keys => (this.options.keysOf(keys)[action] || []).some(c => this.keysDown.has(c));
-        if (!(this.match && this.match.duo)) {
+        const devices = this.playingDevices();
+        if (!devices) {
             return keyHeld(1) || this.gamepad.pads.some(pad => this.gamepad.heldActions(pad).has(action));
         }
-        const device = this.match.devices[p];
+        const device = devices[p];
         if (device.startsWith("pad:")) return this.gamepad.heldActions(Number(device.slice(4))).has(action);
         return keyHeld(device === "keys2" ? 2 : 1);
     }
@@ -1316,7 +1340,7 @@ class Engine {
             [MENU_MAIN]: { pos: "mainpos", count: () => this.mainItems().length, back: null },
             [MENU_SINGLE]: { pos: "singlepos", count: () => SINGLE_ITEMS.length, back: MENU_MAIN },
             [MENU_MULTI]: { pos: "multipos", count: () => MULTI_ITEMS.length, back: MENU_MAIN },
-            [MENU_JOIN]: { pos: "multipos", count: () => 1, back: MENU_SETUP },
+            [MENU_JOIN]: { pos: "multipos", count: () => 1, back: this.setupFrom === MENU_MULTI && !this.chosenMode().setup.length ? MENU_MULTI : MENU_SETUP },
             [MENU_QUICK]: { pos: "quickpos", count: () => QUICK_PLAY.length, back: MENU_SINGLE },
             [MENU_RULES]: { pos: "rulesetpos", count: () => RULESETS.length, back: MENU_SINGLE },
             [MENU_MODES]: { pos: "menupos", count: () => RULESETS[this.rulesetpos].modes.length, back: MENU_RULES },
@@ -1371,6 +1395,10 @@ class Engine {
                     this.initGame(...this.lastGameArgs);
                     this.GAMESTATE = STATE_GAME;
                     return;
+                } else if (this.menuStep === MENU_MULTI && MULTI_ITEMS[pos].modeItem.join && !MULTI_ITEMS[pos].modeItem.setup.length) {
+                    this.setupFrom = MENU_MULTI; // no cards to set: the join screen
+                    this.joined = [];
+                    this.menuStep = MENU_JOIN;
                 } else if (this.menuStep === MENU_MULTI && MULTI_ITEMS[pos].modeItem) { // its setup cards
                     this.setupFrom = MENU_MULTI;
                     this.menuStep = MENU_SETUP;
@@ -2834,6 +2862,11 @@ class Engine {
         this.drawParticles();  // confetti flies off the field: never tilted
         if (this.layout.compact) this.drawCompactPanels();
         else this.drawSidePanels();
+        if (game.partner && !this.layout.compact) { // TAP Doubles: whose half is whose
+            const style = { size: 13, weight: 800, color: INK_DIM, align: "center", spacing: 3 };
+            this.text("P1", BOARD_X + BOARD_W / 4, this.boardY - 22, style);
+            this.text(this.doubles && this.doubles.bot ? "BOT  ·  LV " + this.doubles.level : "P2", BOARD_X + BOARD_W * 3 / 4, this.boardY - 22, style);
+        }
         if (match) {
             if (game.sendsGarbage) this.drawGarbageMeter(game);
             this.drawAttackPopups(match.popups[side]);
@@ -3014,12 +3047,33 @@ class Engine {
             r.globalAlpha = 1;
             if (game.pieceItem) this.drawItemMark(x, y, CELL);
         }
+        if (game.partner) this.drawPartnerPiece(game.partner, firstRow);
         r.restore();
 
         this.drawDropFlashes();
         this.drawFlashes();
         if (game.inStartDelay()) this.drawCountdown(game); // part of the field: flies in with it
         if (game.cutIn > 0) this.drawCutIn(game);
+    }
+
+    // TAP Doubles: the partner's piece in play and its ghost, in the same well
+    drawPartnerPiece(p, firstRow) {
+        if (!p.curPiece_type || p.phase !== "active") return;
+        const r = this.r, cells = p.curCells[p.curPiece_type][p.curPiece_rotation], color = p.getPieceColor();
+        const lockLeft = 1 - Math.min(1, p.curPiece_lockDelay / p.lockDelayMax);
+        for (const [i, j] of cells) {
+            const row = p.getShadowRow() + i;
+            if (p.getShadowRow() > -100 && row >= firstRow) this.drawBlock(color, this.cellX(p.curPiece_col + j), this.cellY(row), CELL, "ghost");
+        }
+        for (const [i, j] of cells) {
+            const row = p.curPiece_row + i;
+            if (row < firstRow) continue;
+            const x = this.cellX(p.curPiece_col + j), y = this.cellY(row);
+            if (lockLeft < 1) this.drawBlock(color, x, y, CELL, "locked", this.options.tileset, false);
+            r.globalAlpha = lockLeft;
+            this.drawBlock(color, x, y, CELL, "active");
+            r.globalAlpha = 1;
+        }
     }
 
     // TGM-style border: a light line along every side of the settled stack that faces an empty
@@ -3165,6 +3219,10 @@ class Engine {
             this.label("HOLD", LEFT_X, this.boardY + 4, SIDE_W);
             this.panel(LEFT_X, this.boardY + 18, SIDE_W, 110);
             this.drawHeldPiece(LEFT_X + SIDE_W / 2, this.boardY + 18 + 55, 24);
+        } else if (game.partner) { // TAP Doubles: player 1's next piece on the left, player 2's on the right
+            this.label("P1 NEXT", LEFT_X, this.boardY + 4, SIDE_W);
+            this.panel(LEFT_X, this.boardY + 18, SIDE_W, 110);
+            this.drawPieceCentered(game.rnd_get_queue(0), LEFT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game);
         }
 
         // STATS
@@ -3200,9 +3258,10 @@ class Engine {
 
         // NEXT (none with the Guideline's previews off)
         if (game.nextCount > 0) {
-            this.label("NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
+            const shown = game.partner || game;
+            this.label(game.partner ? "P2 NEXT" : "NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
             this.panel(RIGHT_X, this.boardY + 18, SIDE_W, 110);
-            this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game, !!game.nextItem);
+            this.drawPieceCentered(shown.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", shown, !!shown.nextItem);
         }
         // the rest of the rule set's preview, tighter when there are more than two
         // (none for TAP's single next piece)
@@ -3241,6 +3300,11 @@ class Engine {
             this.panel(leftX, y + 12, sideW, box);
             this.drawHeldPiece(leftX + sideW / 2, y + 12 + box / 2, size);
             y += 12 + box + 28;
+        } else if (game.partner) { // TAP Doubles: player 1's next piece
+            this.label("P1 NEXT", leftX, y, sideW, 10, 3);
+            this.panel(leftX, y + 12, sideW, box);
+            this.drawPieceCentered(game.rnd_get_queue(0), leftX + sideW / 2, y + 12 + box / 2, size, "locked", game);
+            y += 12 + box + 28;
         }
         game.getStats().forEach(([name, value], n) => {
             if (n === 0) { // rule set and mode
@@ -3258,9 +3322,10 @@ class Engine {
         });
 
         if (game.nextCount > 0) {
-            this.label("NEXT", rightX, top, sideW, 10, 3);
+            const shown = game.partner || game;
+            this.label(game.partner ? "P2 NEXT" : "NEXT", rightX, top, sideW, 10, 3);
             this.panel(rightX, top + 12, sideW, box);
-            this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game, !!game.nextItem);
+            this.drawPieceCentered(shown.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", shown, !!shown.nextItem);
         }
         const rest = game.nextCount - 1;
         if (rest > 0) {

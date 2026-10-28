@@ -23,7 +23,7 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 
 There is no bundler, and package.json only holds the serve script. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
-`game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js → rules-sakura.js →
+`game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js → rules-sakura.js → rules-doubles.js →
 bot.js → sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
@@ -39,6 +39,7 @@ when WebGL is unavailable).
 | `game/rules-tgm.js` | `TgmGame` and its games: `Tgm1Game`, `TapGame` (Master, Death, TGM+), `TiGame` (TGM3 Master, World or Classic) with `TiEasyGame` and `TiShiraseGame`; versus: `tgmVersus()` (a mixin, `TGM_VS_*`) makes `Tgm1VersusGame`, `TapVersusGame`, `TiVersusGame` (and ACE's `AceVersusGame`). |
 | `game/rules-ace.js` | `AceGame`: ACE's five modes. |
 | `game/rules-sakura.js` | `TiSakuraGame`: TGM3's Sakura (stages of jewels), registered over `rules-tgm.js`'s TGM3 modes for the `"sakura"` variant. |
+| `game/rules-doubles.js` | `TapDoublesGame`: TAP's Doubles (two players in one 14-wide well), registered over TAP's modes for the `"doubles"` variant. |
 | `game/rules-1989.js` | `Game1989` with `NesGame` and `GbGame`: A-Type and B-Type; NES and GB versus. |
 | `game/bot.js` | `Bot`, a computer player with levels 0–10 (`BOT_LEVELS`, by index; 6 was Skilled and 10 Master of the five named levels before, the user's scale): no DOM or engine dependencies, `Bot.input(game)` returns the frame's input bitmap and sees only what a human sees (field, piece, visible next pieces, hold). `BotExplorer` finds every pose the piece can reach by running the game's own `rotate()`/`shift()` on a probe (`Object.create(game)` with its event arrays shadowed, so no kick table is duplicated) under a gravity model (after each action the piece falls as gravity takes it in the frames the action costs: at 20G it only slides along the stack); the brain is Thiery and Scherrer's evaluator on bit-row boards with a beam search over the visible next pieces and the hold (`decide()`, `deepen()`); the hands turn the route into key presses (`think()`, `act()`, macros for DAS, soft drops and the final drop), closed loop: the rest of the route is kept while the piece is where the model put it, and searched again from where it actually is when not. The explorer tracks per node what limits a grounded piece (lock resets or lock delay, restarted by a fall; TGM3's floor kicks and the lock delay they zero). Levels 7–10 choose during ARE how the next piece enters and hold that rotation key (IRS, `preSpawn()`), which is what lets them survive 20G, and hold Hold through it when the piece hold brings in plays better (IHS, `ihsAllowed()`, `entryChoice()`: the two weighed on separate frames, so no frame does more than one search; measured: TGM3 Shirase and ACE faster to their ends at level 7, Marathon's score up about 6 % at level 10). The evaluation set comes from the mode (`botProfile()`, `BOT_WEIGHTS`: Tetris stacking where score or grade pays for it, with the right column kept open and rows ready for a Tetris credited while the stack is low and gravity under 1G, else every clear; in the Guideline levels 5 up (`spins`) play as players do: `attack` (Marathon, Ultra, Endless) and `versus` value each clear as the mode does (`botClearValue()`: score, or lines sent) with back-to-backs and combos carried through the search, find T-spins (the explorer keeps whether the last move was a rotation and its kick, per pose; `detectTSpin()` on a probe) and build T-spin double slots (`botTslot()`: the board is scored as if a T filled the slot); `attack` stacks higher for more Tetrises and T-spin doubles, `versus` stays lower and digs, as tuned with Marathon's score and matches against `tetris`); lock outs and blocked entries count as dead. How a piece is finished comes from the rule set (`botLockStyle()`: hard drop, sonic drop then soft drop, soft drop only). Mistakes and noise use the bot's own seeded PRNG. In versus it reads the garbage waiting (the meter, `pendingGarbage()`, where the rule set `sendsGarbage`), not where its holes will be: a placement that clears nothing lets it rise as solid rows that never clear (`botRise()`, `BOT_GARBAGE_BIT`), a clear cancels what it sends in the Guideline only (`botCancels()`, `botPendingAfter()`); TGM3 versus plays the `tetris` profile. With versus items (from level 3, `BOT_ITEM_LEVEL`) it sees the item a placement sets off (`botItemCleared()`, the marks are on screen) and values it (`botItemValue()`: an attack always, a Del Field, Del Even or Free Fall by its stack's height, Exchg Field by how much higher its stack is than the other's); from level 7 (`BOT_SNIPE_LEVEL`) it holds the drop of a placement that sets off an attack item until it will hit the other side's piece in play, a snipe, as it sees that side's screen (`snipeWait()`, at most `BOT_SNIPE_WAIT` frames). Under Dark Block and X-Ray it still reads the whole field, as if it remembered it. Levels 7–10 also charge DAS in ARE (`chargesInAre()`, `dasCharge()`: the Guideline and the TGM games): when the next piece's best place is against a wall, in the turn it enters with, at least `BOT_DAS_MIN` columns off, the direction is held through the entry delay and after it until the piece is there (measured at level 7: Guideline Master 300 lines in every game instead of some, TAP Death and Shirase 8–13 s faster; Marathon's score up again at level 10). Not done: building for T-spin triples and minis. Tried and measured: a T-spin triple slot credited like the double's (`botTslot()`; a three-deep hole with a notch, checked reachable with the game's kicks on a probe) changed nothing in Marathon at a modest weight and lost score at a large one, the bot never finishing a triple (they take set-ups deeper than its lookahead); the minis it finds almost never clear lines, and weighting them changed nothing. |
 | `game/engine.js` | `Engine`: 60 fps loop, input, menus, rendering, effects. |
@@ -755,6 +756,30 @@ settles is listed as an assumption below.
   1000 (`MONO_PALETTE`). Level 1300: a 3238-frame staff roll with big pieces, blocks visible;
   surviving it completes the mode (orange line), topping out ends it with the grade.
 
+### TAP Doubles
+- Sources: tetris.wiki's and harddrop.com's TAP pages (the well 14 wide, a level counter per player counting its own lines,
+  levels as Normal's: no stops but 299, both to 300, the first there playing at 20G until the other is, then a 20G credit
+  roll that "does not matter" and Start skips; the gravity table, `TAP_DOUBLES_GRAVITY`). No clone has the mode; the rest
+  is this game's, below.
+- Each player is a `TapDoublesGame`; player 1's (`createGame()`'s) makes player 2's (`partner`, `begin()`), and both work on
+  one field (`width` 14) and push to the same effect queues (`drain()` empties them in place). Each sees the other's piece in
+  play as solid (`blocked()`, `partnerAt()`); a piece whose entry only the partner's piece blocks waits a frame (`spawn()`),
+  the stack blocking it ends the game for both (`onBlockOut()`). Pieces enter over their player's half
+  (`DOUBLES_SPAWN_COLS`). A clear is the clearing player's (lines, level, score: TAP's Master formula); the field collapses in
+  place and the partner's clear waiting to collapse follows the rows that fall (`collapse()`). Normal's delays. Both at 300
+  complete the game (COMPLETE; the credit roll left out). Each player's own randomizer. Stats: P1 LEVEL, P2 LEVEL, TIME, the
+  two scores together; record: the lower level, then the time.
+- Engine: Multiplayer → Doubles Bot (the Bot card; the bot is player 2) or Doubles Player (straight to the join screen:
+  `MENU_JOIN`, Esc back to Multiplayer). `this.doubles` (`{ bot, level }` or `{ devices }`): `doublesFrame()` plays player 2's
+  frame after player 1's, on player 2's device or the bot's input (`playingDevices()` routes the input as in a two-player
+  match). The well is drawn 14 wide (`setBoardWidth()`), the partner's piece and ghost with it (`drawPartnerPiece()`), P1's
+  next piece where HOLD would be and P2's in NEXT, P1 and P2 over the well's halves.
+- Bot: a placement's blocks in the partner's half cost `BOT_DOUBLES_AWAY` each (measured with two bots: 30 kept them
+  furthest; none stuck behind the other's piece; without it one was).
+- Not settled by the sources, taken here: the spawn columns, the partner's piece being solid and a blocked entry waiting a
+  frame, who a clear counts for (the player whose piece completed it), Normal's delays, separate randomizers, the score
+  formula (Master's, not Normal's ×6), no credit roll, a top out ending it for both.
+
 ### TGM3 Sakura (World or Classic rule)
 - Sources: tetris.wiki (*Tetris The Grand Master 3 Terror-Instinct*, its *Sakura stage list*), NullpoMino `GemManiaMode.java`
   (its clone; stage file `config/map/gemmania/default.map`) and HeborisCE's TOMOYO mode (`tomoyo.c`, `config/stage/stage00.sav`
@@ -999,7 +1024,7 @@ export names explicitly at the top; add new globals there, and new rule files to
 - Sounds: subtle, synthesised; line-clear chime is a dark A-minor-7 arpeggio that rises
   with the combo chain; M (rebindable) mutes.
 - Clear messages appear below the next pieces (over the well in the compact layout), scaled by importance and combo length.
-- Menu: main screen with Single Player, Multiplayer and Options (Continue and Restart on top during a game; the user's request: Quick Play and Custom Game moved under Single Player, Multiplayer has Versus Bot and Versus Player, a local split screen whose devices are picked by a rotate press on each); Quick Play lists
+- Menu: main screen with Single Player, Multiplayer and Options (Continue and Restart on top during a game; the user's request: Quick Play and Custom Game moved under Single Player, Multiplayer has Versus Bot and Versus Player, a local split screen whose devices are picked by a rotate press on each, then TAP's Doubles with the bot or another player); Quick Play lists
   common modes with no setup step (the user's request); Custom Game (named New Game until Quick Play came; the user's rename) has two steps (rule set, then mode); rule sets are "Guideline", "TGM1", "TGM2 TAP", "TGM3 TI", "ACE", "NES" and "GB" (in that order;
   the rule set and mode lists use tighter cards). Guideline's
   modes are "Marathon" (Goal: 150 lines, Variable or Endless; Level 1–15), "Sprint" (Lines), "Ultra" (Time), "Dig" and "Master"

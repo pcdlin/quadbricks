@@ -289,6 +289,9 @@ function botItemValue(game, item, rows) {
     return 0;
 }
 
+// TAP Doubles: what each of a piece's blocks in the partner's half of the well costs
+const BOT_DOUBLES_AWAY = 30;
+
 // TGM3 Sakura: the jewels a placement clears (in the rows it fills), worth BOT_JEWEL each
 const BOT_JEWEL = 40;
 function botJewelsCleared(game, rows, cells, row, col) {
@@ -1037,6 +1040,12 @@ class Bot {
             const dead = botDead(game, buf, seq[0] || tetT) || botRiseDead(game, buf, pending, cleared);
             pl.board = Int32Array.from(buf);
             pl.score = pl.step + botBoardScore(buf, w) + (dead || botBlocked(game, buf, seq[0] || tetT) ? BOT_DANGER : 0);
+            if (game.partner) { // TAP Doubles: its own half of the well, the partner's left to the partner
+                const half = game.width / 2, cells = game.curCells[pl.type][pl.rot];
+                const away = cells.filter(([, j]) => (pl.col + j < half) !== (game.player === 0)).length;
+                pl.step -= BOT_DOUBLES_AWAY * away;
+                pl.score -= BOT_DOUBLES_AWAY * away;
+            }
             if (game.variant === "sakura") { // the jewels it clears
                 const value = BOT_JEWEL * botJewelsCleared(game, this.board, game.curCells[pl.type][pl.rot], pl.row, pl.col);
                 pl.step += value;

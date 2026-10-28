@@ -719,7 +719,7 @@ class RuleGame {
                 this.startdelayCounter = 0;
                 this.sounds.push("go");
                 this.spawn(this.nextFromQueue(), false);
-                if (this.gameover) return;
+                if (this.gameover || this.phase !== "active") return; // (TAP Doubles: the partner's piece in the way)
             } else return;
         }
 
@@ -749,7 +749,7 @@ class RuleGame {
         if (this.phase === "are") {
             if (++this.phaseCounter >= this.phaseLength) {
                 this.spawn(this.nextFromQueue(), false);
-                if (this.gameover) return;
+                if (this.gameover || this.phase !== "active") return;
             } else return;
         }
 
