@@ -331,6 +331,7 @@ class RuleGame {
         this.pieceItem = null;
         this.itemCells = null; // per cell, the item its block carries (where there are items)
         this.firingItems = []; // items a clear set off, used after it (afterClear)
+        this.itemBursts = []; // item blocks a clear took ({ row, col, item }), since the engine last looked
         this.itemsOn = false; // versus: items are dealt (the Items card, useItems())
         this.itemGauge = 0; // pieces towards the next item
         this.itemInterval = VS_ITEM_PIECES; // pieces that fill the gauge (TGM3's styles change it)
@@ -498,6 +499,11 @@ class RuleGame {
         const n = this.fireworks;
         this.fireworks = 0;
         return n;
+    }
+
+    // Item blocks a clear took since the last call (the engine bursts them)
+    takeItemBursts() {
+        return this.drain("itemBursts");
     }
 
     // Holds since the last call (the engine flashes the held piece)
@@ -1430,7 +1436,8 @@ class RuleGame {
     }
 
     // A line clear that takes item blocks sets off the highest (the rightmost in its row) after the
-    // clear (fireItems); every other item block in the field becomes a normal one
+    // clear (fireItems); every other item block in the field becomes a normal one. The item blocks the
+    // clear took burst (itemBursts, for the engine)
     collectItems(rows) {
         if (!this.itemCells) return;
         let item = null;
@@ -1439,6 +1446,11 @@ class RuleGame {
             if (item) break;
         }
         if (!item) return;
+        for (const r of rows) {
+            this.itemCells[r - FIELD_TOP].forEach((block, col) => {
+                if (block) this.itemBursts.push({ row: r, col, item: block });
+            });
+        }
         this.firingItems.push(item);
         for (const marks of this.itemCells) marks.fill(null);
         if (this.itemsOn) this.nextItem = null; // the one in the preview too (the guide)

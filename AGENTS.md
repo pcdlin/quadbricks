@@ -24,7 +24,7 @@ kept because the scripts share globals. A new script in `index.html` is picked u
 There is no bundler, and package.json only holds the serve script. Scripts are classic `<script>` tags that
 share globals; load order in `game/index.html` matters:
 `game.js → randomizers.js → rules.js → rules-guideline.js → rules-tgm.js → rules-ace.js → rules-1989.js → rules-sakura.js →
-bot.js → sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → engine.js`,
+bot.js → sound.js → tiles.js → themes.js → options.js → renderer.js → backdrop.js → touch.js → gamepad.js → items.js → engine.js`,
 then an inline bootstrap creates `Engine` and calls `init()` / `start()` (or shows a message
 when WebGL is unavailable).
 
@@ -51,6 +51,7 @@ when WebGL is unavailable).
 | `game/gamepad.js` | `GamepadControls`: gamepads (Gamepad API, standard layout), polled each game frame (`poll()`, from `Engine.frame()`), each pad on its own (state keyed `"pad:control"`, by the pad's index; `pads`: those connected). In games the buttons and left stick directions act as bound for that pad (`options.padTable(padKey(pad))`, Options → Gamepad; `padKey()`: the browser's id plus `#n` for the nth connected pad of that id, so identical pads keep their own; `padName()` the id shortened for the menu): each pad's actions go to `Engine.padAction(pad, action, down)`, so any pad drives a one-player game (the pads as one, as they were merged before: a press another pad already holds does
   nothing, `Engine.eventTarget()`) and each its own player in a two-player one (`heldActions(pad)` for releases; a pad
   letting go of an action the keyboard still holds no longer releases it); Start opens the menu. On the multiplayer join screen (mode `"join"`) a pad's rotate buttons (`JOIN_ACTIONS`) call `Engine.joinDevice("pad:N")` and Start goes back. Menus take fixed ones, from any pad, fed to `Engine.onKey()` as key events (`PAD_MENU`: D-pad or stick arrows, A = Enter, B and Start = Esc; the sound button works there too), held directions repeat. A control held over a switch between menu and game, or over a binding, is ignored until let go. While a pad was used last (`active`, cleared by any keydown) hints name its buttons (`padWords()`). |
+| `game/items.js` | Versus items' graphics, drawn with canvas paths (the engine renders them once into textures): `ITEM_ART`, per item (`VS_ITEMS`) a glyph in a 100 box and its cut-in colour; `drawItemIcon()`, the icon on an item block and in NEXT (the white glyph on a dark plate in a frame of its kind's colour, `ITEM_KIND_COLORS`, `itemKind()`: attack red, the side's own blue, Exchg Field green, as Heboris has them after the arcade); `drawItemEmblem()`, the cut-in's emblem (the glyph in the item's colour on a dark medallion). Heboris's own pictures (unknown licence) were looked at, not copied. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for the rule sets (~515 checks). |
@@ -242,7 +243,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   (`recordSetup`) at the foot of the NEXT column, its parts stacked when the line doesn't fit
   (`drawGameBest()`). `Records` (`options.js`) keeps them.
 - Event queues the engine drains every frame: `takeClearedCells()` (confetti),
-  `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeHolds()` (a count of holds, IHS included; the engine flashes the held piece in the HOLD box with a soft glow of its light colour around it, `holdFlash`, `HOLD_FLASH_LIFE`, `pieceGlow()` (`HOLD_GLOW_*`, a blurred silhouette cached per piece, colour and size), and the piece coming into play from it glows the same way in the well until it locks (`enterGlow`, `drawPieceGlow()`), none with effects Off, fainter at Subtle), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
+  `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, without the drop sound or shake), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeItemBursts()` (`{ row, col, item }` per item block a clear took, in `collectItems()`: the engine bursts each, `burstItem()`, `drawItemBursts()`: three rings and a ring of glow motes in its kind's colour, `ITEM_BURST_*`, Heboris's 30-frame burst; none with effects Off), `takeHolds()` (a count of holds, IHS included; the engine flashes the held piece in the HOLD box with a soft glow of its light colour around it, `holdFlash`, `HOLD_FLASH_LIFE`, `pieceGlow()` (`HOLD_GLOW_*`, a blurred silhouette cached per piece, colour and size), and the piece coming into play from it glows the same way in the well until it locks (`enterGlow`, `drawPieceGlow()`), none with effects Off, fainter at Subtle), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
   (`{text, kind, value}`, kinds `clear`/`tspin`/`b2b`/`combo`/`pc`) with `actionAge`.
   Versus (the base's VERSUS section; the rule sets decide what a clear sends, when garbage rises (`riseAfterLock()`), how
@@ -295,8 +296,13 @@ too (`softHeld()`). IRS (held rotate) and IHS (held hold) apply at spawn (`irs`,
   (`drawGarbageMeter()`, a red bar per attack waiting), "+lines" (or the item's name) for each attack sent (`drawAttackPopups()`): in the full
   layout in the right column under the clear message that sent it (`drawClearMessage()` returns its bottom,
   `BoardView.popupTop`; the user's request), in the compact one over the well; sounds
-  `"garbage"`, `"attack"`, `"ko"`. An attack item's cut-in on the side it hit (`game.cutIn`): its name sliding in on a gold
-  band across the well (`drawCutIn()`), in place of its clear message there.
+  `"garbage"`, `"attack"`, `"ko"`. An attack item's cut-in on the side it hit (`game.cutIn`): a band opening across the well in the
+  item's colour, its emblem (`itemEmblem()`, items.js) popping in with a ring spreading behind it, its name sliding in under it
+  (`drawCutIn()`, `CUTIN_*`), in place of its clear message there. With items on, the item gauge (`drawItemGauge()`) is the
+  garbage meter's twin right of the well: gold from the bottom with the pieces towards the next item (`itemGauge` /
+  `itemInterval`, eased, `BoardView.gaugeShown`), full and pulsing while an item waits in NEXT, faint while the side's attack
+  is active (it doesn't fill then), flashing as an item comes (`gaugeFlash`, `ITEM_GAUGE_FLASH`). Item blocks, the item piece
+  and NEXT show each item's icon (`drawItemMark()`, `itemIconAtlas()`).
 - Two players (Multiplayer → Versus Player): the join screen (`MENU_JOIN`, `drawJoin()`) takes a rotate press (`JOIN_ACTIONS`)
   on an input device for player 1, then another device for player 2 (`joinDevice()`, `joined`): `"keys1"` (player 1's
   keys, and the touch controls), `"keys2"` (player 2's keys) or `"pad:N"` (`deviceName()`). Then it asks to confirm (the
@@ -710,7 +716,7 @@ settles is listed as an assumption below.
   it goes off after the first line clear that takes any of them (tetris.wiki: item pieces "behave
   normally when placed"; `scoreClear()` collects it in `firingItems`, `afterClear()` calls
   `useItem()`), the piece's other blocks losing it. The engine marks item blocks, the item piece and
-  the NEXT piece that carries one with a pulsing gold rim (`drawItemMark()`). Rows Free Fall fills
+  the NEXT piece that carries one with the item's icon (`drawItemMark()`, items.js; Sakura's jewels with a pulsing gold rim). Rows Free Fall fills
   clear at once, without score or lines, and blocks an item removes take their item with them (only
   the player's clears set items off): assumptions, the sources don't say.
 - Level 300: a 20G staff roll (TAP's length) with blocks visible; COMPLETE whether survived or not.

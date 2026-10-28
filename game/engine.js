@@ -474,6 +474,13 @@ const goldAlpha = (a) => [GOLD_RGB[0], GOLD_RGB[1], GOLD_RGB[2], a]; // pulsing 
 const COMBO_COLORS = [INK, INK, "#fff1a8", MESSAGE_GOLD, "#ffb35c", "#ff8a4c", "#ff5f4a"]; // by chain length
 const GARBAGE_METER = "#ff4f5e"; // versus: the garbage waiting beside a well
 const ATTACK_LIFE = 50; // frames a "+lines" sent pop-up shows
+// Versus items (items.js): an item block a clear takes bursts in rings of its kind's colour for
+// ITEM_BURST_LIFE frames, out to ITEM_BURST_RADIUS, with ITEM_BURST_SPARKS motes (Heboris's 30-frame
+// burst); the item gauge beside the well fills in gold and flashes ITEM_GAUGE_FLASH frames as an item comes
+const ITEM_BURST_LIFE = 30, ITEM_BURST_RADIUS = 58, ITEM_BURST_SPARKS = 14;
+const ITEM_GAUGE_FLASH = 40;
+// The cut-in: its band's height, the emblem's size and where it sits above the band's centre
+const CUTIN_BAND_H = 150, CUTIN_EMBLEM = 92, CUTIN_EMBLEM_Y = 20;
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
 const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
@@ -511,6 +518,10 @@ class BoardView {
         // the field's shake spring (px, py: before the last step), knocked by its own drops and clears
         this.shake = { x: 0, vx: 0, y: 0, vy: 0, px: 0, py: 0, t: 0 };
         this.gx = 0; // where its board group is drawn, translated in x (Engine.resize())
+        this.itemBursts = []; // versus: item blocks bursting ({ x, y, color, life })
+        this.gaugeShown = 0; // the item gauge as drawn (0..1), eased toward the game's
+        this.gaugeFlash = 0; // frames left of its flash as an item comes
+        this.lastNextItem = null; // the item in the NEXT box at the last frame (a new one flashes the gauge)
     }
 }
 
@@ -584,6 +595,8 @@ class Engine {
         this.blockCache = new Map(); // tileset:size -> sprite atlas
         this.confettiAtlas = null;
         this.glowCache = new Map(); // piece glows (pieceGlow): cells|colour|size -> texture
+        this.itemIcons = new Map(); // versus item icons (itemIconAtlas()): size -> atlas
+        this.itemEmblems = new Map(); // and cut-in emblems (itemEmblem()): item -> texture
         this.sound = new Sound();
     }
 
@@ -651,6 +664,10 @@ class Engine {
         this.blockCache.clear();
         for (const glow of this.glowCache.values()) this.r.releaseTexture(glow.tex);
         this.glowCache.clear();
+        for (const cache of [this.itemIcons, this.itemEmblems]) {
+            for (const sprite of cache.values()) this.r.releaseTexture(sprite.tex);
+            cache.clear();
+        }
         this.clearTextCache();
         for (const view of this.boards()) {
             if (view.messageCache) this.r.releaseTexture(view.messageCache.tex);
@@ -845,6 +862,9 @@ class Engine {
         for (const dir of game.takeBumps()) if (own && this.options.shakeScale) this.bumpShake(dir);
         const fireworks = game.takeFireworks();
         if (own && this.options.effects) for (let n = 0; n < Math.min(fireworks, FIREWORK_MAX_BURSTS); n++) this.launchFirework();
+        for (const burst of game.takeItemBursts()) if (this.options.effects && ITEM_ART[burst.item]) this.burstItem(burst);
+        if (game.nextItem && game.nextItem !== view.lastNextItem && this.options.effects) view.gaugeFlash = ITEM_GAUGE_FLASH;
+        view.lastNextItem = game.nextItem;
         this.board = this.ownBoard;
     }
 
@@ -1690,6 +1710,10 @@ class Engine {
         view.dropFlashes = age(view.dropFlashes);
         view.holdFlash = Math.max(0, view.holdFlash - dt);
         view.enterGlow = Math.max(0, view.enterGlow - dt);
+        view.itemBursts = age(view.itemBursts);
+        view.gaugeFlash = Math.max(0, view.gaugeFlash - dt);
+        const game = view.game, gauge = game.nextItem ? 1 : game.itemGauge / game.itemInterval;
+        view.gaugeShown += (gauge - view.gaugeShown) * (1 - Math.pow(0.8, dt));
     }
 
     // Effects strength for the soft, large ones (backdrop wash, trails): never quite off, and
@@ -1869,6 +1893,79 @@ class Engine {
             this.board.particles.push(this.confettiBit("glow", x, y, Math.cos(angle) * speed, Math.sin(angle) * speed,
                 3 + Math.random() * 3, color, FIREWORK_LIFE - Math.floor(Math.random() * 15)));
         }
+    }
+
+    // An item block a clear took ({ row, col, item }) bursts on this.board: rings (drawItemBursts())
+    // and a ring of motes, in its kind's colour
+    burstItem({ row, col, item }) {
+        const x = this.cellX(col) + CELL / 2, y = this.cellY(row) + CELL / 2;
+        const color = PIECE_COLORS[ITEM_KIND_COLORS[itemKind(item)]].light;
+        this.board.itemBursts.push({ x, y, color, life: ITEM_BURST_LIFE });
+        const count = Math.max(6, Math.round(ITEM_BURST_SPARKS * this.options.effectScale));
+        for (let n = 0; n < count; n++) {
+            const angle = (n + Math.random() * 0.5) / count * Math.PI * 2, speed = 2.2 + Math.random() * 1.6;
+            this.board.particles.push(this.confettiBit("glow", x, y, Math.cos(angle) * speed, Math.sin(angle) * speed,
+                2.5 + Math.random() * 2.5, color, 26 + Math.random() * 12));
+        }
+    }
+
+    // Item blocks bursting: three rings one after another, spreading and thinning as they fade
+    drawItemBursts() {
+        const r = this.r, scale = this.options.effectScale;
+        r.save();
+        r.blendMode = "add";
+        for (const b of this.board.itemBursts) {
+            const k = 1 - b.life / ITEM_BURST_LIFE; // 0..1 through the burst
+            for (let n = 0; n < 3; n++) {
+                const t = (k - n * 0.16) / (1 - n * 0.16);
+                if (t <= 0) continue;
+                const rad = ITEM_BURST_RADIUS * (1 - Math.pow(1 - t, 2.2)) * (1 - n * 0.2) + 4;
+                r.globalAlpha = Math.min(1, scale) * (1 - t) * (n ? 0.55 : 0.9);
+                r.shape(b.x - rad, b.y - rad, rad * 2, rad * 2, { radius: rad, stroke: b.color, lineWidth: Math.max(1, 6 * (1 - t)) });
+            }
+            if (k < 0.3) { // a flash where the block was
+                r.globalAlpha = Math.min(1, scale) * (1 - k / 0.3) * 0.8;
+                r.shape(b.x - CELL / 2, b.y - CELL / 2, CELL, CELL, { radius: CELL * 0.16, fill: b.color });
+            }
+        }
+        r.restore();
+    }
+
+    // Item icons (items.js) at one size, pre-rendered at device resolution side by side
+    itemIconAtlas(size) {
+        let atlas = this.itemIcons.get(size);
+        if (atlas) return atlas;
+        const s = this.pixelScale, px = Math.ceil(size * s), gap = 2;
+        const items = Object.keys(ITEM_ART), c = document.createElement("canvas");
+        c.width = items.length * (px + gap);
+        c.height = px;
+        const g = c.getContext("2d"), index = new Map();
+        items.forEach((item, n) => {
+            g.save();
+            g.translate(n * (px + gap), 0);
+            g.scale(s, s);
+            drawItemIcon(g, item, size, s);
+            g.restore();
+            index.set(item, n * (px + gap));
+        });
+        atlas = { tex: this.r.texture(c), index, px };
+        this.itemIcons.set(size, atlas);
+        return atlas;
+    }
+
+    // An item's cut-in emblem (items.js), CUTIN_EMBLEM square, rendered once at device resolution
+    itemEmblem(item) {
+        let emblem = this.itemEmblems.get(item);
+        if (emblem) return emblem;
+        const s = this.pixelScale, size = CUTIN_EMBLEM * 1.4, c = document.createElement("canvas"); // room for its glow
+        c.width = c.height = Math.ceil(size * s);
+        const g = c.getContext("2d");
+        g.scale(s, s);
+        g.translate((size - CUTIN_EMBLEM) / 2, (size - CUTIN_EMBLEM) / 2);
+        drawItemEmblem(g, item, CUTIN_EMBLEM, s);
+        emblem = { tex: this.r.texture(c), size };
+        this.itemEmblems.set(item, emblem);
+        return emblem;
     }
 
     // Confetti: the light styles added together so overlapping bursts bloom, then the solid ones
@@ -2375,17 +2472,30 @@ class Engine {
         r.restore();
     }
 
-    // A block of an item piece (TAP Normal): a pulsing gold rim over it
-    drawItemMark(x, y, size) {
-        const pulse = 0.5 + 0.5 * Math.sin(this.clock / 8);
-        this.r.shape(x + 1.5, y + 1.5, size - 3, size - 3, {
-            radius: size * 0.16, fill: goldAlpha(0.1 + 0.15 * pulse), stroke: goldAlpha(0.55 + 0.45 * pulse), lineWidth: Math.max(1.5, size / 12),
+    // A block that carries an item: a versus item's icon (items.js) with a light pulsing over it in
+    // its kind's colour; anything else (Sakura's jewels) a pulsing gold rim
+    drawItemMark(x, y, size, item) {
+        const r = this.r, pulse = 0.5 + 0.5 * Math.sin(this.clock / 8);
+        if (!ITEM_ART[item]) {
+            r.shape(x + 1.5, y + 1.5, size - 3, size - 3, {
+                radius: size * 0.16, fill: goldAlpha(0.1 + 0.15 * pulse), stroke: goldAlpha(0.55 + 0.45 * pulse), lineWidth: Math.max(1.5, size / 12),
+            });
+            return;
+        }
+        const atlas = this.itemIconAtlas(size);
+        r.image(atlas.tex, x, y, size, size, atlas.index.get(item), 0, atlas.px, atlas.px);
+        r.save();
+        r.blendMode = "add";
+        r.globalAlpha *= 0.15 + 0.3 * pulse;
+        r.shape(x + size * 0.04, y + size * 0.04, size * 0.92, size * 0.92, {
+            radius: size * 0.14, stroke: PIECE_COLORS[ITEM_KIND_COLORS[itemKind(item)]].light, lineWidth: Math.max(1.5, size / 10),
         });
+        r.restore();
     }
 
     // Draw a piece (rotation 0) centred on cx/cy, with a game's shapes and colours if given; item:
-    // it carries an item (drawItemMark); flash (0..1): lit up as a hard-dropped piece is
-    drawPieceCentered(type, cx, cy, size, style = "locked", game = null, item = false, flash = 0, grey = false) {
+    // the item it carries (drawItemMark); flash (0..1): lit up as a hard-dropped piece is
+    drawPieceCentered(type, cx, cy, size, style = "locked", game = null, item = null, flash = 0, grey = false) {
         if (!type) return;
         const cells = (game ? game.pieceCells : SRS_CELLS)[type][0];
         const color = grey ? PIECE_GREY : game ? game.palette[type] : type;
@@ -2398,7 +2508,7 @@ class Engine {
             const x = ox + (j - minC) * size, y = oy + (i - minR) * size;
             this.drawBlock(color, x, y, size, style);
             if (flash > 0) this.drawBlockFlash(color, x, y, size, flash);
-            if (item) this.drawItemMark(x, y, size);
+            if (item) this.drawItemMark(x, y, size, item);
         }
     }
 
@@ -2823,10 +2933,12 @@ class Engine {
         if (m.rx || m.ry || m.dx || m.dy || m.dz) this.drawBoardInMotion(m);
         else this.drawBoard(); // straight onto the screen, pixel-sharp
         this.drawParticles();  // confetti flies off the field: never tilted
+        if (view.itemBursts.length) this.drawItemBursts();
         if (this.layout.compact) this.drawCompactPanels();
         else this.drawSidePanels();
         if (match) {
             if (game.sendsGarbage) this.drawGarbageMeter(game);
+            if (game.itemsOn) this.drawItemGauge(view);
             this.drawAttackPopups(match.popups[side]);
             if (match.duo) this.drawPlayerTag("PLAYER " + (side + 1), deviceName(match.devices[side]));
             else this.drawPlayerTag(side ? "BOT" : "PLAYER", side ? "LV " + match.level : "");
@@ -2879,6 +2991,27 @@ class Engine {
             if (h <= 2) break;
             r.shape(x, y - h + 1, METER_W, h - 2, { radius: 3, fill: GARBAGE_METER });
             y -= h;
+        }
+    }
+
+    // The item gauge, right of a board's well (the garbage meter's twin): it fills in gold from the
+    // bottom with the pieces towards the next item, full and pulsing while an item waits in the NEXT
+    // box, faint while the side's attack is active on the other side (it doesn't fill then), and
+    // flashes as an item comes (gaugeFlash)
+    drawItemGauge(view) {
+        const r = this.r, game = view.game, x = BOARD_X + BOARD_W + 8 + METER_GAP;
+        r.shape(x, this.boardY, METER_W, this.boardH, { radius: 3, fill: "rgba(244,236,220,0.06)" });
+        const h = this.boardH * clamp(view.gaugeShown, 0, 1);
+        const pulse = game.nextItem ? 0.5 + 0.5 * Math.sin(this.clock / 6) : 0;
+        const alpha = game.attacking() ? 0.35 : 0.75 + 0.25 * pulse;
+        if (h > 2) r.shape(x, this.boardY + this.boardH - h, METER_W, h, { radius: 3, fill: goldAlpha(alpha) });
+        for (let k = 1; k < 4; k++) r.rect(x, this.boardY + this.boardH * k / 4, METER_W, 1, "rgba(4,5,14,0.6)"); // quarters
+        if (view.gaugeFlash > 0) {
+            r.save();
+            r.blendMode = "add";
+            r.globalAlpha = view.gaugeFlash / ITEM_GAUGE_FLASH * Math.min(1, this.options.effectScale) * (0.6 + 0.4 * Math.sin(view.gaugeFlash * 0.8));
+            r.shape(x - 3, this.boardY - 3, METER_W + 6, this.boardH + 6, { radius: 5, fill: MESSAGE_GOLD });
+            r.restore();
         }
     }
 
@@ -2975,7 +3108,8 @@ class Engine {
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
                 this.drawLights(game.getCellColor(i, j), this.cellX(j), y, CELL);
-                if (game.getCellItem(i, j)) this.drawItemMark(this.cellX(j), y, CELL); // TAP Normal's item pieces
+                const item = game.getCellItem(i, j); // versus items, TAP Normal's, Sakura's jewels
+                if (item) this.drawItemMark(this.cellX(j), y, CELL, item);
             }
             r.globalAlpha = 1;
         }
@@ -3003,7 +3137,7 @@ class Engine {
             r.globalAlpha = lockLeft;
             this.drawBlock(color, x, y, CELL, "active");
             r.globalAlpha = 1;
-            if (game.pieceItem) this.drawItemMark(x, y, CELL);
+            if (game.pieceItem) this.drawItemMark(x, y, CELL, game.pieceItem);
         }
         r.restore();
 
@@ -3198,7 +3332,7 @@ class Engine {
         if (game.nextCount > 0) {
             this.label("NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
             this.panel(RIGHT_X, this.boardY + 18, SIDE_W, 110);
-            this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game, !!game.nextItem);
+            this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game, game.nextItem);
         }
         // the rest of the rule set's preview, tighter when there are more than two
         // (none for TAP's single next piece)
@@ -3256,7 +3390,7 @@ class Engine {
         if (game.nextCount > 0) {
             this.label("NEXT", rightX, top, sideW, 10, 3);
             this.panel(rightX, top + 12, sideW, box);
-            this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game, !!game.nextItem);
+            this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game, game.nextItem);
         }
         const rest = game.nextCount - 1;
         if (rest > 0) {
@@ -3293,18 +3427,49 @@ class Engine {
         r.restore();
     }
 
-    // A versus attack item's cut-in on the side it hit, while that side stands still: the item's name
-    // sliding in on a band across the well in gold, then fading
+    // A versus attack item's cut-in on the side it hit, while that side stands still: a band opening
+    // across the well in the item's colour, its emblem (items.js) popping in with a ring spreading
+    // behind it, its name sliding in under it, then all fading
     drawCutIn(game) {
-        const r = this.r, cy = this.bandY();
+        const r = this.r, cy = this.bandY(), item = game.cutInItem;
         const t = clamp(1 - (game.cutIn - this.tickPhase) / VS_CUTIN_FRAMES, 0, 1);
         const fadeIn = Math.min(1, t / 0.2), fadeOut = Math.min(1, (1 - t) / 0.2);
-        const gold = PIECE_COLORS[tetO].light;
+        const art = ITEM_ART[item], color = PIECE_COLORS[art ? art.color : tetO].light;
+        const open = 1 - Math.pow(1 - Math.min(1, t / 0.15), 3);
+        const cx = BOARD_X + BOARD_W / 2, ey = cy - CUTIN_EMBLEM_Y;
         r.save();
-        r.globalAlpha = Math.min(fadeIn, fadeOut);
-        this.drawBand(cy, 70, gold);
+        r.globalAlpha = fadeOut;
+        this.drawBand(cy, Math.max(4, CUTIN_BAND_H * open), color);
+        if (art) {
+            const fx = this.options.effectScale, ring = clamp((t - 0.08) / 0.45, 0, 1);
+            if (fx && ring > 0 && ring < 1) { // spreading behind the emblem
+                const rad = CUTIN_EMBLEM * (0.45 + 0.75 * (1 - Math.pow(1 - ring, 2)));
+                r.save();
+                r.blendMode = "add";
+                r.globalAlpha = fadeOut * (1 - ring) * 0.8 * Math.min(1, fx);
+                r.shape(cx - rad, ey - rad, rad * 2, rad * 2, { radius: rad, stroke: color, lineWidth: 2 + 6 * (1 - ring) });
+                r.restore();
+            }
+            const pop = clamp((t - 0.04) / 0.2, 0, 1);
+            if (pop > 0) { // in with an overshoot, flashing white as it lands
+                const back = 1 + 2.70158 * Math.pow(pop - 1, 3) + 1.70158 * Math.pow(pop - 1, 2);
+                const emblem = this.itemEmblem(item), size = emblem.size * back;
+                r.globalAlpha = fadeOut * pop;
+                r.image(emblem.tex, cx - size / 2, ey - size / 2, size, size);
+                if (pop < 1 && fx) {
+                    r.save();
+                    r.blendMode = "add";
+                    r.globalAlpha = fadeOut * (1 - pop) * 0.7;
+                    r.image(emblem.tex, cx - size / 2, ey - size / 2, size, size);
+                    r.restore();
+                }
+            }
+        }
+        const name = item || "", room = BOARD_W - 24;
+        const size = Math.min(26, Math.floor(26 * room / this.measureText(name, 26, 900, 2)));
         const slide = (1 - fadeIn) * (1 - fadeIn) * 90; // from the right
-        this.text(game.cutInItem || "", BOARD_X + BOARD_W / 2 + slide, cy, { size: 28, weight: 900, color: gold, align: "center", spacing: 2 });
+        r.globalAlpha = Math.min(fadeIn, fadeOut);
+        this.text(name, cx + slide, art ? cy + CUTIN_BAND_H / 2 - 30 : cy, { size, weight: 900, color, align: "center", spacing: 2 });
         r.restore();
     }
 
