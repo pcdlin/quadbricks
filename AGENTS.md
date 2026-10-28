@@ -592,6 +592,8 @@ settles is listed as an assumption below.
   - Laser: a column deleted.
   - ↑ Del Field: the stack's upper half deleted (half its rows, rounded up, as ↓ Del Field).
   - Del Even: every other row from the bottom deleted (the second, fourth, ...).
+  - Roll Roll: for 3 pieces, each turns counter-clockwise by itself right after it enters and every 30 frames after, in
+    grey (the guide; `getPieceColor()`).
   - Mirror Block: the field turned left to right now and after each of the next two pieces (`mirrorPieces`); garbage sent
     meanwhile waits for its end (`mirrorGarbage`), and a perfect clear ends it (the guide).
   - 180° Field: the top row of the stack swapped with the bottom one, and so on.

@@ -1642,6 +1642,11 @@ function tgmVersus(Base) {
             this.lockCells = this.curPieceCells();
         }
 
+        // Roll Roll's pieces are grey (the guide)
+        getPieceColor() {
+            return this.hitting("ROLL ROLL") ? 8 : super.getPieceColor();
+        }
+
         // 2+ lines send their garbage; the goal ends the round (the rows collapse first, as the round
         // stops here)
         scoreClear(n, rows) {

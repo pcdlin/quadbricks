@@ -74,6 +74,7 @@ const VS_ITEMS = {
     "LASER": { weight: 250, attack: true },
     "↑ DEL FIELD": { weight: 250 },
     "DEL EVEN": { weight: 150 },
+    "ROLL ROLL": { weight: 150, attack: true, pieces: 3 },
     "MIRROR BLOCK": { weight: 150, attack: true },
     "X-RAY": { weight: 150, attack: true, pieces: 4 }, // pieces: Heboris's
     "180° FIELD": { weight: 100, attack: true },
@@ -752,6 +753,8 @@ class RuleGame {
             if (C(ROTR_PUSH)) this.rotate(1);
             if (C(ROT180_PUSH) && this.rot180) this.rotate(2);
         }
+        // Roll Roll: the piece turns counter-clockwise by itself right after it enters, then every 30 frames (the guide)
+        if (this.hitting("ROLL ROLL") && !this.spawnedThisFrame && (this.activeTime - 2) % 30 === 0) this.rotate(-1);
 
         this.entering = this.spawnedThisFrame && !this.moveOnSpawn;
         if (this.entering) {

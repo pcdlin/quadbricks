@@ -3126,6 +3126,22 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         [sent.map(a => [a.lines, a.rows.length, new Set(a.rows.map(r => r.indexOf(0))).size, a.rows[0].filter(v => !v).length])], [[[2, 2, 1, 1]]]);
 }
 {
+    // Roll Roll: for 3 pieces, grey and turning counter-clockwise right after entering, then every 30 frames (the guide)
+    const [a, d] = versusPair(tgmTap, 5, 0, { items: true });
+    clearField(d);
+    d.receiveGarbage({ item: "ROLL ROLL" });
+    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    d.gravity = 0; // keep it in the air
+    place(d, tetT, 0, 5, 3); // as it enters (activeTime 0): its first frame comes next
+    d.activeTime = 1;
+    const turns = [d.curPiece_rotation];
+    for (let f = 0; f < 31; f++) { d.advanceFrame(0); if (f === 0 || f === 29 || f === 30) turns.push(d.curPiece_rotation); }
+    const grey = d.getPieceColor();
+    for (let k = 0; k < 3; k++) d.takeItems();
+    check("Roll Roll: the other side's pieces turn counter-clockwise right after entering and every 30 frames, in grey, for 3 pieces",
+        [turns, grey, a.attacking(), d.getPieceColor() === d.palette[d.curPiece_type]], [[0, 3, 3, 2], 8, false, true]);
+}
+{
     // an attack item's active time: the other side stands still for its cut-in; the attacker's gauge doesn't fill and its
     // own items wait until the attack is over (the guide); garbage sent during Mirror Block waits for its end, which a
     // perfect clear brings
