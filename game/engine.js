@@ -227,8 +227,8 @@ const QUICK_PLAY = [
     { name: "NES A-Type", ruleset: "NES", mode: "A-Type", accent: tetJ, desc: "From level 0, faster every 10 lines" },
 ].map(item => ({ ...item, modeItem: RULESETS.find(r => r.name === item.ruleset).modes.find(m => m.name === item.mode) }));
 const OPTIONS_ITEMS = [
-    { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS },
-    { name: "Gamepad", desc: "Change each gamepad's buttons", accent: tetI, screen: MENU_GAMEPAD },
+    { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS, bindings: true },
+    { name: "Gamepad", desc: "Change each gamepad's buttons", accent: tetI, screen: MENU_GAMEPAD, bindings: true },
     { name: "Visuals", desc: "Block style, scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
@@ -1079,6 +1079,11 @@ class Engine {
         return this.gameGoesOn() ? [CONTINUE_ITEM, RESTART_ITEM, ...MAIN_ITEMS] : [RESTART_ITEM, ...MAIN_ITEMS];
     }
 
+    // The Options items: no Keybinds or Gamepad with the touch controls
+    optionsItems() {
+        return this.touch.enabled ? OPTIONS_ITEMS.filter(item => !item.bindings) : OPTIONS_ITEMS;
+    }
+
     // The game can be resumed: it isn't over, or it is a match not yet decided (NES: the other side
     // plays on after one tops out)
     gameGoesOn() {
@@ -1360,7 +1365,7 @@ class Engine {
             [MENU_QUICK]: { pos: "quickpos", count: () => QUICK_PLAY.length, back: MENU_SINGLE },
             [MENU_RULES]: { pos: "rulesetpos", count: () => RULESETS.length, back: MENU_SINGLE },
             [MENU_MODES]: { pos: "menupos", count: () => RULESETS[this.rulesetpos].modes.length, back: MENU_RULES },
-            [MENU_OPTIONS]: { pos: "optionspos", count: () => OPTIONS_ITEMS.length, back: MENU_MAIN },
+            [MENU_OPTIONS]: { pos: "optionspos", count: () => this.optionsItems().length, back: MENU_MAIN },
             [MENU_CONTROLS]: { pos: "controlspos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_GAMEPAD]: { pos: "padpos", count: () => this.gamepad.connected ? KEY_ACTIONS.length + 2 : 1, back: MENU_OPTIONS },
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
@@ -1418,7 +1423,7 @@ class Engine {
                     this.setuppos = 0;
                     this.menuScroll[MENU_SETUP] = { at: 0, target: 0 };
                 } else if (this.menuStep === MENU_MAIN || this.menuStep === MENU_OPTIONS || this.menuStep === MENU_SINGLE) {
-                    const items = this.menuStep === MENU_MAIN ? this.mainItems() : this.menuStep === MENU_SINGLE ? SINGLE_ITEMS : OPTIONS_ITEMS;
+                    const items = this.menuStep === MENU_MAIN ? this.mainItems() : this.menuStep === MENU_SINGLE ? SINGLE_ITEMS : this.optionsItems();
                     const next = items[pos].screen;
                     this.menuStep = next;
                     // the start lists remember their place
@@ -2709,7 +2714,7 @@ class Engine {
             }
             case MENU_OPTIONS:
                 heading("OPTIONS");
-                this.drawMenuList(OPTIONS_ITEMS, this.optionspos, listTop);
+                this.drawMenuList(this.optionsItems(), this.optionspos, listTop);
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
             case MENU_VISUALS: {
