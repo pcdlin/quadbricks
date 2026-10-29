@@ -183,13 +183,14 @@ const LINES_WELL_ALPHA = 0.7; // the well's fill (0.94 with effects off, as Gall
 // Hologram: the foil's light bands (their offset at rest, and how far a degree of the field's tilt about
 // the x and y axes moves them, logical units), the share of the Holo blocks' sheen hue its hue takes (so
 // they turn together), how fast it turns by itself (degrees per second, with the animated backdrop), its
-// extra strength on a line clear's pulse, and the rosette behind the well (centre, radius, amplitude)
+// extra strength on a line clear's pulse, and the foil's facets (the centre they fade out from, a facet's
+// width, the distance they start fading at)
 const HOLOGRAM_BAND_REST = 260;
 const HOLOGRAM_BAND_PER_DEG = [40, 54];
 const HOLOGRAM_HUE_SHARE = 0.6;
 const HOLOGRAM_DRIFT = 3;
 const HOLOGRAM_SWELL = 1.2;
-const HOLOGRAM_ROSETTE = [400, 370, 290, 26];
+const HOLOGRAM_FACETS = [400, 370, 22, 330];
 const HOLOGRAM_SPAN = 0.8; // degrees of hue per logical unit along a spectrum edge
 const HOLOGRAM_FILL = "rgba(10,12,17,0.72)";
 const HOLOGRAM_EDGE = "rgba(200,210,230,0.10)";
@@ -623,7 +624,7 @@ const BACKGROUNDS = {
         },
         foil(e) {
             const st = this.state(e);
-            return { hue: st.hue, band: st.band, time: st.time, strength: e.softEffectScale() * (1 + HOLOGRAM_SWELL * e.pulse), rosette: HOLOGRAM_ROSETTE };
+            return { hue: st.hue, band: st.band, time: st.time, strength: e.softEffectScale() * (1 + HOLOGRAM_SWELL * e.pulse), facets: HOLOGRAM_FACETS };
         },
         glowRgb() { return hslToRgb(220, 40, 78); },
         frame(e, [x, y, w, h], exam) {

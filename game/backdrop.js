@@ -107,24 +107,29 @@ void main() {
 
 // Holographic foil (the Hologram background), added over the picture: a rainbow sheen whose hue runs
 // along a diagonal, lit by two soft bands of light across it (their place moves with uFoil.y); fine
-// grooves along the same diagonal that catch the light in the bands; and a rosette of interlaced
-// sinusoidal rings round uRosette's centre (like a hologram sticker's guilloche), in the sheen's
-// colours. The grooves fade out where they would be under 3 pixels apart. Antialiased like the field lines.
+// grooves along the same diagonal that catch the light in the bands; and facets, a honeycomb of small
+// hexagonal mirrors each turned its own way, so as the bands move some flash while the rest stay dark (glitter
+// foil), fading out away from uFacets's centre. The grooves fade out where they would be under 3 pixels apart.
+// Antialiased like the field lines.
 const FOIL_FS = `
 precision highp float;
 uniform vec2 uSize;
 uniform vec3 uBgView;    // scale, offset x, offset y of the backdrop's logical view
 uniform vec4 uFoil;      // hue (degrees), band offset (logical), strength, time (seconds)
-uniform vec4 uRosette;   // centre x, y, radius, amplitude (logical)
+uniform vec4 uFacets;    // centre x, y, a facet's width, the distance they start fading at (logical)
 const float GROOVES = 4.0;   // logical units between grooves
-const float WAVES = 7.0;     // the rosette's waves per turn
-const int RINGS = 10;        // its interlaced rings
+const float FLASH = 0.09;    // a facet's light at its brightest
+const float EDGE = 0.012;    // the facets' edges, and their extra in the light bands
+const float EDGE_LIT = 0.03;
 vec3 spectrum(float h) {     // HSL at 85 % saturation, 56 % lightness
     vec3 rgb = clamp(abs(mod(h / 60.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
     return 0.56 + 0.748 * (rgb - 0.5);
 }
 float hairline(float distPx, float width) {
     return clamp(0.5 * max(width, 1.0) + 0.5 - distPx, 0.0, 1.0) * min(width, 1.0);
+}
+float hash(vec2 v) {
+    return fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453);
 }
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
@@ -139,16 +144,18 @@ void main() {
     float groove = hairline(abs(fract(along / GROOVES + 0.5) - 0.5) * GROOVES * s, s * 0.8);
     groove *= smoothstep(3.0, 5.0, GROOVES * s);
     c += mix(vec3(1.0), sheen, 0.5) * groove * (0.02 + 0.08 * lit);
-    vec2 o = (q - uRosette.xy) / vec2(1.05, 0.88);
-    float r = length(o), a = atan(o.y, o.x);
-    float ring = 0.0;
-    for (int k = 0; k < RINGS; k++) {
-        float ph = WAVES * a + 6.2832 * float(k) / float(RINGS);
-        float rk = uRosette.z + uRosette.w * sin(ph);
-        float slope = WAVES * uRosette.w * cos(ph) / max(r, 1.0);
-        ring = max(ring, hairline(abs(r - rk) / sqrt(1.0 + slope * slope) * s, s * 0.8));
-    }
-    c += spectrum(uFoil.x + degrees(a) * 0.5 + q.x * 0.3) * ring * (0.08 + 0.1 * lit);
+    // the facet this pixel is on (the nearer centre of two offset rectangular lattices) and where in it
+    float size = uFacets.z;
+    vec2 hs = vec2(1.0, 1.7320508), hp = q / size;
+    vec2 ha = mod(hp, hs) - 0.5 * hs, hb = mod(hp - 0.5 * hs, hs) - 0.5 * hs;
+    vec2 hl = dot(ha, ha) < dot(hb, hb) ? ha : hb, id = hp - hl;
+    float turn = hash(id), shine = hash(id + 17.0);
+    float hex = max(abs(hl.x), dot(abs(hl), vec2(0.5, 0.8660254)));
+    float edge = hairline((0.5 - hex) * size * s, s * 0.6);
+    float facing = pow(0.5 + 0.5 * cos(turn * 6.2832 + uFoil.y * 0.025 + dot(id * size, vec2(0.8, 0.6)) * 0.004), 8.0);
+    float flash = facing * (0.25 + lit) * (0.6 + 0.4 * shine);
+    float keep = 1.0 - smoothstep(uFacets.w, uFacets.w * 1.9, length(q - uFacets.xy));
+    c += spectrum(uFoil.x + along * 0.32 + turn * 140.0) * (flash * FLASH + edge * (EDGE + EDGE_LIT * lit)) * keep;
     gl_FragColor = vec4(c * uFoil.z, 0.0);
 }`;
 
@@ -386,7 +393,7 @@ class GLBackdrop {
     //   nebula: 0 or how much noise shapes the blobs into nebulae, time (seconds, their flow),
     //   shade: [[x, y, r]] (backdrop logical, at most 2) circles in front of the blobs,
     //   lines: null or {spacing, ink: [r, g, b, a], bumps: [{x, y, r, amp, rgb}]} (same),
-    //   foil: null or {hue, band, strength, time, rosette: [x, y, radius, amplitude]} (same),
+    //   foil: null or {hue, band, strength, time, facets: [x, y, width, fade]} (same),
     //   water: null or {rgb, strength, time},
     //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
     //   glows: up to two of {rect: [x0, y0, x1, y1], sigma, rgb, a}, a board glow each }
@@ -448,14 +455,14 @@ class GLBackdrop {
 
         // Holographic foil
         if (scene.foil) {
-            const { hue, band, strength, time, rosette } = scene.foil;
+            const { hue, band, strength, time, facets } = scene.foil;
             p = this.foil;
             gl.useProgram(p.prog);
             gl.blendFunc(gl.ONE, gl.ONE);
             gl.uniform2f(p.u("uSize"), width, height);
             gl.uniform3fv(p.u("uBgView"), scene.bgView);
             gl.uniform4f(p.u("uFoil"), hue, band, strength, time);
-            gl.uniform4f(p.u("uRosette"), rosette[0], rosette[1], rosette[2], rosette[3]);
+            gl.uniform4f(p.u("uFacets"), facets[0], facets[1], facets[2], facets[3]);
             this.drawFullscreen(p);
         }
 
