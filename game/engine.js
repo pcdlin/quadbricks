@@ -3034,12 +3034,12 @@ class Engine {
             case MENU_CUSTOM:
             case MENU_VISUALS: {
                 const top = TALL_TOP; // heading in the tagline's place: leaves room for the hint
-                const custom = this.menuStep === MENU_CUSTOM;
+                const custom = step === MENU_CUSTOM;
                 heading(custom ? "OPTIONS  ·  CUSTOMIZATION" : "OPTIONS  ·  VISUALS", INK_DIM, top - 16);
                 const items = this.settingCards(custom ? CUSTOM_ITEMS : VISUAL_ITEMS);
                 // Tighter cards leave room for the hint; the list shows VISUALS_LIST_H of them,
                 // scrolled to keep the selection in view
-                this.drawScrolledList(this.menuStep, items, top);
+                this.drawScrolledList(step, items, top);
                 hintY = Math.max(hintY, top + (custom ? menuListHeight(items, VISUALS_ROWS.rowH, VISUALS_ROWS.gap) : VISUALS_LIST_H) + 22);
                 hint = "← →  CHANGE      ESC  BACK";
                 break;
