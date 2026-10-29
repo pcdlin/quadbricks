@@ -56,7 +56,7 @@ when WebGL is unavailable).
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
 | `test/rules.test.js` | Spec checks for the rule sets (~600 checks; the debug menu's setups too, every one in every mode). |
-| `test/options.test.js` | The options: `Options.bind()` keeps every key one player's and every action with a key. |
+| `test/options.test.js` | The options: `Options.bind()` keeps every key one player's and every action with a key; the themes; `SectionRecords`. |
 | `test/bot.test.js` | The bot: the probe leaves the game alone, plans are carried out as planned, every level plays every rule set without sticking. Each check is a `job()` (seeding its own games), run in worker threads heaviest first (`cost`), its output printed in file order; checks over several jobs' results go in a `summary()`, run once they are all done. |
 | `tools/bot-bench.js` | Not in the test run: `node tools/bot-bench.js [level] [games] [mode filter] [profile]` plays modes headless (seeded) and prints each one's own result (`record()`), for tuning the bot. |
 
@@ -177,7 +177,7 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   the abbreviation spelled out and one line on what it does, drawn under the compact card list for
   the selected item. `options.handling` goes to `RuleGame` in `initGame()`; changes made while a
   game is paused apply at once (`applyHandling()` → `RuleGame.setHandling()`).
-- The Customization screen lists the theme and what it chooses (`CUSTOM_ITEMS`; the user's request): Theme (`options.theme`), Background (`options.background`; a change of either redraws the backdrop picture), Block style, Confetti, Clear burst and Drop trail, drawn like the Visuals screen. The Visuals screen lists Scale, Effects, Row flash, Backdrop, 3D tilt, Drop shake and Stack border (`VISUAL_ITEMS`). Background, Block style, Confetti, Clear burst and Drop trail (`THEMED_IDS`) have a Follow theme value first (`FOLLOW_THEME`, `"theme"`, the default), shown as "Theme (its choice)"; code reads them through `options.look(id)`, never the field. The Block
+- The Customization screen lists the theme and what it chooses (`CUSTOM_ITEMS`; the user's request): Theme (`options.theme`), Background (`options.background`; a change of either redraws the backdrop picture), Block style, Confetti, Clear burst and Drop trail, drawn like the Visuals screen. The Visuals screen lists Scale, Effects, Row flash, Backdrop, 3D tilt, Drop shake, Stack border and Section times (`VISUAL_ITEMS`). Background, Block style, Confetti, Clear burst and Drop trail (`THEMED_IDS`) have a Follow theme value first (`FOLLOW_THEME`, `"theme"`, the default), shown as "Theme (its choice)"; code reads them through `options.look(id)`, never the field. The Block
   style card (`preview: true`) is a little taller (`menuRowHeight()`) and shows the style's preview at
   its right, beside the name (`drawTilesetPreview()`: one active, one locked and one ghost block in
   different colours, `PREVIEW_BLOCKS`, at their size in the well). The list is
@@ -264,7 +264,16 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   shows FIRST RECORD / NEW BEST / BEST … in the game over banner, the best for the current choices
   under the mode list and setup cards (`drawBest()`), and in a game the best for its setup
   (`recordSetup`) at the foot of the NEXT column, its parts stacked when the line doesn't fit
-  (`drawGameBest()`). `Records` (`options.js`) keeps them.
+  (`drawGameBest()`; shrunk to one line instead with section times on). `Records` (`options.js`) keeps them.
+- Section times (Options → Visuals → Section times, `options.splits`, on by default; `showsSplits()`: the TGM modes with
+  `hasSplits`, not in a match): during a game a strip under the preview, the clear messages under it
+  (`drawSectionStrip()`): the section being played with its running time in the colour of the ST tier it would earn now
+  (`MEDAL_COLORS`, `splitTier()`), the last section's gap to its record (`splitGap()`, `SPLIT_AHEAD` / `SPLIT_BEHIND`) and
+  a bar of the sections, each in the tier it earned, the one played filling, COOL and REGRET dots under it (`SPLIT_MARKS`).
+  Once the game is over a table takes NEXT's place (`drawSectionTable()`): every section's time, its gap to the record it
+  had, the total and, once every section has one, the sum of the records. The records: `SectionRecords` (`options.js`),
+  each section's best per record key, passed to the game as `sectionBest` (`initGame()`, for the ST medal and the gaps)
+  and updated when it ends (`submitRecord()`; not test games; `sectionNew`).
 - Event queues the engine drains every frame: `takeClearedCells()` (confetti),
   `takeHardDropCells()` (landing flash and trail; cells a clear removed come with `cleared: true`, in the row they landed in; TAP Master's sonic drop adds them too, so it gets the trail, and knocks the field down like a hard drop (`sonicDistance`), without the drop sound), `takeBumps()` (directions the piece was pushed against the left/right border, once per press; nudges the field via `bumpShake()`, same Drop shake option), `takeSoftLandings()` (the rows a soft drop brought the piece down, per landing on the stack: `softRows` in `applyGravity()`, the 1989 games' `softRun`; knocks the field via `kickShake(rows, SHAKE_SOFT)`), `takeItemBursts()` (`{ row, col, item }` per item block a clear took, in `collectItems()`: the engine bursts each, `burstItem()`, `drawItemBursts()`: three rings and a ring of glow motes in its kind's colour, `ITEM_BURST_*`, Heboris's 30-frame burst; none with effects Off), `takeHolds()` (a count of holds, IHS included; the engine flashes the held piece in the HOLD box with a soft glow of its light colour around it, `holdFlash`, `HOLD_FLASH_LIFE`, `pieceGlow()` (`HOLD_GLOW_*`, a blurred silhouette cached per piece, colour and size), and the piece coming into play from it glows the same way in the well until it locks (`enterGlow`, `drawPieceGlow()`), none with effects Off, fainter at Subtle), `takeSounds()` (`"move"`, `"rotate"`, `"lock"`,
   `"harddrop"`, `"sonic"`, `"zap"` (an item used, `useItem()`), `"count"` (each countdown digit), `"go"` (first active frame), `"clear<n>"` or `"clear<n>c<chain>"`), plus `actions`
@@ -1115,10 +1124,11 @@ export names explicitly at the top; add new globals there, and new rule files to
 
 ## Storage
 
-- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), keys2 (player 2's, the same without sound), pad (the same actions, lists of pad controls: the table of pads not set up on their own), pads ({ [padKey]: such a table }, each gamepad's own), theme, background, tileset, confetti, effects, backdrop, rings (`"theme"` in background, tileset, confetti, rings and trail: Follow theme; saved before themes, without background, the theme was the background, and a tileset, confetti or rings at its old default, flat, sparks or flare, becomes Follow theme), flash, tilt, shake (an index into `SHAKE_LEVELS`; a saved true/false from before becomes Normal/Off), trail (a saved true/false from before becomes Follow theme/Off), border, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
+- `localStorage["quadbricks.options"]`: `{ keys: {left, right, soft, hard, rotl, rotr, rot180, hold, sound} (lists of key codes; an action missing from saved keys keeps its default), keys2 (player 2's, the same without sound), pad (the same actions, lists of pad controls: the table of pads not set up on their own), pads ({ [padKey]: such a table }, each gamepad's own), theme, background, tileset, confetti, effects, backdrop, rings (`"theme"` in background, tileset, confetti, rings and trail: Follow theme; saved before themes, without background, the theme was the background, and a tileset, confetti or rings at its old default, flat, sparks or flare, becomes Follow theme), flash, tilt, shake (an index into `SHAKE_LEVELS`; a saved true/false from before becomes Normal/Off), trail (a saved true/false from before becomes Follow theme/Off), border, splits, scale, das, arr, dcd, sdf, ghost, dropGuard, previews, holdPiece, irs, ihs, rot180 }` (`sdf` null = Instant, JSON has no Infinity).
 - `localStorage["quadbricks.muted"]`: `"1"` / `"0"`.
 - `localStorage["quadbricks.exams"]`: `{ world, classic: { qualified, demotion, history } }`, TGM3 Master's
   qualified grade per rule (grade indices into `TGM_GRADE_LABELS`, history latest first, at most 7).
+- `localStorage["quadbricks.sections"]`: `{ [recordKey]: [frames or null per section] }`, the TGM modes' best section times.
 - `localStorage["quadbricks.records"]`: `{ [recordKey]: { key: [numbers], text } }`, the best result per
   game setup (invalid entries are dropped on load).
 - Every access is wrapped in try/catch; the game must work with storage unavailable.

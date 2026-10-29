@@ -324,6 +324,7 @@ const VISUAL_ITEMS = [
     { id: "tilt", name: "3D tilt", accent: tetI, fx: true },
     { id: "shake", name: "Drop shake", accent: tetS, fx: true },
     { id: "border", name: "Stack border", accent: tetZ },
+    { id: "splits", name: "Section times", accent: tetO },
 ];
 // Guideline handling; help: the name spelled out and what it does, shown under the list for the selection
 const HANDLING_ITEMS = [
@@ -695,6 +696,12 @@ const ITEM_BURST_LIFE = 30, ITEM_BURST_RADIUS = 58, ITEM_BURST_SPARKS = 14;
 const ITEM_GAUGE_FLASH = 40;
 // The cut-in: its band's height, the emblem's size and where it sits above the band's centre
 const CUTIN_BAND_H = 150, CUTIN_EMBLEM = 92, CUTIN_EMBLEM_Y = 20;
+// Section times (the TGM modes, Options → Visuals → Section times): a section's time is drawn in the
+// colour of the ST medal tier it earns against its record (none, bronze, silver, gold), its gap to the
+// record ahead or behind; COOL and REGRET sections marked
+const MEDAL_COLORS = [INK_DIM, "#d9965c", "#dce3ea", MESSAGE_GOLD]; // by tier
+const SPLIT_AHEAD = "#86e3a8", SPLIT_BEHIND = "#ff8f7f";
+const SPLIT_MARKS = { cool: "#7fd8ff", regret: "#ff5f4a" };
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
 const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
@@ -790,6 +797,8 @@ class Engine {
         this.flyReplay = null; // the debug menu's fly-in again: game frames into it, null when not flying
         this.options = new Options();
         this.records = new Records();
+        this.sections = new SectionRecords(); // the TGM modes' best section times
+        this.sectionNew = []; // the game just ended: by section, whether it set the record
         this.exams = new Exams(); // TGM3 Master's qualified grades
         this.recordNote = null; // the game over banner's record line
         this.recordNew = false;
@@ -1360,6 +1369,8 @@ class Engine {
         // on duoDevices), both sides of the mode's rule set and dealt from one seed
         const versus = variant === "versus";
         if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
+        else gameOptions.sectionBest = this.sections.get(this.recordSetup); // the ST medal's records
+        this.sectionNew = [];
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
         const hadMatch = !!this.match;
         // the other board's clear message goes with it (clearEffects() releases the player's)
@@ -2030,6 +2041,7 @@ class Engine {
         if (this.examRule && !game.tested) {
             this.exams.set(this.examRule, tgm3ExamAfter(this.exams.get(this.examRule), game.exam, game.earnedGradeIndex()));
         }
+        if (game.hasSplits && !game.tested) this.sectionNew = this.sections.submit(this.recordSetup, game.splits);
         const result = game.record();
         if (!result) return;
         if (game.tested) { // a test setup or the debug menu changed it
@@ -2054,19 +2066,126 @@ class Engine {
 
     // In a game, at the foot of the NEXT column: the best result for this setup, if any
     // (after the game ends, the one it may just have set); its parts (grade · level · time) stacked
-    // when the whole doesn't fit in w
-    drawGameBest(x, w, bottom, compact) {
+    // when the whole doesn't fit in w, unless oneLine (shrunk instead: the section times take the room).
+    // Returns the top of what it drew (its label), or bottom.
+    drawGameBest(x, w, bottom, compact, oneLine = false) {
         const best = this.records.get(this.recordSetup);
-        if (!best) return;
+        if (!best) return bottom;
         const max = compact ? 11 : 16, lineH = compact ? 14 : 20;
-        const lines = this.measureText(best.text, max, 800, 1) > w ? best.text.split(" · ") : [best.text];
+        const lines = !oneLine && this.measureText(best.text, max, 800, 1) > w ? best.text.split(" · ") : [best.text];
         lines.forEach((s, n) => {
             const size = Math.min(max, Math.floor(max * w / this.measureText(s, max, 800, 1)));
             this.text(s, x, bottom - (lines.length - 1 - n) * lineH, { size, weight: 800, color: MESSAGE_GOLD, spacing: 1 });
         });
         const top = bottom - (lines.length - 1) * lineH;
-        if (compact) this.label("BEST", x, top - 24, w, 9, 2);
-        else this.label("BEST", x, top - 38, w);
+        const labelY = top - (compact ? 24 : 38);
+        if (compact) this.label("BEST", x, labelY, w, 9, 2);
+        else this.label("BEST", x, labelY, w);
+        return labelY;
+    }
+
+    // -----------------------------------
+    // SECTION TIMES (the TGM modes)
+
+    // Whether the board's game shows its section times: a single-player TGM mode with them, the option on
+    showsSplits() {
+        const game = this.board.game;
+        return this.options.splits && !!game.hasSplits && !this.match;
+    }
+
+    // The ST medal tier a section's time earns against its record (rules-tgm.js's judgeSectionTime)
+    splitTier(time, record) {
+        return MEDAL_ST_SLACK.reduce((tier, slack, i) => time < record + slack ? i + 1 : tier, 0);
+    }
+
+    // A time's gap to its record: −1.82, +3.10, +1:02.40
+    splitGap(frames) {
+        const sign = frames < 0 ? "−" : "+", abs = Math.abs(frames);
+        const cs = Math.floor((abs % 60) * 100 / 60), s = Math.floor(abs / 60);
+        const secs = s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : String(s);
+        return `${sign}${secs}.${String(cs).padStart(2, "0")}`;
+    }
+
+    // During a game, under the preview (top: its label's line; returns its foot): the section being
+    // played and its running time, in the tier it would earn now, the last section's gap to its
+    // record, and a bar of the sections, each in the tier it earned (the one played filling as its
+    // levels go by)
+    drawSectionStrip(x, w, top, compact) {
+        const game = this.board.game, count = game.sectionCount();
+        const running = game.splitSection < count && !game.isGameOver();
+        const barH = compact ? 4 : 6, gap = compact ? 2 : 3;
+        const barY = top + (compact ? 30 : 38), bottom = barY + barH + 5; // COOL and REGRET marks under the bar
+        const section = Math.min(game.splitSection, count - 1);
+        this.label(compact ? "SECTION" : `SECTION ${section * 100}`, x, top, w, compact ? 9 : 12, compact ? 2 : 4);
+        const size = compact ? 13 : 20, y = top + (compact ? 18 : 24);
+        if (running) {
+            const time = game.frames - game.splitStart;
+            const color = MEDAL_COLORS[this.splitTier(time, game.sectionRecord(section))];
+            this.textRun(game.formatTime(time), x, y, { size, weight: 800, color: color === INK_DIM ? INK : color, spacing: 1 });
+        } else {
+            const total = game.splits.reduce((a, t) => a + (t || 0), 0);
+            this.textRun(game.formatTime(total), x, y, { size, weight: 800, color: INK, spacing: 1 });
+        }
+        // the last section finished: its gap to the record it had
+        const last = game.splits.length - 1;
+        if (!compact && last >= 0 && game.splits[last] && game.sectionBest[last]) {
+            const delta = game.splits[last] - game.sectionBest[last];
+            const s = this.splitGap(delta), gapSize = 13;
+            this.textRun(s, x + w - this.measureText(s, gapSize, 800, 0), y + 3, { size: gapSize, weight: 800, color: delta < 0 ? SPLIT_AHEAD : SPLIT_BEHIND });
+        }
+        const segW = (w - gap * (count - 1)) / count;
+        for (let i = 0; i < count; i++) {
+            const sx = x + i * (segW + gap), time = game.splits[i];
+            this.r.shape(sx, barY, segW, barH, { radius: barH / 2, fill: INK_FAINT });
+            if (time) {
+                this.r.shape(sx, barY, segW, barH, { radius: barH / 2, fill: MEDAL_COLORS[this.splitTier(time, game.sectionRecord(i))] });
+            } else if (running && i === game.splitSection) {
+                const part = Math.min(1, (game.level - i * 100) / Math.min(100, game.maxLevel - i * 100));
+                if (part > 0) this.r.shape(sx, barY, Math.max(barH, segW * part), barH, { radius: barH / 2, fill: INK_DIM });
+            }
+            const mark = SPLIT_MARKS[game.splitMarks[i]];
+            if (mark) this.r.shape(sx + segW / 2 - 1.5, barY + barH + 2, 3, 3, { radius: 1.5, fill: mark });
+        }
+        return bottom;
+    }
+
+    // After a game ends, in place of NEXT (from top to bottom): every section's time in the tier it
+    // earned, its gap to the record it had (COOL and REGRET marked), then the total and, once every
+    // section has one, the sum of the records
+    drawSectionTable(x, w, top, bottom, compact) {
+        const game = this.board.game, count = game.sectionCount();
+        this.label("SECTIONS", x, top, w, compact ? 9 : 12, compact ? 2 : 4);
+        const footer = compact ? 0 : 56;
+        const rowH = Math.min(compact ? 16 : 26, Math.floor((bottom - top - 22 - footer) / count));
+        const size = compact ? 10 : Math.min(16, rowH - 8), small = compact ? 8 : Math.min(12, rowH - 10);
+        const timeX = x + (compact ? 22 : 38);
+        for (let i = 0; i < count; i++) {
+            const y = top + 22 + rowH * (i + 0.5), time = game.splits[i];
+            this.text(String(i * 100).padStart(3, "0"), x, y, { size: small, weight: 700, color: INK_DIM, spacing: 1 });
+            if (!time) {
+                this.text("—", timeX, y, { size, weight: 800, color: INK_FAINT });
+                continue;
+            }
+            this.text(game.formatTime(time), timeX, y, { size, weight: 800, color: MEDAL_COLORS[this.splitTier(time, game.sectionRecord(i))], spacing: 1 });
+            const mark = SPLIT_MARKS[game.splitMarks[i]];
+            if (mark) this.r.shape(compact ? x + w - 4 : timeX - 8, y - 2, 4, 4, { radius: 2, fill: mark }); // compact: no room before the time
+            const record = game.sectionBest[i];
+            if (!compact && record) {
+                const delta = time - record;
+                this.text(this.splitGap(delta), x + w, y, { size: small, weight: 800, color: delta < 0 ? SPLIT_AHEAD : SPLIT_BEHIND, align: "right" });
+            }
+        }
+        if (compact) return;
+        const y = top + 22 + rowH * count + 18;
+        const total = game.splits.reduce((a, t) => a + (t || 0), 0);
+        this.text("TOTAL", x, y, { size: 11, weight: 700, color: INK_DIM, spacing: 2 });
+        this.text(game.formatTime(total), x + w, y, { size: 14, weight: 800, color: INK, align: "right", spacing: 1 });
+        const records = this.sections.get(this.recordSetup);
+        if (records.length === count && records.every(t => t)) {
+            const sum = records.reduce((a, t) => a + t, 0);
+            this.text("BEST SUM", x, y + 22, { size: 11, weight: 700, color: INK_DIM, spacing: 2 });
+            this.text(game.formatTime(sum), x + w, y + 22, { size: 14, weight: 800, color: MESSAGE_GOLD, align: "right", spacing: 1 });
+        }
     }
 
     // -----------------------------------
@@ -4318,6 +4437,12 @@ class Engine {
             this.text("QUADBRICKS", LEFT_X, this.boardY + this.boardH - 6, { size: 18, weight: 900, color: INK_DIM, spacing: 5 });
         }
 
+        // Section times: a strip under the preview, the clear messages under it; once the game is over
+        // a table in place of NEXT
+        const splits = this.showsSplits(), table = splits && game.isGameOver() && game.splits.length > 0;
+        const bestTop = this.drawGameBest(RIGHT_X, SIDE_W, this.boardY + this.boardH - 6, false, splits); // level with the wordmark
+        if (table) return this.drawSectionTable(RIGHT_X, SIDE_W, this.boardY + 4, bestTop - 24, false);
+
         // NEXT (none with the Guideline's previews off)
         if (game.nextCount > 0) {
             this.label("NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
@@ -4327,10 +4452,8 @@ class Engine {
         // the rest of the rule set's preview, tighter when there are more than two
         // (none for TAP's single next piece)
         const rest = game.nextCount - 1;
-        // versus: the lines a clear sent show under its message (popupTop, drawAttackPopups)
-        if (game.nextCount === 0) {
-            this.board.popupTop = this.drawClearMessage(this.boardY + 20);
-        } else if (rest > 0) {
+        let below = this.boardY + 20; // where the clear messages start
+        if (rest > 0) {
             const spacing = rest > 2 ? 50 : 80, size = rest > 2 ? 16 : 18;
             const listH = rest * spacing + 10;
             this.panel(RIGHT_X, this.boardY + 140, SIDE_W, listH);
@@ -4338,11 +4461,13 @@ class Engine {
                 const y = this.boardY + 140 + 5 + spacing / 2 + (n - 1) * spacing;
                 this.drawPieceCentered(game.rnd_get_queue(n), RIGHT_X + SIDE_W / 2, y, size, "locked", game);
             }
-            this.board.popupTop = this.drawClearMessage(this.boardY + 140 + listH + 30);
-        } else {
-            this.board.popupTop = this.drawClearMessage(this.boardY + 140 + 20);
+            below = this.boardY + 140 + listH + 30;
+        } else if (game.nextCount > 0) {
+            below = this.boardY + 140 + 20;
         }
-        this.drawGameBest(RIGHT_X, SIDE_W, this.boardY + this.boardH - 6, false); // level with the wordmark
+        if (splits) below = this.drawSectionStrip(RIGHT_X, SIDE_W, below - 4, false) + 26;
+        // versus: the lines a clear sent show under its message (popupTop, drawAttackPopups)
+        this.board.popupTop = this.drawClearMessage(below);
     }
 
     // The compact layout's columns: HOLD over the stats on the left, NEXT and the rest of the
@@ -4377,20 +4502,26 @@ class Engine {
             y += 46;
         });
 
+        const splits = this.showsSplits(), table = splits && game.isGameOver() && game.splits.length > 0;
+        const bestTop = this.drawGameBest(rightX, sideW, this.boardY + this.boardH - 6, true);
+        if (table) return this.drawSectionTable(rightX, sideW, top, bestTop - 18, true);
+
         if (game.nextCount > 0) {
             this.label("NEXT", rightX, top, sideW, 10, 3);
             this.panel(rightX, top + 12, sideW, box);
             this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game, game.nextItem);
         }
         const rest = game.nextCount - 1;
+        let below = top + 12 + box; // the preview's foot
         if (rest > 0) {
             const spacing = rest > 2 ? 42 : 50, listTop = top + 12 + box + 10;
             this.panel(rightX, listTop, sideW, rest * spacing + 8);
             for (let n = 1; n <= rest; n++) {
                 this.drawPieceCentered(game.rnd_get_queue(n), rightX + sideW / 2, listTop + 4 + spacing * (n - 0.5), rest > 2 ? 11 : 12, "locked", game);
             }
+            below = listTop + rest * spacing + 8;
         }
-        this.drawGameBest(rightX, sideW, this.boardY + this.boardH - 6, true);
+        if (splits) this.drawSectionStrip(rightX, sideW, below + 22, true);
         this.drawClearMessage(this.boardY + this.boardH * 0.3);
     }
 

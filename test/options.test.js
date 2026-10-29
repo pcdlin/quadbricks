@@ -1,4 +1,4 @@
-// Checks for the player's options (game/options.js): the key bindings of the two players, and the themes.
+// Checks for the player's options (game/options.js): the key bindings of the two players, the themes, and section records.
 // Usage: node test/options.test.js
 const fs = require("fs");
 const vm = require("vm");
@@ -94,6 +94,13 @@ for (const [id, theme] of Object.entries(THEMES)) {
     check("Saved with themes: every setting as saved", [p.theme, looks(p)], ["lines", ["space", "flat", "paper", "flare", "chalk"]]);
     check("A drop trail saved on or off: following the theme, or off",
         [loaded({ theme: "undersea", trail: true }).look("trail"), loaded({ theme: "undersea", trail: false }).look("trail")], ["water", "off"]);
+}
+{
+    const r = new SectionRecords(); // no storage here: kept in memory
+    const first = r.submit("tap", [3000, 3200]);
+    const second = r.submit("tap", [3100, 3100, , 2900]);
+    check("Section records: each section's best kept, a section never finished none; which ones the game set",
+        [first, second, r.get("tap"), r.get("other")], [[true, true], [false, true, null, true], [3000, 3100, null, 2900], []]);
 }
 console.log(failures ?`\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

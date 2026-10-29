@@ -6,6 +6,7 @@
 const OPTIONS_STORAGE_KEY = "quadbricks.options";
 const RECORDS_STORAGE_KEY = "quadbricks.records";
 const EXAMS_STORAGE_KEY = "quadbricks.exams";
+const SECTIONS_STORAGE_KEY = "quadbricks.sections";
 
 // Rebindable actions, in the order the controls screen lists them
 const KEY_ACTIONS = [
@@ -190,7 +191,7 @@ const OPTION_CHOICES = {
     sdf: SDF_STEPS,
     previews: frameRange(0, GUIDELINE_NEXT),
 };
-const OPTION_TOGGLES = ["flash", "backdrop", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
+const OPTION_TOGGLES = ["flash", "backdrop", "border", "splits", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
 
 // Index i stepped by dir through n values: wraps around, or stops at the ends (held keys)
 function stepIndex(i, dir, n, wrap = true) {
@@ -215,6 +216,7 @@ class Options {
         this.flash = true; // cleared rows light up as they go (only with effects on)
         this.trail = FOLLOW_THEME; // trails behind hard drops and rows falling into clears, an id from TRAIL_STYLES (only with effects on)
         this.border = false; // TGM-style light outline around the settled stack
+        this.splits = true; // the TGM modes' section times beside the well
         this.scale = 1; // the largest that fits
         Object.assign(this, GUIDELINE_HANDLING);
         try {
@@ -459,6 +461,38 @@ class Records {
             localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(this.best));
         } catch (e) { /* not remembered */ }
         return true;
+    }
+}
+
+// The TGM modes' section records: the best time of each section (frames, null for one never
+// finished) per game setup (Engine.recordKey), from RuleGame's splits. Kept in localStorage.
+class SectionRecords {
+    constructor() {
+        this.best = {};
+        try {
+            const saved = JSON.parse(localStorage.getItem(SECTIONS_STORAGE_KEY) || "{}");
+            for (const [setup, times] of Object.entries(saved)) {
+                if (Array.isArray(times) && times.every(t => t === null || (Number.isInteger(t) && t > 0))) this.best[setup] = times;
+            }
+        } catch (e) { /* storage unavailable or corrupt: no records */ }
+    }
+
+    get(setup) {
+        return this.best[setup] || [];
+    }
+
+    // A game's splits: each section faster than its record (or the first) is kept; returns, by
+    // section, whether it was
+    submit(setup, splits) {
+        const best = this.get(setup).slice();
+        const better = splits.map((t, i) => t > 0 && !(best[i] <= t));
+        if (!better.some(Boolean)) return better;
+        better.forEach((b, i) => { if (b) best[i] = splits[i]; });
+        this.best[setup] = Array.from(best, t => t ?? null);
+        try {
+            localStorage.setItem(SECTIONS_STORAGE_KEY, JSON.stringify(this.best));
+        } catch (e) { /* not remembered */ }
+        return better;
     }
 }
 
