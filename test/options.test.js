@@ -75,11 +75,11 @@ const looks = o => THEMED_IDS.map(id => o.look(id));
 {
     const o = new Options();
     check("At first every themed setting follows the first theme",
-        [o.theme, THEMED_IDS.map(id => o[id]), looks(o)], ["space", THEMED_IDS.map(() => FOLLOW_THEME), ["space", "flat", "sparks", "flare"]]);
+        [o.theme, THEMED_IDS.map(id => o[id]), looks(o)], ["space", THEMED_IDS.map(() => FOLLOW_THEME), ["space", "flat", "sparks", "flare", "streak"]]);
     o.theme = "gallery";
-    check("Another theme brings its background, block style, confetti and clear burst", looks(o), ["gallery", "neon", "sparks", "rings"]);
+    check("Another theme brings its background, block style, confetti, clear burst and drop trail", looks(o), ["gallery", "neon", "sparks", "rings", "streak"]);
     o.tileset = "gem";
-    check("A setting of its own wins over the theme's", looks(o), ["gallery", "gem", "sparks", "rings"]);
+    check("A setting of its own wins over the theme's", looks(o), ["gallery", "gem", "sparks", "rings", "streak"]);
 }
 for (const [id, theme] of Object.entries(THEMES)) {
     check(`Theme ${id}'s choices are values of their settings`,
@@ -89,9 +89,11 @@ for (const [id, theme] of Object.entries(THEMES)) {
     const o = loaded({ theme: "lines", tileset: "flat", confetti: "glow", rings: "flare" });
     check("Saved before themes: the theme stays, settings left at their old defaults follow it",
         [o.theme, o.background, o.tileset, o.confetti, o.rings, looks(o)],
-        ["lines", FOLLOW_THEME, FOLLOW_THEME, "glow", FOLLOW_THEME, ["lines", "chalk", "glow", "flare"]]);
+        ["lines", FOLLOW_THEME, FOLLOW_THEME, "glow", FOLLOW_THEME, ["lines", "chalk", "glow", "flare", "streak"]]);
     const p = loaded({ theme: "lines", background: "space", tileset: "flat", confetti: FOLLOW_THEME, rings: "flare" });
-    check("Saved with themes: every setting as saved", [p.theme, looks(p)], ["lines", ["space", "flat", "paper", "flare"]]);
+    check("Saved with themes: every setting as saved", [p.theme, looks(p)], ["lines", ["space", "flat", "paper", "flare", "streak"]]);
+    check("A drop trail saved on or off: following the theme, or off",
+        [loaded({ theme: "undersea", trail: true }).look("trail"), loaded({ theme: "undersea", trail: false }).look("trail")], ["water", "off"]);
 }
 console.log(failures ?`\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

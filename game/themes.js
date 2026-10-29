@@ -1027,14 +1027,14 @@ const BACKGROUNDS = {
 };
 const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order
 
-// Themes (Options → Customization → Theme): a background with the block style, confetti and clear burst that
-// go with it, which those settings take while they are on Follow theme (Options.look())
+// Themes (Options → Customization → Theme): a background with the block style, confetti, clear burst and drop
+// trail that go with it, which those settings take while they are on Follow theme (Options.look())
 const THEMES = {
-    space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare" },
-    gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "sparks", rings: "rings" },
-    lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare" },
-    hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "stars", rings: "ripple" },
-    undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple" },
+    space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare", trail: "streak" },
+    gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "sparks", rings: "rings", trail: "streak" },
+    lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare", trail: "streak" },
+    hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "stars", rings: "ripple", trail: "streak" },
+    undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple", trail: "water" },
 };
 const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order; the first is the default
 
@@ -1047,7 +1047,7 @@ function rgbToHsl([r, g, b]) {
     return [h * 60, s * 100, l * 100];
 }
 
-// A soft bubble (Undersea's) of radius rad in a colour (CSS), its sprite reaching
+// A soft bubble (Undersea's, and the Water drop trail's) of radius rad in a colour (CSS), its sprite reaching
 // BUBBLE_REACH times the radius
 const BUBBLE_REACH = 2.2;
 function drawBubble(r, x, y, rad, color, alpha) {

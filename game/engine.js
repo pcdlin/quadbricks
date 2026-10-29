@@ -300,7 +300,7 @@ const QUICK_PLAY = [
 const OPTIONS_ITEMS = [
     { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS, bindings: true },
     { name: "Gamepad", desc: "Change each gamepad's buttons", accent: tetI, screen: MENU_GAMEPAD, bindings: true },
-    { name: "Customization", desc: "Theme, background, block style, confetti and clear burst", accent: tetO, screen: MENU_CUSTOM },
+    { name: "Customization", desc: "Theme, background, block style, confetti, burst, trail", accent: tetO, screen: MENU_CUSTOM },
     { name: "Visuals", desc: "Scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
@@ -314,6 +314,7 @@ const CUSTOM_ITEMS = [
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "confetti", name: "Confetti", accent: tetS, fx: true },
     { id: "rings", name: "Clear burst", accent: tetZ, fx: true },
+    { id: "trail", name: "Drop trail", accent: tetT, fx: true },
 ];
 const VISUAL_ITEMS = [
     { id: "scale", name: "Scale", accent: tetL },
@@ -322,7 +323,6 @@ const VISUAL_ITEMS = [
     { id: "backdrop", name: "Backdrop", accent: tetJ, fx: true },
     { id: "tilt", name: "3D tilt", accent: tetI, fx: true },
     { id: "shake", name: "Drop shake", accent: tetS, fx: true },
-    { id: "trail", name: "Drop trail", accent: tetT, fx: true },
     { id: "border", name: "Stack border", accent: tetZ },
 ];
 // Guideline handling; help: the name spelled out and what it does, shown under the list for the selection
@@ -519,6 +519,15 @@ const STACK_BORDER_COLOR = "rgba(222,222,232,0.9)";
 const DROP_TRAIL_GROW = 4; // frames the hard-drop trail takes to reach down to the piece
 const DROP_TRAIL_FADE = 8; // frames a drop trail then takes to fade out, all at once
 const DROP_TRAIL_ALPHA = 0.38; // peak opacity of the trail
+// The Water trail (Drop trail: Water): the streak drawn in slices WATER_SLICE high, each swung sideways (up to
+// WATER_SWING) and shimmering with ripples running up it, its colour taken WATER_TINT_SHARE of the way to
+// WATER_TINT; and the bubbles a hard drop lets go along it (per row fallen per column at Normal effects, at most
+// WATER_BUBBLES_MAX a column), rising and swaying, lingering after the streak is gone
+const WATER_SLICE = 4, WATER_SWING = 1.6;
+const WATER_TINT = [0.62, 0.95, 1], WATER_TINT_SHARE = 0.12;
+const WATER_BUBBLES_PER_ROW = 0.45, WATER_BUBBLES_MAX = 8;
+const WATER_BUBBLE_LIFE = [40, 80], WATER_BUBBLE_RISE = [0.35, 0.85], WATER_BUBBLE_SIZE = [2, 4.5];
+const WATER_BUBBLE_ALPHA = 1;
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 
 // The staff roll's credits, made up: [role, ...names], or a heading alone. They scroll up behind
@@ -657,6 +666,7 @@ class BoardView {
         this.particles = [];
         this.flashes = [];
         this.dropFlashes = [];
+        this.trailBubbles = []; // the Water trail's ({ row, col, dx, up, r, v, phase, life, maxLife, index })
         this.holdFlash = 0; // frames left of the held piece's flash
         this.enterGlow = 0; // and of the glow round the piece entering from hold (gone when it locks)
         this.creditsAlpha = 0; // the staff roll's credits: 1 while they run, fading after a top out in the roll
@@ -1016,6 +1026,7 @@ class Engine {
         if (own && cleared.length && this.options.shakeScale && !game.inRollStart()) this.clearShake(cleared, game.chain);
         const dropped = game.takeHardDropCells().map(toColor);
         if (dropped.length && this.options.effects) view.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 });
+        if (dropped.length && this.options.effects && this.options.look("trail") === "water") this.waterBubbles(view, dropped);
         for (const s of game.takeSounds()) {
             if (own) this.sound.play(s);
             // from the event, not the dropped cells: those a clear removed aren't listed
@@ -1716,6 +1727,7 @@ class Engine {
             case "background": return BACKGROUNDS[value].name;
             case "tileset": return TILESETS[value].name;
             case "confetti": return CONFETTI_STYLES[CONFETTI_STYLE_IDS.indexOf(value)].name;
+            case "trail": return TRAIL_STYLES[TRAIL_STYLE_IDS.indexOf(value)].name;
             case "das": return frameValue(o.das);
             case "arr": return o.arr ? frameValue(o.arr) : "Instant";
             case "dcd": return o.dcd ? frameValue(o.dcd) : "Off";
@@ -2064,6 +2076,11 @@ class Engine {
         const age = (effects) => effects.filter(e => (e.life -= dt) > 0);
         view.flashes = age(view.flashes);
         view.dropFlashes = age(view.dropFlashes);
+        for (const b of view.trailBubbles) {
+            b.up += b.v * dt;
+            b.phase += 0.1 * dt;
+        }
+        view.trailBubbles = age(view.trailBubbles);
         view.holdFlash = Math.max(0, view.holdFlash - dt);
         view.enterGlow = Math.max(0, view.enterGlow - dt);
         view.itemBursts = age(view.itemBursts);
@@ -2102,10 +2119,23 @@ class Engine {
     // one area, inset only at its outer sides.
     drawTrails(streaks) {
         const r = this.r, [inset] = this.trailFit(), scale = DROP_TRAIL_ALPHA * this.softEffectScale();
+        const water = this.options.look("trail") === "water";
         const streak = (s, x, w, ya, yb) => {
-            const color = parseColor(this.tileLight(s.index));
-            r.globalAlpha = scale * s.alpha;
-            r.shape(x, ya, w, yb - ya, { fill: [[color[0], color[1], color[2], 0], color], fillY: [s.y0, s.y1] });
+            let color = parseColor(this.tileLight(s.index));
+            if (!water) {
+                r.globalAlpha = scale * s.alpha;
+                r.shape(x, ya, w, yb - ya, { fill: [[color[0], color[1], color[2], 0], color], fillY: [s.y0, s.y1] });
+                return;
+            }
+            // Water: in slices swung sideways by their height alone (so neighbouring columns and their joins swing
+            // together) and shimmering with ripples running up
+            color = color.map((c, i) => i < 3 ? c + (WATER_TINT[i] - c) * WATER_TINT_SHARE : c);
+            const fill = [[color[0], color[1], color[2], 0], color], fillY = [s.y0, s.y1], t = this.clock;
+            for (let y = ya; y < yb; y += WATER_SLICE) {
+                const h = Math.min(WATER_SLICE, yb - y);
+                r.globalAlpha = scale * s.alpha * (0.75 + 0.3 * Math.sin(y * 0.21 + t * 0.35));
+                r.shape(x + WATER_SWING * Math.sin(y * 0.09 + t * 0.25), y, w, h, { fill, fillY });
+            }
         };
         // whichever way up (Rev): the span drawn, and the part of it above the blocks
         const span = (s, yEnd) => [Math.min(s.y0, yEnd), Math.max(s.y0, yEnd)];
@@ -2212,6 +2242,41 @@ class Engine {
             streaks.push({ col: cell.col, y0, y1, index: cell.type, yEnd: y0 + (yFar - y0) * grown, alpha });
         }
         this.drawTrails(streaks);
+    }
+
+    // The Water trail's bubbles for a hard drop's cells (dropped) on view: along each column's fall, more for a
+    // longer one, rising from where they start
+    waterBubbles(view, dropped) {
+        const top = new Map(); // col -> its topmost landed cell
+        for (const cell of dropped) if (!top.has(cell.col) || cell.row < top.get(cell.col).row) top.set(cell.col, cell);
+        const span = (range) => range[0] + Math.random() * (range[1] - range[0]);
+        for (const cell of top.values()) {
+            const from = Math.max(cell.row - cell.dist, view.game.wellTop);
+            if (cell.dist <= 0 || cell.row <= from) continue;
+            const n = Math.min(WATER_BUBBLES_MAX, Math.round((cell.row - from) * WATER_BUBBLES_PER_ROW * this.options.effectScale) || 1);
+            for (let k = 0; k < n; k++) {
+                const life = span(WATER_BUBBLE_LIFE);
+                view.trailBubbles.push({
+                    row: from + Math.random() * (cell.row - from), col: cell.col, dx: (Math.random() - 0.5) * CELL * 0.6, up: 0,
+                    r: span(WATER_BUBBLE_SIZE), v: span(WATER_BUBBLE_RISE), phase: Math.random() * 6.28, life, maxLife: life, index: cell.type,
+                });
+            }
+        }
+    }
+
+    // The Water trail's bubbles on this.board, added: each fades in, sways as it rises and fades out at the end of
+    // its life and near the top of the well
+    drawWaterBubbles() {
+        const r = this.r, top = this.cellY(this.rev ? HEIGHT - 1 : this.wellTop), scale = Math.min(1, WATER_BUBBLE_ALPHA * this.softEffectScale());
+        r.save();
+        r.blendMode = "add";
+        for (const b of this.board.trailBubbles) {
+            const y = this.cellY(b.row) + CELL / 2 - b.up;
+            const fade = Math.min(1, (b.maxLife - b.life) / 6, b.life / 20, (y - top) / 12);
+            if (fade <= 0) continue;
+            drawBubble(r, this.cellX(b.col) + CELL / 2 + b.dx + 1.5 * Math.sin(b.phase), y, b.r, this.tileLight(b.index), scale * fade);
+        }
+        r.restore();
     }
 
     // Line clear delay: a streak above each column of the falling stack, from where it
@@ -3556,9 +3621,10 @@ class Engine {
         }
 
         // Draw Field
-        if (this.options.effects && this.options.trail) {
+        if (this.options.effects && this.options.look("trail") !== "off") {
             this.drawLineDropTrails(firstRow);
             for (const f of this.board.dropFlashes) this.drawDropTrail(f);
+            if (this.board.trailBubbles.length) this.drawWaterBubbles();
         }
         for (let i = firstRow; i < HEIGHT; i++) {
             const y = this.cellY(i + game.getDropOffset(i, this.tickPhase)); // rows fall into place during a line clear

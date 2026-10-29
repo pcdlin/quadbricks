@@ -137,6 +137,15 @@ const CONFETTI_STYLES = [
 ];
 const CONFETTI_STYLE_IDS = CONFETTI_STYLES.map(s => s.id);
 
+// Drop trails behind hard drops and rows falling into clears (Engine.drawTrails()): off, a streak of light, or
+// water (a rippling streak that lets bubbles go)
+const TRAIL_STYLES = [
+    { id: "off", name: "Off" },
+    { id: "streak", name: "Streak" },
+    { id: "water", name: "Water" },
+];
+const TRAIL_STYLE_IDS = TRAIL_STYLES.map(s => s.id);
+
 // Guideline handling (Options → Guideline), passed to RuleGame; defaults in GUIDELINE_HANDLING.
 // Frames for DAS, ARR and DCD; soft drop factors (Infinity: instant)
 const frameRange = (min, max) => Array.from({ length: max - min + 1 }, (_, i) => min + i);
@@ -145,7 +154,7 @@ const HANDLING_IDS = ["das", "arr", "sdf", "dcd", "ghost", "dropGuard", "preview
 
 // The value of a setting a theme can choose (THEMES) that takes the theme's choice (Options.look())
 const FOLLOW_THEME = "theme";
-const THEMED_IDS = ["background", "tileset", "confetti", "rings"];
+const THEMED_IDS = ["background", "tileset", "confetti", "rings", "trail"];
 
 // Settings stepped through a list of values (Options → Visuals and Guideline), and on/off settings
 const OPTION_CHOICES = {
@@ -155,6 +164,7 @@ const OPTION_CHOICES = {
     confetti: [FOLLOW_THEME, ...CONFETTI_STYLE_IDS],
     effects: EFFECT_LEVELS.map((_, i) => i), // 0 off, then an index into EFFECT_LEVELS
     rings: [FOLLOW_THEME, ...RING_MODE_IDS],
+    trail: [FOLLOW_THEME, ...TRAIL_STYLE_IDS],
     tilt: TILT_LEVELS.map((_, i) => i),
     shake: SHAKE_LEVELS.map((_, i) => i),
     scale: SCALE_STEPS,
@@ -164,7 +174,7 @@ const OPTION_CHOICES = {
     sdf: SDF_STEPS,
     previews: frameRange(0, GUIDELINE_NEXT),
 };
-const OPTION_TOGGLES = ["flash", "backdrop", "trail", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
+const OPTION_TOGGLES = ["flash", "backdrop", "border", "ghost", "dropGuard", "holdPiece", "irs", "ihs", "rot180"];
 
 // Index i stepped by dir through n values: wraps around, or stops at the ends (held keys)
 function stepIndex(i, dir, n, wrap = true) {
@@ -187,7 +197,7 @@ class Options {
         this.tilt = DEFAULT_TILT; // playing field tilt: index into TILT_LEVELS
         this.shake = DEFAULT_SHAKE; // playing field shake on hard drops, clears and bumps: index into SHAKE_LEVELS
         this.flash = true; // cleared rows light up as they go (only with effects on)
-        this.trail = true; // streaks behind hard drops and rows falling into clears (only with effects on)
+        this.trail = FOLLOW_THEME; // trails behind hard drops and rows falling into clears, an id from TRAIL_STYLES (only with effects on)
         this.border = false; // TGM-style light outline around the settled stack
         this.scale = 1; // the largest that fits
         Object.assign(this, GUIDELINE_HANDLING);
@@ -210,6 +220,7 @@ class Options {
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
             if (typeof saved.shake === "boolean") saved.shake = saved.shake ? DEFAULT_SHAKE : 0; // once on/off
+            if (typeof saved.trail === "boolean") saved.trail = saved.trail ? FOLLOW_THEME : "off"; // once on/off
             if (saved.theme && !("background" in saved)) {
                 // Saved before themes: the theme was the background (the same ids), and the block style,
                 // confetti and clear burst left at their defaults then follow it
