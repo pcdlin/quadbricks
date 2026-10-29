@@ -8,7 +8,8 @@
 // - ambient(e): { blobs, orbs, nebula, shade } for the backdrop pass in place of Engine.ambientShapes()
 //   (see GLBackdrop.render(): nebula shapes the blobs with noise, shade hides them behind circles), and
 //   update(e, dt) to move them on (runs in the menus too)
-// - lines(e): the field lines the backdrop pass draws over the picture (GLBackdrop.render())
+// - lines(e): the field lines the backdrop pass draws over the picture (GLBackdrop.render()), or
+//   foil(e): its holographic foil
 // - hueStep: how far a line clear moves the backdrop's hue, as a share of HUE_STEP
 // - glowRgb(e): the board glow's colour, or null for none
 // - frame(e, rect, exam): the well's frame and grid (rect: [x, y, w, h]; exam: a TGM3 promotional exam)
@@ -178,6 +179,23 @@ const LINES_HUE_STEP = 1.5; // how far a clear turns the bumps' colours, as a sh
 const LINES_RULE = "rgba(242,242,242,0.85)";
 const LINES_FILL = "rgba(6,6,7,0.84)";
 const LINES_WELL_ALPHA = 0.7; // the well's fill (0.94 with effects off, as Gallery's goes more solid)
+
+// Hologram: the foil's light bands (their offset at rest, and how far a degree of the field's tilt about
+// the x and y axes moves them, logical units), the share of the Holo blocks' sheen hue its hue takes (so
+// they turn together), how fast it turns by itself (degrees per second, with the animated backdrop), its
+// extra strength on a line clear's pulse, and the rosette behind the well (centre, radius, amplitude)
+const HOLOGRAM_BAND_REST = 260;
+const HOLOGRAM_BAND_PER_DEG = [40, 54];
+const HOLOGRAM_HUE_SHARE = 0.6;
+const HOLOGRAM_DRIFT = 3;
+const HOLOGRAM_SWELL = 1.2;
+const HOLOGRAM_ROSETTE = [400, 370, 290, 26];
+const HOLOGRAM_SPAN = 0.8; // degrees of hue per logical unit along a spectrum edge
+const HOLOGRAM_FILL = "rgba(10,12,17,0.72)";
+const HOLOGRAM_EDGE = "rgba(200,210,230,0.10)";
+const HOLOGRAM_CHROME = "rgba(220,228,242,0.7)";
+const HOLOGRAM_LABEL = "rgba(200,208,224,0.9)";
+const HOLOGRAM_WELL_ALPHA = 0.74; // the well's fill (0.94 with effects off)
 
 const BACKGROUNDS = {
     // Night gallery: deep gradient, soft spotlight, receding floor grid
@@ -554,8 +572,116 @@ const BACKGROUNDS = {
             BACKGROUNDS.lines.stripe(e, cx - 150, 199, 300 + 300 / 7 * 0.34, 4);
         },
     },
+
+    // Hologram: graphite under a holographic foil (GLBackdrop's FOIL_FS) whose rainbow sheen and light
+    // bands follow the field's tilt as the Holo blocks' sheen does; a chrome frame with a rainbow glint,
+    // smoked glass panels and cards with a spectrum along their top
+    hologram: {
+        name: "Hologram",
+        ink: [228 / 255, 233 / 255, 242 / 255],
+        picture(g, x0, y0, x1, y1) {
+            const sky = g.createLinearGradient(0, y0, 0, y1);
+            sky.addColorStop(0, "#0f1015");
+            sky.addColorStop(1, "#090a0f");
+            g.fillStyle = sky;
+            g.fillRect(x0, y0, x1 - x0, y1 - y0);
+            vignette(g, x0, y0, x1, y1, 0.55);
+        },
+        ambient() { return { blobs: [], orbs: [] }; },
+        // The foil's hue and its light bands' place now: they follow the tilt the Holo sheen does
+        // (Engine.updateSheen()); with the animated backdrop line clears turn the hue with the backdrop's,
+        // and the hue drifts and the bands sway by themselves
+        state(e) {
+            const moving = e.options.effects && e.options.backdrop;
+            const t = moving ? e.clock / 60 : 0, sh = e.sheen || { hue: 0, rx: 0, ry: 0 };
+            const st = this.st || (this.st = {});
+            st.time = t;
+            st.hue = sh.hue * HOLOGRAM_HUE_SHARE + (moving ? e.hue - HUE_DEFAULT : 0) + HOLOGRAM_DRIFT * t;
+            st.band = HOLOGRAM_BAND_REST + sh.rx * HOLOGRAM_BAND_PER_DEG[0] + sh.ry * HOLOGRAM_BAND_PER_DEG[1] + 60 * Math.sin(t * 0.15);
+            return st;
+        },
+        foil(e) {
+            const st = this.state(e);
+            return { hue: st.hue, band: st.band, time: st.time, strength: e.softEffectScale() * (1 + HOLOGRAM_SWELL * e.pulse), rosette: HOLOGRAM_ROSETTE };
+        },
+        glowRgb() { return hslToRgb(220, 40, 78); },
+        frame(e, [x, y, w, h], exam) {
+            const r = e.r;
+            r.rect(x, y, w, h, [6 / 255, 7 / 255, 10 / 255, e.options.effects ? HOLOGRAM_WELL_ALPHA : 0.94]); // the foil shows through
+            for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL - 0.5, e.boardY, 1, e.boardH, "rgba(210,220,240,0.05)");
+            r.shape(x, y, w, h, { radius: 0, stroke: exam ? goldAlpha(0.6 + 0.35 * e.pulse) : HOLOGRAM_CHROME, lineWidth: 1.2 });
+            if (exam) return;
+            // a rainbow glint on the top and bottom edges, sliding with the light bands
+            const k = clamp((this.state(e).band - HOLOGRAM_BAND_REST) / 520 + 0.5, 0, 1), gw = 110;
+            this.glint(e, x + k * (w - gw), y - 1, gw, 2);
+            this.glint(e, x + (1 - k) * (w - gw), y + h - 1, gw, 2);
+        },
+        panel(e, x, y, w, h) {
+            e.r.rect(x, y, w, h, HOLOGRAM_FILL);
+            e.r.shape(x, y, w, h, { radius: 0, stroke: HOLOGRAM_EDGE, lineWidth: 1 });
+            this.spectrum(e, x, y, w, 1.5, this.state(e).hue + x * 0.3, 0.85); // panels side by side differ
+        },
+        label(e, s, x, y, w, size, spacing) {
+            e.text(s, x, y, { size, weight: 700, color: HOLOGRAM_LABEL, spacing });
+        },
+        card(e, x, y, w, h, radius, selected, accent) {
+            e.r.shape(x, y, w, h, {
+                radius: 2, lineWidth: 1,
+                fill: selected ? "rgba(28,32,42,0.82)" : "rgba(10,12,17,0.66)",
+                stroke: selected ? "rgba(220,228,245,0.4)" : HOLOGRAM_EDGE,
+            });
+            if (selected) {
+                this.spectrum(e, x, y, w, 2, this.state(e).hue, 0.9);
+                e.r.rect(x + 1, y + 6, 3, h - 12, accent); // down the left edge, clear of the text on tight cards
+            }
+        },
+        // a spectrum in place of the seven colours
+        stripe(e, x, y, w, h) {
+            this.spectrum(e, x, y, w, h, this.state(e).hue, 0.9);
+        },
+        // thin chrome lettering over a spectrum line with a glint sliding along it
+        wordmark(e, cx) {
+            const size = Math.min(74, Math.floor(74 * (e.layout.view[2] - 48) / e.measureText("QUADBRICKS", 74, 300, 18)));
+            e.text("QUADBRICKS", cx, 150, { size, weight: 300, align: "center", spacing: Math.round(size * 18 / 74) });
+            const st = this.state(e), k = clamp((st.band - HOLOGRAM_BAND_REST) / 520 + 0.5, 0, 1);
+            this.spectrum(e, cx - 150, 199, 300, 2, st.hue, 0.9);
+            this.glint(e, cx - 150 + k * 220, 198, 80, 4);
+        },
+        // A spectrum from hue along a strip, HOLOGRAM_SPAN degrees per logical unit (at most a turn)
+        spectrum(e, x, y, w, h, hue, alpha) {
+            const r = e.r;
+            r.save();
+            r.globalAlpha *= alpha;
+            r.image(this.spectra(r)[0], x, y, w, h, (hue % 360 + 360) % 360, 0, Math.min(360, w * HOLOGRAM_SPAN), 1);
+            r.restore();
+        },
+        // A short rainbow glint, fading out at both ends
+        glint(e, x, y, w, h) {
+            e.r.image(this.spectra(e.r)[1], x, y, w, h);
+        },
+        // Their textures, rendered once: two turns of hue (so any turn can be cut from them), and the glint
+        spectra(r) {
+            if (this.tex) return this.tex;
+            const strip = (w, color) => {
+                const c = document.createElement("canvas");
+                c.width = w;
+                c.height = 1;
+                const g = c.getContext("2d");
+                for (let i = 0; i < w; i++) {
+                    g.fillStyle = color(i);
+                    g.fillRect(i, 0, 1, 1);
+                }
+                return r.texture(c);
+            };
+            this.tex = [
+                strip(720, i => `hsl(${i % 360},85%,68%)`),
+                strip(128, i => `hsla(${i / 128 * 300},90%,78%,${Math.sin(Math.PI * (i + 0.5) / 128)})`),
+            ];
+            return this.tex;
+        },
+    },
 };
-const BACKGROUND_IDS = ["space", "gallery", "lines"]; // menu order
+const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram"]; // menu order
 
 // Themes (Options → Customization → Theme): a background with the block style, confetti and clear burst that
 // go with it, which those settings take while they are on Follow theme (Options.look())
@@ -563,8 +689,9 @@ const THEMES = {
     space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare" },
     gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "sparks", rings: "rings" },
     lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare" },
+    hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "stars", rings: "ripple" },
 };
-const THEME_IDS = ["space", "gallery", "lines"]; // menu order; the first is the default
+const THEME_IDS = ["space", "gallery", "lines", "hologram"]; // menu order; the first is the default
 
 // [r, g, b] (0..1) to [h, s, l] (degrees, percent), as hslToRgb() takes them
 function rgbToHsl([r, g, b]) {

@@ -1172,7 +1172,7 @@ class Engine {
         r.end();
     }
 
-    // What the backdrop pass draws: colour wash, drifting lights, field lines, rings and board glow
+    // What the backdrop pass draws: colour wash, drifting lights, field lines or foil, rings and board glow
     backdropScene() {
         const inGame = this.GAMESTATE === STATE_GAME;
         const ambient = this.options.effects && this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
@@ -1206,6 +1206,7 @@ class Engine {
             shade: ambient.shade || [],
             time: this.clock / 60,
             lines: this.background.lines ? this.background.lines(this) : null,
+            foil: this.background.foil ? this.background.foil(this) : null,
             rings,
             ringSigma: 6, // like a shadowBlur of 12
             glows,
@@ -2784,6 +2785,7 @@ class Engine {
         this.sheen = {
             strength: k * k * (3 - 2 * k) * HOLO_ALPHA,
             hue: m.ry * deg * HOLO_HUE_PER_DEG[1] + m.rx * deg * HOLO_HUE_PER_DEG[0],
+            rx: m.rx * deg, ry: m.ry * deg, // the tilt in degrees (the Hologram background follows it too)
         };
         this.sheenColors = this.sheenColors || [];
         this.sheenY = this.sheenY || [0, 0];
