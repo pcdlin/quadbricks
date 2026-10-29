@@ -90,6 +90,7 @@ class TiSakuraGame extends TiGame {
         super(mode, variant);
         this.internalGrading = false;
         this.hasKill = false;
+        this.hasSplits = false; // stages, not sections
         this.maxLevel = SAKURA_MAX_LEVEL;
         this.randomizer = new SakuraSequence();
         this.stage = 0; // index into SAKURA_STAGES

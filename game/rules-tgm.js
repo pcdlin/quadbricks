@@ -138,6 +138,29 @@ const TGM_COOL_SPEEDUP = 100; // a COOL moves the speed level 100 ahead once its
 const TGM_COOL_SHOWN = 82;
 
 // ----------------------------------------------------------
+// Section splits and medals. Every single-player TGM mode but Sakura keeps the time each 100-level
+// section took (splits; the engine shows them and keeps the best of each). Medals (tetris.wiki: TAP's
+// Master and Death, TGM3's Master and Shirase), bronze, silver and gold (tiers 1-3) for: AC perfect
+// clears; ST a section within 10 s of its record, within 5 s, faster (the best tier of any section;
+// NullpoMino's strict comparisons); SK Tetrises; RE (TAP) recoveries, 150 blocks or more in the well,
+// then cleared down to 70 or fewer; RO (TAP) at least 1.2 rotations per piece in a range of levels,
+// each range passed a tier more (as NullpoMino), at most 4 a piece and 3000 a range counted; CO a combo
+// (gradeCombo: clears of 2+ lines in a row, singles keep it). None in the staff roll.
+const TAP_MEDALS = ["AC", "ST", "SK", "RE", "RO", "CO"]; // in the order shown
+const TI_MEDALS = ["AC", "ST", "SK", "CO"];
+const MEDAL_AC = [1, 2, 3]; // perfect clears for each tier
+const MEDAL_RE = [1, 2, 4]; // recoveries
+const MEDAL_CO = [4, 5, 7], MEDAL_CO_BIG = [2, 3, 4];
+// SK, Tetrises: TAP Master, TAP Death, TGM3 Master, Shirase, and Big (TAP's; taken for TGM3 Big too)
+const MEDAL_SK = { tap: [10, 20, 35], death: [5, 10, 17], ti: [15, 25, 40], shirase: [5, 10, 16], big: [1, 2, 4] };
+const MEDAL_ST_SLACK = [10 * 60, 5 * 60, 0]; // frames slower than the record for bronze, silver; gold beats it
+// A section's record before it has one: 1:30 (NullpoMino); TAP Death's 0:42, as its arcade records start
+const SECTION_DEFAULT_BEST = 90 * 60, DEATH_DEFAULT_BEST = 42 * 60;
+const MEDAL_RE_FULL = 150, MEDAL_RE_LOW = 70; // blocks
+const MEDAL_RO_RANGES = [300, 700, 999]; // the ranges' ends
+const MEDAL_RO_AVERAGE = 1.2, MEDAL_RO_PIECE_MAX = 4, MEDAL_RO_RANGE_MAX = 3000;
+
+// ----------------------------------------------------------
 // The secret grade (TGM1, TAP Master and Death, TGM3 Master and Shirase): the ">" pattern built from
 // the bottom, a row with a single hole each, the hole under a block, the holes going from the left
 // wall to the right one at the tenth row and back to the left at the nineteenth, whose hole must
@@ -372,6 +395,31 @@ class TgmGame extends RuleGame {
         this.rollHide = TGM_ROLL_HIDE; // frames until locked blocks hide, by roll
         this.lockTime = null; // per cell, rollFrames when it locked (during the roll)
         this.secretGrade = null; // judged when the game ends (secretGradeLabels), if high enough to show
+
+        // Section splits (none in versus; Sakura turns them off)
+        this.hasSplits = !this.versus;
+        this.splits = []; // frames each finished section took, by section (one the debug menu skipped: none)
+        this.splitMarks = []; // by finished section: "cool" or "regret" (TGM3 Master, Shirase)
+        this.splitSection = 0; // the section being played (sectionCount() once the last is finished)
+        this.splitStart = 0; // frame it began
+        this.sectionBest = []; // each section's record in this setup before this game (setOptions), for ST
+
+        // Medals (setMedals): tier by id, null for modes without
+        this.medals = null;
+        this.medalEvents = []; // { id, tier } per medal earned or raised, for the engine
+        this.bravos = 0;
+        this.tetrises = 0;
+        this.recoveries = 0;
+        this.recovering = false; // the well has held MEDAL_RE_FULL blocks since the last recovery
+        this.pieceTurns = 0; // rotations of the piece in play (not IRS)
+        this.rangeTurns = 0; // RO: rotations counted in the current range, and pieces locked in it
+        this.rangePieces = 0;
+        this.roRange = 0;
+    }
+
+    setOptions(options = {}) {
+        super.setOptions(options);
+        if (options.sectionBest) this.sectionBest = options.sectionBest;
     }
 
     // ----------------------------------------------------------
@@ -501,12 +549,21 @@ class TgmGame extends RuleGame {
     // Level +1 per new piece, except at section stops (x99 and the one before the end) and in the
     // staff roll (TAP Death's can start at 500)
     afterSpawn(newPiece) {
+        this.pieceTurns = 0;
         if (!this.firstPiece && newPiece && !this.roll && !(this.sectionStops && this.level % 100 === 99)
             && this.level !== this.maxLevel - 1) {
             this.level++;
             this.updateSection();
+            this.noteLevel();
             this.updateTimings();
         }
+    }
+
+    // A rotation key in play: RO counts the rotations that turned the piece
+    turn(dir) {
+        const rotation = this.curPiece_rotation;
+        super.turn(dir);
+        if (this.curPiece_rotation !== rotation) this.pieceTurns++;
     }
 
     onBlockOut() {
@@ -565,7 +622,10 @@ class TgmGame extends RuleGame {
     }
 
     scoreClear(n, rows) {
+        const roll = this.roll;
+        if (this.medals && !roll) this.countTurns();
         this.scoreTgm(n, rows);
+        if (this.medals && !roll) this.noteMedals(n);
     }
 
     // A piece locked, clearing n lines. In the staff roll clears count lines and whatever the mode
@@ -603,6 +663,87 @@ class TgmGame extends RuleGame {
             soft: this.softFrames + (this.hardDropped ? 1 : 0),
             speed: Math.max(0, this.lockDelayMax - Math.max(1, this.activeTime)),
         };
+    }
+
+    // ----------------------------------------------------------
+    // Section splits and medals
+
+    sectionCount() { return Math.ceil(this.maxLevel / 100); }
+
+    // After a level change: a section is finished when the level passes its end (the last at the mode's
+    // end); RO's ranges end at 300, 700 and 999
+    noteLevel() {
+        if (this.roll) return;
+        const done = this.splitSection, section = Math.floor(this.level / 100);
+        if (this.hasSplits && done < this.sectionCount() && (section > done || this.level >= this.maxLevel)) {
+            const time = this.frames - this.splitStart;
+            this.splits[done] = time;
+            this.splitSection = this.level >= this.maxLevel ? this.sectionCount() : section;
+            this.splitStart = this.frames;
+            if (this.medals && "ST" in this.medals) this.judgeSectionTime(done, time);
+        }
+        if (this.medals && "RO" in this.medals && this.roRange < MEDAL_RO_RANGES.length && this.level >= MEDAL_RO_RANGES[this.roRange]) {
+            if (this.rangePieces && Math.min(this.rangeTurns, MEDAL_RO_RANGE_MAX) / this.rangePieces >= MEDAL_RO_AVERAGE) {
+                this.awardMedal("RO", this.medals.RO + 1);
+            }
+            this.rangeTurns = this.rangePieces = 0;
+            this.roRange++;
+        }
+    }
+
+    // The section's record before this game, or the default one
+    sectionRecord(section) {
+        return this.sectionBest[section] ?? this.defaultSectionBest();
+    }
+
+    defaultSectionBest() { return SECTION_DEFAULT_BEST; }
+
+    judgeSectionTime(section, time) {
+        const best = this.sectionRecord(section);
+        this.awardMedal("ST", MEDAL_ST_SLACK.reduce((tier, slack, i) => time < best + slack ? i + 1 : tier, 0));
+    }
+
+    // The mode's medals, all at tier 0
+    setMedals(ids) {
+        this.medals = Object.fromEntries(ids.map(id => [id, 0]));
+    }
+
+    awardMedal(id, tier) {
+        if (!this.medals || !(id in this.medals) || tier <= this.medals[id]) return;
+        this.medals[id] = Math.min(3, tier);
+        this.medalEvents.push({ id, tier: this.medals[id] });
+        this.sounds.push("medal" + this.medals[id]);
+    }
+
+    // The tier a count reaches by its thresholds
+    medalTier(count, thresholds) {
+        return thresholds.filter(t => count >= t).length;
+    }
+
+    takeMedals() { return this.drain("medalEvents"); }
+
+    skillThresholds() { return MEDAL_SK.tap; } // SK's Tetrises, by mode (Big's in noteMedals)
+
+    // RO: the locked piece's rotations, before the clear moves the level on
+    countTurns() {
+        this.rangeTurns += Math.min(this.pieceTurns, MEDAL_RO_PIECE_MAX);
+        this.rangePieces++;
+        this.pieceTurns = 0;
+    }
+
+    // After a lock that cleared n lines (the rows already emptied)
+    noteMedals(n) {
+        if (n > 0 && this.fieldEmpty()) this.awardMedal("AC", this.medalTier(++this.bravos, MEDAL_AC));
+        if (n === 4) this.awardMedal("SK", this.medalTier(++this.tetrises, this.bigMode ? MEDAL_SK.big : this.skillThresholds()));
+        if (n > 0) this.awardMedal("CO", this.medalTier(this.gradeCombo, this.bigMode ? MEDAL_CO_BIG : MEDAL_CO));
+        if ("RE" in this.medals) {
+            const blocks = this.field.reduce((sum, row) => sum + row.reduce((s, v) => s + (v ? 1 : 0), 0), 0);
+            if (blocks >= MEDAL_RE_FULL) this.recovering = true;
+            else if (this.recovering && blocks <= MEDAL_RE_LOW) {
+                this.recovering = false;
+                this.awardMedal("RE", this.medalTier(++this.recoveries, MEDAL_RE));
+            }
+        }
     }
 
     // ----------------------------------------------------------
@@ -694,6 +835,7 @@ class TgmGame extends RuleGame {
             if (this.timerStopped || skip <= 0) return false;
             this.frames += skip;
             this.sectionStart += skip; // the section isn't slower for it (no REGRET)
+            this.splitStart += skip;
             this.tested = true;
             return true;
         }
@@ -787,6 +929,10 @@ class TgmGame extends RuleGame {
     // A level the debug menu set starts its section over, so the jump isn't judged as one
     debugSection() {
         const section = Math.floor(this.level / 100);
+        if (section !== this.splitSection) {
+            this.splitSection = section;
+            this.splitStart = this.frames;
+        }
         if (section === this.section) return;
         this.section = section;
         this.sectionStart = this.frames;
@@ -879,6 +1025,7 @@ class Tgm1Game extends TgmGame {
         if (bravo > 1) this.addAction("BRAVO", "pc");
 
         this.level = Math.min(TGM_MAX_LEVEL, levelBefore + n); // one level per line
+        this.noteLevel();
         for (const [level, score, frames] of TGM1_GM_CHECKS) {
             if (levelBefore < level && this.level >= level && (this.score < score || this.frames > frames)) this.gmQualified = false;
         }
@@ -951,9 +1098,9 @@ class TapGame extends TgmGame {
         this.invisibleRollName = "M-ROLL";
         this.rollLength = this.tapPlus ? TAP_PLUS_ROLL_FRAMES : TAP_ROLL_FRAMES;
         this.rollHide = TAP_ROLL_HIDE;
-        this.sectionTimes = []; // frames each finished section took
         this.sectionTetrises = 0; // Tetrises in the current section
         this.mrollQualified = true; // every finished section met the M-roll conditions
+        if (!this.tapPlus && !this.normal && !this.versus) this.setMedals(TAP_MEDALS); // Master and Death
         this.torikan = false; // Death: reached 500 too late, the roll starts there
         this.garbageCount = 0; // TGM+: pieces locked without a clear
         this.garbagePos = 0; // TGM+: next row of the pattern
@@ -977,6 +1124,10 @@ class TapGame extends TgmGame {
         if (this.normal) return { key: [this.score], text: this.scoreText() };
         return super.record();
     }
+
+    skillThresholds() { return this.death ? MEDAL_SK.death : MEDAL_SK.tap; }
+
+    defaultSectionBest() { return this.death ? DEATH_DEFAULT_BEST : SECTION_DEFAULT_BEST; }
 
     // Death has no grade until M at level 500
     gradeLabel() {
@@ -1068,6 +1219,7 @@ class TapGame extends TgmGame {
         if (this.internalGrading && !death) this.scoreGrade(n, levelBefore);
         this.level = levelAfter;
         this.updateTapSection();
+        this.noteLevel();
 
         if (death && !this.versus && levelBefore < TAP_DEATH_M_LEVEL && this.level >= TAP_DEATH_M_LEVEL) {
             if (this.frames <= TAP_DEATH_M_FRAMES) {
@@ -1096,18 +1248,18 @@ class TapGame extends TgmGame {
         this.updateTapSection();
     }
 
-    // Master: judge a section against the M-roll conditions once it is finished (the last at 999)
+    // Master: judge a section against the M-roll conditions once it is finished (the last at 999), by
+    // the splits of the sections before it (noteLevel then adds this one's)
     updateTapSection() {
         const section = Math.floor(this.level / 100);
         if (section === this.section && this.level < this.maxLevel) return;
         const time = this.frames - this.sectionStart;
-        const s = this.section, times = this.sectionTimes;
+        const s = this.section, times = this.splits;
         let limit;
         if (s < 5) limit = TAP_MROLL_SECTION_FRAMES;
-        else if (s === 5) limit = Math.floor(times.slice(0, 5).reduce((a, b) => a + b, 0) / 5) + TAP_MROLL_SLACK;
-        else limit = times[s - 1] + TAP_MROLL_SLACK;
+        else if (s === 5) limit = Math.floor(times.slice(0, 5).reduce((a, b) => a + (b ?? Infinity), 0) / 5) + TAP_MROLL_SLACK;
+        else limit = (times[s - 1] ?? Infinity) + TAP_MROLL_SLACK;
         if (time > limit || this.sectionTetrises < TAP_MROLL_TETRISES[s]) this.mrollQualified = false;
-        times.push(time);
         this.section = section;
         this.sectionStart = this.frames;
         this.sectionTetrises = 0;
@@ -1199,7 +1351,10 @@ class TiGame extends TgmGame {
         this.exams = false; // the qualified grade and its exams (Master, not Big)
         this.qualified = 0;
         this.exam = null;
+        if (variant === "standard") this.setMedals(TI_MEDALS); // Master (Shirase sets its own)
     }
+
+    skillThresholds() { return MEDAL_SK.ti; }
 
     // Exams (the Exams card): exams on, the player's qualified grade and this game's exam
     // (tgm3ExamFor), for Master without Big
@@ -1294,6 +1449,7 @@ class TiGame extends TgmGame {
 
         this.level = levelAfter;
         this.updateSection();
+        this.noteLevel();
         this.updateTimings();
         this.setShadow();
 
@@ -1349,8 +1505,10 @@ class TiGame extends TgmGame {
             if (this.coolPending) {
                 this.cools++;
                 this.speedBonus += TGM_COOL_SPEEDUP;
+                this.splitMarks[this.section] = "cool";
             }
             if (seconds > TGM_REGRET_TIME[this.section]) {
+                this.splitMarks[this.section] = "regret";
                 // fall back to the highest internal grade with one boost less, the points gone; with
                 // no boosts it changes nothing, not even the points (tetris.wiki)
                 const boosts = TGM_GRADES[this.internalGrade][0];
@@ -1631,7 +1789,10 @@ class TiShiraseGame extends TiGame {
         this.garbageCount = 0; // rising garbage
         this.sectionsDone = 0; // sections finished, and REGRETs
         this.regrets = 0;
+        this.setMedals(TI_MEDALS);
     }
+
+    skillThresholds() { return MEDAL_SK.shirase; }
 
     // Grade: sections finished less REGRETs
     gradeLabel() {
@@ -1702,6 +1863,7 @@ class TiShiraseGame extends TiGame {
         this.sectionsDone++;
         if (seconds > SHIRASE_REGRET_TIME(this.section)) {
             this.regrets++;
+            this.splitMarks[this.section] = "regret";
             this.addAction("REGRET!!", "grade");
         }
         this.section = section;

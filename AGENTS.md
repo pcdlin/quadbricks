@@ -55,7 +55,7 @@ when WebGL is unavailable).
 | `game/items.js` | Versus items' graphics, drawn with canvas paths (the engine renders them once into textures): `ITEM_ART`, per item (`VS_ITEMS`) a glyph in a 100 box and its cut-in colour; `drawItemIcon()`, the icon on an item block and in NEXT (the white glyph on a dark plate in a frame of its kind's colour, `ITEM_KIND_COLORS`, `itemKind()`: attack red, the side's own blue, Exchg Field green, as Heboris has them after the arcade); `drawItemEmblem()`, the cut-in's emblem (the glyph in the item's colour on a dark medallion). Heboris's own pictures (unknown licence) were looked at, not copied. |
 | `game/sound.js` | `Sound`: Web Audio synthesised effects (no audio files). |
 | `game/gfx/` | Copies of the legacy tile PNGs, used only by the "Original" block style. |
-| `test/rules.test.js` | Spec checks for the rule sets (~575 checks; the debug menu's setups too, every one in every mode). |
+| `test/rules.test.js` | Spec checks for the rule sets (~600 checks; the debug menu's setups too, every one in every mode). |
 | `test/options.test.js` | The options: `Options.bind()` keeps every key one player's and every action with a key. |
 | `test/bot.test.js` | The bot: the probe leaves the game alone, plans are carried out as planned, every level plays every rule set without sticking. Each check is a `job()` (seeding its own games), run in worker threads heaviest first (`cost`), its output printed in file order; checks over several jobs' results go in a `summary()`, run once they are all done. |
 | `tools/bot-bench.js` | Not in the test run: `node tools/bot-bench.js [level] [games] [mode filter] [profile]` plays modes headless (seeded) and prints each one's own result (`record()`), for tuning the bot. |
@@ -587,6 +587,27 @@ length, M-roll section rules as code), `GradeManiaMode.java` (TGM1's GM checks a
   other cell filled; the 19th row's hole covered) give 9…S9, GM (`SECRET_GRADE_LABELS`; Shirase's S1…S9,
   m1…m9, GM). Shown from 5 rows (`SECRET_GRADE_MIN_ROWS`, NullpoMino's) in the game over banner
   (`endNotes()`, lines under its sub-title), not in the records.
+
+### Section splits and medals (TGM1, TAP, TGM3)
+- Splits (the user's choice, after fan clients: NullpoMino's and Cambridge's section times): every single-player TGM mode
+  but Sakura (`hasSplits`; none in versus) keeps the frames each 100-level section took, `splits` by section (`noteLevel()`,
+  after every level change: a piece, TGM1's, TAP's and TGM3's clears; the last section ends at the mode's end, `maxLevel`:
+  999, Shirase 1300, Easy 200, TAP Normal 300), and TGM3 Master's and Shirase's COOL or REGRET per section (`splitMarks`).
+  A level the debug menu sets starts the section over (`debugSection()`); the 15-minute test skips the time. TAP's M-roll
+  check reads the splits of the sections before.
+- Medals (tetris.wiki's TAP and TGM3 pages; `setMedals()`, `medals`: tier 0–3 by id, null without): TAP Master and Death
+  have AC, ST, SK, RE, RO and CO (`TAP_MEDALS`), TGM3 Master and Shirase AC, ST, SK and CO (`TI_MEDALS`); not TGM1 (TAP
+  brought them), TAP Normal or TGM+ (the wiki doesn't say), Easy, Sakura or versus. Bronze, silver, gold: AC perfect clears
+  1/2/3; SK Tetrises (`skillThresholds()`: TAP Master 10/20/35, Death 5/10/17, TGM3 Master 15/25/40, Shirase 5/10/16, Big
+  1/2/4, `MEDAL_SK`); CO a combo of 4/5/7 (Big 2/3/4) counted as `gradeCombo` (clears of 2+ lines, singles keep it); RE
+  recoveries 1/2/4, 150 blocks or more in the well, then 70 or fewer (cells, Big's too); RO at least 1.2 rotations per piece
+  in each of 0–300, 300–700 and 700–999, each range passed a tier more (as NullpoMino: the wiki gives bronze, silver, gold
+  per range), at most 4 a piece and 3000 a range counted, rotations in play only (`turn()`, not IRS); ST a section within
+  10 s of its record, within 5 s, faster (`judgeSectionTime()`, strict as NullpoMino), the best tier of any section. The
+  records are each section's best in the game's setup before it began (`sectionBest` in the options, from the engine);
+  without one 1:30 (NullpoMino), TAP Death 0:42 (its arcade records reset to it, tetris.wiki; `defaultSectionBest()`).
+  Counted in `scoreClear()` (after the clear, its rows emptied); none in the staff roll. `takeMedals()` (`{ id, tier }` per
+  medal earned or raised) and the sound `"medal<tier>"`.
 
 ### Versus: the sources checked
 The versus modes were reviewed (the user's request) against tetris.wiki (*TGM Versus Mode Guide*, the TGM1, TAP, TGM3,

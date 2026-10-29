@@ -1368,7 +1368,7 @@ function tapClear(g, rows, setup = () => {}) {
 {
     const g = startedTap();
     const judge = (section, seconds, tetrises, times = []) => {
-        g.mrollQualified = true; g.sectionTimes = times.slice(); g.section = section;
+        g.mrollQualified = true; g.splits = times.slice(); g.section = section;
         g.frames = 100000; g.sectionStart = g.frames - seconds * 60; g.sectionTetrises = tetrises;
         g.level = section * 100 + 100; g.updateTapSection();
         return g.mrollQualified;
@@ -1378,13 +1378,13 @@ function tapClear(g, rows, setup = () => {}) {
         [judge(0, 65, 2), judge(0, 65.02, 2), judge(4, 60, 1), judge(5, 63, 1, five), judge(5, 63.02, 1, five), judge(5, 60, 0, five),
          judge(6, 63, 1, [...five, 61 * 60]), judge(6, 63.02, 1, [...five, 61 * 60])],
         [true, false, false, true, false, false, true, false]);
-    check("  ...the times are kept", [g.sectionTimes.length, g.section, g.sectionStart], [7, 7, g.frames]);
+    check("  ...the next section starts", [g.section, g.sectionStart], [7, g.frames]);
 }
 // Reach 999 in TAP Master with a Tetris, every section so far meeting the M-roll conditions
 function tapTo999(setup = () => {}) {
     const g = startedTap();
     g.level = 996; g.section = 9; g.frames = 8 * 3600; g.sectionStart = g.frames - 30 * 60;
-    g.sectionTimes = new Array(9).fill(55 * 60);
+    g.splits = new Array(9).fill(55 * 60); g.splitSection = 9; g.splitStart = g.sectionStart;
     g.internalGrade = 31;
     setup(g);
     clearField(g);
@@ -3731,6 +3731,142 @@ function inPlay(mode, variant, options = {}) {
     const a = inPlay(tgmTap, "versus", { items: true }), d = a.rival;
     a.debugSetup("itemrival", "MIRROR BLOCK");
     check("Debug versus: an attack item on the other side hits it with its cut-in", [d.cutIn, d.cutInItem], [VS_CUTIN_FRAMES, "MIRROR BLOCK"]);
+}
+
+// ---------------------------------------------------------------- Section splits and medals
+// A double from `level`, the section begun `seconds` ago
+function splitAfterDouble(mode, variant, level, seconds, options = {}) {
+    const g = startedWith(mode, variant, options);
+    clearField(g);
+    g.level = level; g.frames = 50000;
+    g.splitSection = g.section = Math.floor(level / 100);
+    g.splitStart = g.sectionStart = g.frames - seconds * 60;
+    tapClear(g, 2);
+    return g;
+}
+{
+    const runs = [[tgmOriginal, "standard", 98], [tgmTap, "standard", 98], [tgmTap, "death", 98], [arika, "standard", 98],
+        [tgmClassic, "shirase", 98], [arika, "easy", 98]].map(([mode, variant, level]) => {
+        const g = splitAfterDouble(mode, variant, level, 40);
+        return [g.splits, g.splitSection, g.splitStart === g.frames];
+    });
+    check("Splits: a clear passing a section's end keeps its time (TGM1, TAP Master and Death, TGM3 Master, Shirase, Easy)",
+        runs, new Array(6).fill([[2400], 1, true]));
+    const last = [splitAfterDouble(arika, "easy", 198, 50), splitAfterDouble(tgmTap, "standard", 997, 50), splitAfterDouble(arika, "shirase", 1298, 50)]
+        .map(g => [g.splits.length, g.splits[g.splits.length - 1], g.splitSection]);
+    check("  ...the last section ends at the mode's end: Easy 200, TAP 999, Shirase 1300", last, [[2, 3000, 2], [10, 3000, 10], [13, 3000, 13]]);
+    const mid = splitAfterDouble(arika, "standard", 150, 40);
+    check("  ...a clear inside a section keeps none", [mid.splits, mid.splitSection], [[], 1]);
+    const off = [createGame(tgmTap, "versus"), createGame(arika, "versus"), createGame(arika, "sakura")].map(g => g.hasSplits);
+    check("  ...none in versus or Sakura", off, [false, false, false]);
+}
+{
+    const g = startedMode(arika, "standard");
+    g.level = 168; g.frames = 3600; g.splitStart = g.sectionStart = 0; g.section = g.splitSection = 1; g.cools = 0;
+    g.coolPending = true; g.coolChecked = true;
+    g.level = 200; g.updateSection(); g.noteLevel();
+    const regret = startedMode(arika, "standard");
+    regret.level = 200; regret.frames = 91 * 60; regret.updateSection(); regret.noteLevel();
+    check("Splits: TGM3 Master marks a COOL section and a REGRET one", [g.splitMarks[1], regret.splitMarks[0], regret.splits[0]], ["cool", "regret", 91 * 60]);
+    const d = inPlay(arika, "standard");
+    d.frames = 4000;
+    d.debugSetup("level", 500);
+    check("  ...a level the debug menu set starts its section over", [d.splitSection, d.splitStart], [5, 4000]);
+}
+{
+    const sets = [[tgmTap, "standard"], [tgmTap, "death"], [tgmTap, "normal"], [tgmTap, "plus"], [tgmTap, "versus"], [tgmOriginal, "standard"],
+        [arika, "standard"], [tgmClassic, "shirase"], [arika, "easy"], [arika, "sakura"], [arika, "versus"]]
+        .map(([mode, variant]) => { const m = createGame(mode, variant).medals; return m && Object.keys(m).join(" "); });
+    check("Medals: TAP Master and Death AC ST SK RE RO CO, TGM3 Master and Shirase AC ST SK CO, no others",
+        sets, ["AC ST SK RE RO CO", "AC ST SK RE RO CO", null, null, null, null, "AC ST SK CO", "AC ST SK CO", null, null, null]);
+}
+{
+    const best = 60 * 60;
+    const st = [69.9, 70, 64.9, 59.9].map(s => splitAfterDouble(tgmTap, "standard", 98, s, { sectionBest: [best] }).medals.ST);
+    const death = [51.9, 52].map(s => splitAfterDouble(tgmTap, "death", 98, s).medals.ST);
+    const ti = splitAfterDouble(arika, "standard", 98, 99.9).medals.ST; // within 10 s of the default 1:30
+    check("Medals ST: a section within 10 s of its record bronze, 5 s silver, faster gold; Death's records 0:42, others' 1:30",
+        [st, death, ti], [[1, 0, 2, 3], [1, 0], 1]);
+    const g = splitAfterDouble(tgmTap, "standard", 98, 50, { sectionBest: [best] });
+    check("  ...an event and a sound for the engine", [g.takeMedals(), g.takeSounds().filter(s => s.startsWith("medal"))], [[{ id: "ST", tier: 3 }], ["medal3"]]);
+    g.splitStart = g.frames - 200 * 60; g.level = 199; tapClear(g, 2);
+    check("  ...the best tier is kept", [g.splits.length, g.medals.ST, g.takeMedals()], [2, 3, []]);
+}
+{
+    const tetrisAfter = (mode, variant, before, big = false) => {
+        const g = startedMode(mode, variant);
+        g.bigMode = big; g.tetrises = before; g.setCell(5, 0, 1); // no perfect clear
+        g.scoreClear(4, []);
+        return g.medals.SK;
+    };
+    check("Medals SK: Tetrises 10/20/35 (TAP Master), 5/10/17 (Death), 15/25/40 (TGM3 Master), 5/10/16 (Shirase), 1/2/4 (Big)",
+        [[9, 19, 34, 33].map(n => tetrisAfter(tgmTap, "standard", n)), [4, 9, 16].map(n => tetrisAfter(tgmTap, "death", n)),
+         [14, 24, 39, 13].map(n => tetrisAfter(arika, "standard", n)), [4, 9, 15].map(n => tetrisAfter(arika, "shirase", n)),
+         [0, 1, 3].map(n => tetrisAfter(tgmTap, "standard", n, true))],
+        [[1, 2, 3, 2], [1, 2, 3], [1, 2, 3, 0], [1, 2, 3], [1, 2, 3]]);
+    const reach = n => { const g = startedTap(); g.setCell(5, 0, 1); for (let i = 0; i < n; i++) g.scoreClear(4, []); return g.medals.SK; };
+    check("  ...10 Tetrises bronze, 20 silver, 35 gold", [reach(9), reach(10), reach(20), reach(35)], [0, 1, 2, 3]);
+}
+{
+    const g = startedTap();
+    g.setCell(5, 0, 1); // no perfect clear
+    const co = [];
+    for (const n of [2, 2, 2, 2, 1, 2, 2, 2]) { g.scoreClear(n, []); co.push(g.medals.CO); }
+    g.scoreClear(0, []);
+    g.scoreClear(2, []);
+    check("Medals CO: combos of 4, 5, 7 clears of 2+ lines (singles keep it), none from a miss", [co, g.gradeCombo, g.medals.CO], [[0, 0, 0, 1, 1, 2, 2, 3], 1, 3]);
+    const big = startedBig(tgmTap);
+    big.setCell(5, 0, 1);
+    for (const n of [2, 2]) big.scoreClear(n, []);
+    check("  ...Big: 2, 3, 4", big.medals.CO, 1);
+}
+{
+    const g = startedTap();
+    clearField(g);
+    const ac = [];
+    for (let i = 0; i < 4; i++) { g.scoreClear(1, []); ac.push(g.medals.AC); }
+    g.setCell(5, 0, 1);
+    g.scoreClear(1, []);
+    check("Medals AC: perfect clears 1, 2, 3", [ac, g.bravos], [[1, 2, 3, 3], 4]);
+}
+{
+    const g = startedTap();
+    const blocks = n => { clearField(g); for (let k = 0; k < n; k++) g.setCell(HEIGHT - 1 - Math.floor(k / WIDTH), k % WIDTH, 1); };
+    g.setCell(5, 0, 1);
+    const re = [];
+    for (const [n, cleared] of [[149, 0], [71, 1], [150, 0], [71, 1], [70, 1], [160, 0], [69, 1], [150, 0], [70, 1], [150, 0], [70, 1]]) {
+        blocks(n);
+        g.scoreClear(cleared, []);
+        re.push(g.medals.RE);
+    }
+    check("Medals RE: 150 blocks or more, then 70 or fewer, 1/2/4 times", [re, g.recoveries], [[0, 0, 0, 0, 1, 1, 2, 2, 2, 2, 3], 4]);
+}
+{
+    const ro = (pieces, turns, last) => {
+        const g = startedTap();
+        g.setCell(5, 0, 1);
+        g.level = 299; g.rangePieces = pieces; g.rangeTurns = turns; g.pieceTurns = last;
+        g.scoreClear(1, []);
+        return [g.medals.RO, g.roRange, g.rangePieces];
+    };
+    check("Medals RO: 1.2 rotations a piece or more by level 300, at most 4 a piece counted",
+        [ro(9, 8, 4), ro(9, 7, 6), ro(9, 7, 4)], [[1, 1, 0], [0, 1, 0], [0, 1, 0]]);
+    const g = startedTap();
+    g.medals.RO = 1; g.roRange = 1; g.level = 699; g.rangePieces = 10; g.rangeTurns = 14; g.pieceTurns = 0;
+    g.scoreClear(1, []);
+    check("  ...each range passed a tier more", [g.medals.RO, g.roRange], [2, 2]);
+    const t = startedTap();
+    clearField(t);
+    place(t, tetT, 0, 5, 3);
+    t.advanceFrame(ROTR_PUSH); t.advanceFrame(ROTR_RELEASE); t.advanceFrame(ROTR_PUSH);
+    check("  ...rotations in play are counted", t.pieceTurns, 2);
+}
+{
+    const g = startedTap();
+    g.setCell(5, 0, 1);
+    g.roll = "fading"; g.tetrises = 9;
+    g.scoreClear(4, []);
+    check("Medals: none in the staff roll", [g.medals.SK, g.tetrises], [0, 9]);
 }
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);
