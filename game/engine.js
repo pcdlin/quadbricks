@@ -299,7 +299,7 @@ const QUICK_PLAY = [
 const OPTIONS_ITEMS = [
     { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS, bindings: true },
     { name: "Gamepad", desc: "Change each gamepad's buttons", accent: tetI, screen: MENU_GAMEPAD, bindings: true },
-    { name: "Visuals", desc: "Block style, scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
+    { name: "Visuals", desc: "Theme, block style, scale, effects and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
 // Settings changed with ← →, by screen; descriptions show the current setting (optionValue())
@@ -307,6 +307,7 @@ const OPTIONS_ITEMS = [
 // setting does nothing with effects off, and its card is greyed out then)
 const VISUAL_ITEMS = [
     { id: "theme", name: "Theme", accent: tetJ },
+    { id: "background", name: "Background", accent: tetI },
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
     { id: "scale", name: "Scale", accent: tetL },
     { id: "effects", name: "Effects", accent: tetT },
@@ -477,7 +478,7 @@ const COUNTDOWN_COLORS = [null, PIECE_COLORS[tetS].light, PIECE_COLORS[tetO].lig
 const CONFETTI_EXTRA = ["#ffffff", "#ff5fd2", "#fff27a"];
 const CONFETTI_COLORS = [...PIECE_COLORS.slice(1).map(c => c.light), ...CONFETTI_EXTRA];
 const FIREWORK_COLORS = CONFETTI_COLORS.filter(c => !PIECE_COLORS.slice(8).some(p => p.light === c)); // no grey bursts
-// By confetti style (options.confetti, none when off; fireworks are always glow): bits per cell, size (least,
+// By confetti style (options.look("confetti"), none when off; fireworks are always glow): bits per cell, size (least,
 // random extra), burst speed factor and upward lift, gravity and air drag per frame, life in
 // frames, alpha, additive blending; spin (radians per frame, at most), sideways flutter, fastest
 // fall, grid (positions and sizes snapped to it)
@@ -829,8 +830,8 @@ class Engine {
         if (this.match && this.layout.duo) this.match.view.gx = this.layout.duo.gx[1];
     }
 
-    // The theme chosen in Options → Visuals (themes.js)
-    get theme() { return THEMES[this.options.theme]; }
+    // The background in effect (Options → Visuals: its own, or the theme's; themes.js)
+    get background() { return BACKGROUNDS[this.options.look("background")]; }
 
     // The Options scale applies to the game only: entering or leaving it redoes the view size
     get GAMESTATE() { return this._state; }
@@ -1171,7 +1172,7 @@ class Engine {
         const ambient = this.options.effects && this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
         const color = (s) => ({ ...s, rgb: hslToRgb(s.h, s.s, s.l) });
         const ps = this.pixelScale;
-        const glowRgb = this.theme.glowRgb ? this.theme.glowRgb(this) : hslToRgb(this.hue, 90, 62);
+        const glowRgb = this.background.glowRgb ? this.background.glowRgb(this) : hslToRgb(this.hue, 90, 62);
         // a glow round each side's board (not the bot's mini-board)
         const glows = !inGame || !glowRgb ? [] : this.boards().filter(view => !this.layout.mini || view === this.ownBoard).map(view => {
             const m = view === this.ownBoard ? this.motion : this.boardMotion(view);
@@ -1198,7 +1199,7 @@ class Engine {
             nebula: ambient.nebula || 0,
             shade: ambient.shade || [],
             time: this.clock / 60,
-            lines: this.theme.lines ? this.theme.lines(this) : null,
+            lines: this.background.lines ? this.background.lines(this) : null,
             rings,
             ringSigma: 6, // like a shadowBlur of 12
             glows,
@@ -1667,7 +1668,7 @@ class Engine {
         if (id === "resetHandling") this.options.resetHandling();
         else this.options.step(id, dir, wrap);
         if (id === "scale") this.resize(); // the view's size; the backdrop stays as it is
-        if (id === "theme") this.backdrop.setBackground(this.renderBackground());
+        if (id === "theme" || id === "background") this.backdrop.setBackground(this.renderBackground());
         if (HANDLING_ITEMS.some(item => item.id === id)) this.applyHandling();
     }
 
@@ -1683,15 +1684,23 @@ class Engine {
         const setup = this.setupCard(id);
         if (setup) return setup.item.labels[this.setupIndex(setup.n)];
         if (OPTION_TOGGLES.includes(id)) return o[id] ? "On" : "Off";
+        if (THEMED_IDS.includes(id) && o[id] === FOLLOW_THEME) return `Theme (${this.lookName(id, o.look(id))})`;
+        return this.lookName(id, o[id]);
+    }
+
+    // The name of a setting's value (one of OPTION_CHOICES')
+    lookName(id, value) {
+        const o = this.options;
         switch (id) {
             case "effects": return EFFECT_LEVELS[o.effects].name;
-            case "rings": return RING_MODES[RING_MODE_IDS.indexOf(o.rings)].name;
+            case "rings": return RING_MODES[RING_MODE_IDS.indexOf(value)].name;
             case "tilt": return TILT_LEVELS[o.tilt].name;
             case "shake": return SHAKE_LEVELS[o.shake].name;
             case "scale": return Math.round(o.scale * 100) + "%";
-            case "theme": return THEMES[o.theme].name;
-            case "tileset": return TILESETS[o.tileset].name;
-            case "confetti": return CONFETTI_STYLES[CONFETTI_STYLE_IDS.indexOf(o.confetti)].name;
+            case "theme": return THEMES[value].name;
+            case "background": return BACKGROUNDS[value].name;
+            case "tileset": return TILESETS[value].name;
+            case "confetti": return CONFETTI_STYLES[CONFETTI_STYLE_IDS.indexOf(value)].name;
             case "das": return frameValue(o.das);
             case "arr": return o.arr ? frameValue(o.arr) : "Instant";
             case "dcd": return o.dcd ? frameValue(o.dcd) : "Off";
@@ -1805,7 +1814,7 @@ class Engine {
     viewDebug() {
         const entries = [{ id: "messages", values: DEBUG_MESSAGES.map((_, i) => i), labels: DEBUG_MESSAGES.map(([name]) => name) },
             { id: "burst" }, { id: "bursts" }];
-        if (this.theme.showSun) entries.push({ id: "sun" }, { id: "meteor" });
+        if (this.background.showSun) entries.push({ id: "sun" }, { id: "meteor" });
         return [...entries, { id: "flyin" }, { id: "context" }];
     }
 
@@ -1866,8 +1875,8 @@ class Engine {
                 return true;
             case "sun": case "meteor":
                 if (!fx || !this.options.backdrop) return false;
-                if (id === "sun") this.theme.showSun();
-                else this.theme.showMeteor();
+                if (id === "sun") this.background.showSun();
+                else this.background.showMeteor();
                 return true;
             case "flyin":
                 if (!fx) return false;
@@ -1963,7 +1972,7 @@ class Engine {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
             const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
-            const mode = this.options.rings;
+            const mode = this.options.look("rings");
             const span = mode === "ripple" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
             this.rings.push({
                 gx: this.board.gx, // the board's group: the burst spreads from its well
@@ -1971,7 +1980,7 @@ class Engine {
                 life: span, span, power: rows.size,
                 chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
             });
-            this.hueTarget += HUE_STEP * rows.size / 2 * (this.theme.hueStep ?? 1);
+            this.hueTarget += HUE_STEP * rows.size / 2 * (this.background.hueStep ?? 1);
             this.pulse = Math.min(1, this.pulse + (0.15 + 0.1 * rows.size) * this.options.effectScale);
         }
     }
@@ -1979,7 +1988,7 @@ class Engine {
     explodeCell(cell) {
         const cx = this.cellX(cell.col) + CELL / 2;
         const cy = this.cellY(cell.row) + CELL / 2;
-        const style = this.options.confetti, spec = CONFETTI_SPECS[style];
+        const style = this.options.look("confetti"), spec = CONFETTI_SPECS[style];
         if (!spec) return; // off
         const count = Math.max(1, Math.round(spec.count * this.options.effectScale));
         for (let n = 0; n < count; n++) {
@@ -2055,7 +2064,7 @@ class Engine {
 
     // Light colour of colour index `index` in the block style, for drop trails and flashes
     tileLight(index) {
-        const set = TILESETS[this.options.tileset];
+        const set = TILESETS[this.options.look("tileset")];
         return set.trail ? set.trail(index) : PIECE_COLORS[index].light;
     }
 
@@ -2063,7 +2072,7 @@ class Engine {
     // reaches past the cell's edge into the block, under its rounded corners] (that way on screen:
     // down, or up when the well is upside down). Drawn under the field, it runs into the blocks.
     trailFit() {
-        const [inset, round] = TILESETS[this.options.tileset].face || [0, 0];
+        const [inset, round] = TILESETS[this.options.look("tileset")].face || [0, 0];
         return [inset, (this.rev ? -1 : 1) * (inset + round * CELL)];
     }
 
@@ -2458,13 +2467,13 @@ class Engine {
             o.sway += 0.01 * dt;
             if (o.y < -o.r * 3) { o.y = VIEW_H + o.r * 3; o.x = Math.random() * VIEW_W; }
         }
-        if (this.theme.update) this.theme.update(this, dt);
+        if (this.background.update) this.background.update(this, dt);
     }
 
     // Aurora wash (big colour blobs) and rising lights, in backdrop coordinates. Each has a
     // centre, radius, hue, saturation, lightness and alpha at the centre (fading to 0 at r).
     ambientShapes() {
-        if (this.theme.ambient) return this.theme.ambient(this);
+        if (this.background.ambient) return this.background.ambient(this);
         const t = this.clock / 60;
         const h = this.hue;
         const swell = (0.16 + 0.22 * this.pulse) * this.softEffectScale();
@@ -2517,7 +2526,7 @@ class Engine {
 
     // The Clear burst in effect: an id from RING_MODES, "off" outside a game or with effects off
     ringMode() {
-        return this.GAMESTATE === STATE_GAME && this.options.effects ? this.options.rings : "off";
+        return this.GAMESTATE === STATE_GAME && this.options.effects ? this.options.look("rings") : "off";
     }
 
     // Clear ripples: a wave packet spreading from the cleared rows through the whole view,
@@ -2554,7 +2563,7 @@ class Engine {
     text(s, x, y, { size = 16, weight = 700, color = INK, align = "left", spacing = 0, baseline = "middle" } = {}) {
         const r = this.r;
         let [cr, cg, cb, ca] = parseColor(color);
-        const ink = this.theme.ink; // the theme's text colour in place of INK's
+        const ink = this.background.ink; // the background's text colour in place of INK's
         if (ink && cr === INK_RGB[0] && cg === INK_RGB[1] && cb === INK_RGB[2]) [cr, cg, cb] = ink;
         const rgb = `rgb(${Math.round(cr * 255)},${Math.round(cg * 255)},${Math.round(cb * 255)})`;
         const res = r.s;
@@ -2611,14 +2620,14 @@ class Engine {
 
     // Small caps heading with a hairline rule, used above each side panel
     label(s, x, y, w, size = 12, spacing = 4) {
-        if (this.theme.label) return this.theme.label(this, s, x, y, w, size, spacing);
+        if (this.background.label) return this.background.label(this, s, x, y, w, size, spacing);
         this.text(s, x, y, { size, weight: 700, color: INK_DIM, spacing });
         const tw = this.measureText(s, size, 700, spacing);
         if (w - tw - 8 > 4) this.r.rect(x + tw + 8, y, w - tw - 8, 1, INK_FAINT);
     }
 
     panel(x, y, w, h) {
-        if (this.theme.panel) return this.theme.panel(this, x, y, w, h);
+        if (this.background.panel) return this.background.panel(this, x, y, w, h);
         this.r.shape(x, y, w, h, { radius: 10, fill: PANEL, stroke: "rgba(244,236,220,0.10)", lineWidth: 1 });
     }
 
@@ -2714,7 +2723,7 @@ class Engine {
 
     // lights false: leave out the light drawn over the block (Holo's sheen, the lamp), for
     // drawing it in a pass of its own after many blocks (drawLights())
-    drawBlock(type, x, y, size, style = "locked", tileset = this.options.tileset, lights = true) {
+    drawBlock(type, x, y, size, style = "locked", tileset = this.options.look("tileset"), lights = true) {
         if (!type) return;
         const atlas = this.blockAtlas(size, tileset);
         const sp = atlas.sprites[style][type];
@@ -2723,7 +2732,7 @@ class Engine {
         if (lights) this.drawLights(type, x, y, size, style, tileset);
     }
 
-    drawLights(type, x, y, size, style = "locked", tileset = this.options.tileset) {
+    drawLights(type, x, y, size, style = "locked", tileset = this.options.look("tileset")) {
         if (!type || style === "ghost") return;
         if (TILESETS[tileset].sheen) this.drawSheen(x, y, size);
         this.drawLamp(type, x, y, size, style, tileset);
@@ -2843,7 +2852,7 @@ class Engine {
         }
     }
 
-    // The theme's static backdrop picture, the size of the screen
+    // The background's static backdrop picture, the size of the screen
     renderBackground() {
         const c = document.createElement("canvas");
         c.width = this.canvas.width;
@@ -2854,13 +2863,13 @@ class Engine {
         // Visible area in logical units (extends past the view when letterboxed)
         const x0 = -this.bgOffX / s, y0 = -this.bgOffY / s;
         const x1 = (c.width - this.bgOffX) / s, y1 = (c.height - this.bgOffY) / s;
-        this.theme.background(g, x0, y0, x1, y1);
+        this.background.picture(g, x0, y0, x1, y1);
         return c;
     }
 
     // Seven-colour stripe, a nod to the piece set
     colorStripe(x, y, w, h) {
-        if (this.theme.stripe) return this.theme.stripe(this, x, y, w, h);
+        if (this.background.stripe) return this.background.stripe(this, x, y, w, h);
         const seg = w / 7;
         for (let t = 1; t <= 7; t++) this.r.rect(x + (t - 1) * seg, y, seg + 0.5, h, PIECE_COLORS[t].base);
     }
@@ -2883,7 +2892,7 @@ class Engine {
         const cx = VIEW_W / 2;
 
         // Wordmark, shrunk to the compact view's width
-        if (this.theme.wordmark) this.theme.wordmark(this, cx);
+        if (this.background.wordmark) this.background.wordmark(this, cx);
         else {
             const markSize = Math.min(76, Math.floor(76 * (this.layout.view[2] - 48) / this.measureText("QUADBRICKS", 76, 900, 14)));
             this.text("QUADBRICKS", cx, 150, { size: markSize, weight: 900, color: INK, align: "center", spacing: Math.round(markSize * 14 / 76) });
@@ -3159,7 +3168,7 @@ class Engine {
 
     // A menu card; the selected one is lighter, with an accent bar on its left edge
     card(x, y, w, h, radius, selected, accent, barW) {
-        if (this.theme.card) return this.theme.card(this, x, y, w, h, radius, selected, accent, barW);
+        if (this.background.card) return this.background.card(this, x, y, w, h, radius, selected, accent, barW);
         const r = this.r;
         r.shape(x, y, w, h, {
             radius, lineWidth: 1,
@@ -3482,7 +3491,7 @@ class Engine {
         // Frame (the backdrop pass has drawn its glow and the rings)
         const frame = [BOARD_X - 8, this.boardY - 8, BOARD_W + 16, this.boardH + 16];
         const exam = game.exam && game.exam.kind === "promotion"; // a gold frame, as in the arcade
-        if (this.theme.frame) this.theme.frame(this, frame, exam);
+        if (this.background.frame) this.background.frame(this, frame, exam);
         else {
             const fx = this.options.effects;
             r.shape(...frame, { radius: 12, fill: [6 / 255, 8 / 255, 22 / 255, fx ? 0.55 : 0.92] });
@@ -3531,7 +3540,7 @@ class Engine {
                 const alpha = game.getCellAlpha(i, j); // TGM3 and TAP staff roll: blocks fade or vanish
                 if (alpha <= 0) continue;
                 r.globalAlpha = alpha;
-                this.drawBlock(game.getCellColor(i, j), this.cellX(j), y, CELL, "locked", this.options.tileset, false);
+                this.drawBlock(game.getCellColor(i, j), this.cellX(j), y, CELL, "locked", this.options.look("tileset"), false);
             }
             r.globalAlpha = 1;
         }
@@ -3565,7 +3574,7 @@ class Engine {
             if (row < firstRow) continue;
             const x = this.cellX(col + j), y = this.cellY(row);
             if (lockLeft < 1) {
-                this.drawBlock(color, x, y, CELL, "locked", this.options.tileset, false);
+                this.drawBlock(color, x, y, CELL, "locked", this.options.look("tileset"), false);
                 r.globalAlpha = 1 - lockLeft; // the lights cross-fade too, rather than add up
                 this.drawLights(color, x, y, CELL, "locked");
             }

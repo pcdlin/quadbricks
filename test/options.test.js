@@ -1,4 +1,4 @@
-// Checks for the player's options (game/options.js): the key bindings of the two players.
+// Checks for the player's options (game/options.js): the key bindings of the two players, and the themes.
 // Usage: node test/options.test.js
 const fs = require("fs");
 const vm = require("vm");
@@ -6,7 +6,7 @@ const dir = require("path").join(__dirname, "..", "game");
 // options.js reads the themes', block styles' and rule sets' tables; none of these touch the DOM at load
 const OPTION_FILES = ["game.js", "randomizers.js", "rules.js", "rules-guideline.js", "rules-tgm.js", "renderer.js", "tiles.js", "themes.js", "options.js"];
 vm.runInThisContext(OPTION_FILES.map(f => fs.readFileSync(dir + "/" + f, "utf8")).join("\n") +
-    "\n;Object.assign(globalThis, {Options, DEFAULT_KEYS, DEFAULT_KEYS2});");
+    "\n;Object.assign(globalThis, {Options, DEFAULT_KEYS, DEFAULT_KEYS2, THEMES, FOLLOW_THEME, THEMED_IDS, OPTION_CHOICES});");
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -66,5 +66,32 @@ const keyless = o => [...Object.entries(o.keys), ...Object.entries(o.keys2)].fil
     check("Player 2 can't take the sound key, and Escape can't be bound",
         [o.bind("hold", o.keys.sound[0], 2), o.bind("hold", "Escape", 1), o.keys2.hold, o.keys.hold], [false, false, DEFAULT_KEYS2.hold, DEFAULT_KEYS.hold]);
 }
-console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
+// Options loaded from these saved settings (a stand-in for localStorage)
+function loaded(saved) {
+    globalThis.localStorage = { getItem: () => JSON.stringify(saved), setItem() {} };
+    try { return new Options(); } finally { delete globalThis.localStorage; }
+}
+const looks = o => THEMED_IDS.map(id => o.look(id));
+{
+    const o = new Options();
+    check("At first every themed setting follows the first theme",
+        [o.theme, THEMED_IDS.map(id => o[id]), looks(o)], ["space", THEMED_IDS.map(() => FOLLOW_THEME), ["space", "flat", "sparks", "flare"]]);
+    o.theme = "gallery";
+    check("Another theme brings its background, block style, confetti and clear burst", looks(o), ["gallery", "neon", "sparks", "rings"]);
+    o.tileset = "gem";
+    check("A setting of its own wins over the theme's", looks(o), ["gallery", "gem", "sparks", "rings"]);
+}
+for (const [id, theme] of Object.entries(THEMES)) {
+    check(`Theme ${id}'s choices are values of their settings`,
+        THEMED_IDS.every(k => theme[k] !== FOLLOW_THEME && OPTION_CHOICES[k].includes(theme[k])), true);
+}
+{
+    const o = loaded({ theme: "lines", tileset: "flat", confetti: "glow", rings: "flare" });
+    check("Saved before themes: the theme stays, settings left at their old defaults follow it",
+        [o.theme, o.background, o.tileset, o.confetti, o.rings, looks(o)],
+        ["lines", FOLLOW_THEME, FOLLOW_THEME, "glow", FOLLOW_THEME, ["lines", "chalk", "glow", "flare"]]);
+    const p = loaded({ theme: "lines", background: "space", tileset: "flat", confetti: FOLLOW_THEME, rings: "flare" });
+    check("Saved with themes: every setting as saved", [p.theme, looks(p)], ["lines", ["space", "flat", "paper", "flare"]]);
+}
+console.log(failures ?`\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

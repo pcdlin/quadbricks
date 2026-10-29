@@ -1,7 +1,7 @@
-// Themes (Options → Visuals → Theme): the look around the blocks: the backdrop, the well's frame,
-// the side panels, the menu cards and the wordmark. The block styles (tiles.js) and effects are
-// chosen separately and work with every theme.
-// Each theme has a name and background(g, x0, y0, x1, y1), the static backdrop picture drawn with
+// Backgrounds (Options → Visuals → Background): the look around the blocks: the backdrop, the well's
+// frame, the side panels, the menu cards and the wordmark. The block styles (tiles.js) and effects are
+// chosen separately and work with every background; a theme (THEMES, below) picks one of each.
+// Each background has a name and picture(g, x0, y0, x1, y1), the static backdrop picture drawn with
 // canvas 2D in logical units (x0..x1, y0..y1 is the visible area, past the view when letterboxed).
 // The rest is optional; without it the engine draws Gallery's look:
 // - ink: [r, g, b] (0..1) that text drawn in INK's colour takes instead (any alpha)
@@ -179,11 +179,11 @@ const LINES_RULE = "rgba(242,242,242,0.85)";
 const LINES_FILL = "rgba(6,6,7,0.84)";
 const LINES_WELL_ALPHA = 0.7; // the well's fill (0.94 with effects off, as Gallery's goes more solid)
 
-const THEMES = {
+const BACKGROUNDS = {
     // Night gallery: deep gradient, soft spotlight, receding floor grid
     gallery: {
         name: "Night Gallery", // id "gallery", as saved
-        background(g, x0, y0, x1, y1) {
+        picture(g, x0, y0, x1, y1) {
             const sky = g.createLinearGradient(0, y0, 0, y1);
             sky.addColorStop(0, "#0d1230");
             sky.addColorStop(0.6, "#080a1d");
@@ -231,7 +231,7 @@ const THEMES = {
         name: "Deep Space",
         hueStep: 0.4, // the nebulae change colour gently with clears
         ink: [230 / 255, 242 / 255, 255 / 255],
-        background(g, x0, y0, x1, y1) {
+        picture(g, x0, y0, x1, y1) {
             const sky = g.createLinearGradient(0, y0, 0, y1);
             sky.addColorStop(0, "#04061a");
             sky.addColorStop(1, "#010208");
@@ -492,10 +492,10 @@ const THEMES = {
     // Field lines: fine lines bending round slowly drifting bumps, taking a piece colour where they
     // bend most; flat black panels with a rule along the top
     lines: {
-        name: "Field lines",
+        name: "Field Lines",
         ink: [242 / 255, 242 / 255, 242 / 255],
         hueStep: LINES_HUE_STEP,
-        background(g, x0, y0, x1, y1) {
+        picture(g, x0, y0, x1, y1) {
             g.fillStyle = "#060607";
             g.fillRect(x0, y0, x1 - x0, y1 - y0);
             vignette(g, x0, y0, x1, y1, 0.4);
@@ -551,9 +551,18 @@ const THEMES = {
         wordmark(e, cx) {
             const size = Math.min(74, Math.floor(74 * (e.layout.view[2] - 48) / e.measureText("QUADBRICKS", 74, 200, 16)));
             e.text("QUADBRICKS", cx, 150, { size, weight: 200, align: "center", spacing: Math.round(size * 16 / 74) });
-            THEMES.lines.stripe(e, cx - 150, 199, 300 + 300 / 7 * 0.34, 4);
+            BACKGROUNDS.lines.stripe(e, cx - 150, 199, 300 + 300 / 7 * 0.34, 4);
         },
     },
+};
+const BACKGROUND_IDS = ["space", "gallery", "lines"]; // menu order
+
+// Themes (Options → Visuals → Theme): a background with the block style, confetti and clear burst that
+// go with it, which those settings take while they are on Follow theme (Options.look())
+const THEMES = {
+    space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare" },
+    gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "sparks", rings: "rings" },
+    lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare" },
 };
 const THEME_IDS = ["space", "gallery", "lines"]; // menu order; the first is the default
 

@@ -1,4 +1,4 @@
-// Player options, kept in localStorage: key and gamepad bindings, theme, block style, effects and motion, and
+// Player options, kept in localStorage: key and gamepad bindings, theme, background, block style, effects and motion, and
 // the Guideline handling.
 // Storage can be unavailable (private windows, blocked site data); the game then
 // runs on the defaults and simply doesn't remember changes.
@@ -143,13 +143,18 @@ const frameRange = (min, max) => Array.from({ length: max - min + 1 }, (_, i) =>
 const SDF_STEPS = [5, 10, 20, 40, Infinity];
 const HANDLING_IDS = ["das", "arr", "sdf", "dcd", "ghost", "dropGuard", "previews", "holdPiece", "irs", "ihs", "rot180"];
 
+// The value of a setting a theme can choose (THEMES) that takes the theme's choice (Options.look())
+const FOLLOW_THEME = "theme";
+const THEMED_IDS = ["background", "tileset", "confetti", "rings"];
+
 // Settings stepped through a list of values (Options → Visuals and Guideline), and on/off settings
 const OPTION_CHOICES = {
     theme: THEME_IDS,
-    tileset: TILESET_IDS,
-    confetti: CONFETTI_STYLE_IDS,
+    background: [FOLLOW_THEME, ...BACKGROUND_IDS],
+    tileset: [FOLLOW_THEME, ...TILESET_IDS],
+    confetti: [FOLLOW_THEME, ...CONFETTI_STYLE_IDS],
     effects: EFFECT_LEVELS.map((_, i) => i), // 0 off, then an index into EFFECT_LEVELS
-    rings: RING_MODE_IDS,
+    rings: [FOLLOW_THEME, ...RING_MODE_IDS],
     tilt: TILT_LEVELS.map((_, i) => i),
     shake: SHAKE_LEVELS.map((_, i) => i),
     scale: SCALE_STEPS,
@@ -172,12 +177,13 @@ class Options {
         this.keys2 = defaultKeys2(); // player 2's (PLAYER2_ACTIONS)
         this.pad = defaultPad(); // the table of a pad not set up on its own: the defaults, or the one saved for every pad before
         this.pads = {};          // each gamepad's own bindings, by its key (GamepadControls' padKey())
-        this.theme = THEME_IDS[0]; // the look around the blocks (themes.js)
-        this.tileset = TILESET_IDS[0];
-        this.confetti = "sparks"; // line clear confetti, an id from CONFETTI_STYLES
+        this.theme = THEME_IDS[0]; // the background, block style, confetti and clear burst that follow it (THEMES)
+        this.background = FOLLOW_THEME; // the look around the blocks, an id from BACKGROUNDS (themes.js)
+        this.tileset = FOLLOW_THEME; // an id from TILESETS
+        this.confetti = FOLLOW_THEME; // line clear confetti, an id from CONFETTI_STYLES
         this.effects = DEFAULT_EFFECTS;
         this.backdrop = true; // animated backdrop: colour wash and drifting lights
-        this.rings = "flare"; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
+        this.rings = FOLLOW_THEME; // line clear shockwaves, an id from RING_MODES (strength follows the effects level)
         this.tilt = DEFAULT_TILT; // playing field tilt: index into TILT_LEVELS
         this.shake = DEFAULT_SHAKE; // playing field shake on hard drops, clears and bumps: index into SHAKE_LEVELS
         this.flash = true; // cleared rows light up as they go (only with effects on)
@@ -204,6 +210,13 @@ class Options {
             }
             if (saved.sdf === null) saved.sdf = Infinity; // JSON has no Infinity
             if (typeof saved.shake === "boolean") saved.shake = saved.shake ? DEFAULT_SHAKE : 0; // once on/off
+            if (saved.theme && !("background" in saved)) {
+                // Saved before themes: the theme was the background (the same ids), and the block style,
+                // confetti and clear burst left at their defaults then follow it
+                for (const [id, old] of [["tileset", "flat"], ["confetti", "sparks"], ["rings", "flare"]]) {
+                    if (saved[id] === old) delete saved[id];
+                }
+            }
             for (const [id, values] of Object.entries(OPTION_CHOICES)) {
                 if (values.includes(saved[id])) this[id] = saved[id];
             }
@@ -298,6 +311,11 @@ class Options {
             this[id] = values[stepIndex(values.indexOf(this[id]), dir, values.length, wrap)];
         }
         this.save();
+    }
+
+    // A setting a theme can choose (THEMED_IDS) as it is in effect: its own value, or on Follow theme the theme's
+    look(id) {
+        return this[id] === FOLLOW_THEME ? THEMES[this.theme][id] : this[id];
     }
 
     // Multiplier of the playing field's tilt angles (0 when off, or with effects off)

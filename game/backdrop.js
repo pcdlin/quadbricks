@@ -68,7 +68,7 @@ void main() {
     gl_FragColor = vec4(c, 1.0);
 }`;
 
-// Field lines (the Field lines theme), added over the picture: the level sets y - d = n × spacing of a
+// Field lines (the Field Lines background), added over the picture: the level sets y - d = n × spacing of a
 // height field d made of Gaussian bumps, so the lines run across and bend round each bump, taking its
 // colour where it lifts them most. Antialiased by their distance in pixels (the line's offset over
 // the field's gradient), about one logical unit wide and never thinner than a pixel (fainter instead).
