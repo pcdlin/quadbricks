@@ -1071,10 +1071,11 @@ const BACKGROUNDS = {
             }
             return { lights, rgb: ECLIPSE_RGB, time: moving ? e.clock / 60 : 0 };
         },
-        // where the lamp shines through the well for the motion m, as Engine.updateSheen() places it
+        // where the lamp shines through the well for the motion m, as Engine.updateSheen() places it (the
+        // fly-in's turn included)
         lampAt(e, m) {
-            const moves = e.options.effectScale > 0 ? 180 / Math.PI : 0;
-            return [LAMP_REST[0] - m.ry * moves * LAMP_PER_DEG[1], LAMP_REST[1] + m.rx * moves * LAMP_PER_DEG[0]];
+            const moves = e.options.effectScale > 0 ? 180 / Math.PI : 0, tilt = e.sheenTilt(m);
+            return [LAMP_REST[0] - tilt.ry * moves * LAMP_PER_DEG[1], LAMP_REST[1] + tilt.rx * moves * LAMP_PER_DEG[0]];
         },
         glowRgb() { return null; },
         // a black well with a faint rim; the lamp a soft pool through it

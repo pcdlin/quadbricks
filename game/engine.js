@@ -1203,8 +1203,7 @@ class Engine {
         const r = this.r;
         if (!r.begin()) return; // WebGL context lost: nothing to draw on until it's restored
         this.motion = this.boardMotion();
-        const m = this.motion, fly = m.fly; // the blocks' sheen and lamp follow the fly-in's turn too
-        this.updateSheen(this.flying(fly) ? { rx: m.rx + fly.rx, ry: m.ry + fly.ry } : m);
+        this.updateSheen(this.sheenTilt(this.motion));
         // Clear ripples: the frame is drawn into a layer, then onto the screen through them
         const mode = this.ringMode();
         const ripples = mode === "ripple" && this.rings.length ? this.rippleShapes() : null;
@@ -1472,6 +1471,11 @@ class Engine {
     // Whether the fly-in still moves the board group
     flying(fly) {
         return fly.rx || fly.ry || fly.dz || fly.alpha < 1;
+    }
+
+    // The tilt the blocks' sheen and lamp follow for the motion m: the field's, and the fly-in's turn too
+    sheenTilt(m) {
+        return this.flying(m.fly) ? { rx: m.rx + m.fly.rx, ry: m.ry + m.fly.ry } : m;
     }
 
     // How big the board's centre is drawn at its depth in the fly-in (1 in its place)
@@ -3676,9 +3680,16 @@ class Engine {
         });
     }
 
+    // Each side's blocks take the sheen and lamp of its own board's tilt (player 2's drifts mirrored); the
+    // player's are in effect again after
     drawGame() {
         this.drawSide(this.ownBoard, this.motion, 0);
-        if (this.match && !this.layout.mini) this.drawSide(this.match.view, this.boardMotion(this.match.view), 1);
+        if (this.match && !this.layout.mini) {
+            const m = this.boardMotion(this.match.view);
+            this.updateSheen(this.sheenTilt(m));
+            this.drawSide(this.match.view, m, 1);
+            this.updateSheen(this.sheenTilt(this.motion));
+        }
     }
 
     // The bot's field in the mini layout (touch controls): small at the foot of the right column,
