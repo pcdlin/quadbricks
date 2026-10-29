@@ -77,9 +77,9 @@ const looks = o => THEMED_IDS.map(id => o.look(id));
     check("At first every themed setting follows the first theme",
         [o.theme, THEMED_IDS.map(id => o[id]), looks(o)], ["space", THEMED_IDS.map(() => FOLLOW_THEME), ["space", "flat", "sparks", "flare", "streak"]]);
     o.theme = "gallery";
-    check("Another theme brings its background, block style, confetti, clear burst and drop trail", looks(o), ["gallery", "neon", "sparks", "rings", "neon"]);
+    check("Another theme brings its background, block style, confetti, clear burst and drop trail", looks(o), ["gallery", "neon", "neon", "rings", "neon"]);
     o.tileset = "gem";
-    check("A setting of its own wins over the theme's", looks(o), ["gallery", "gem", "sparks", "rings", "neon"]);
+    check("A setting of its own wins over the theme's", looks(o), ["gallery", "gem", "neon", "rings", "neon"]);
 }
 for (const [id, theme] of Object.entries(THEMES)) {
     check(`Theme ${id}'s choices are values of their settings`,

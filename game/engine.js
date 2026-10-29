@@ -495,8 +495,18 @@ const CONFETTI_SPECS = {
     stars: { count: 2, size: [3, 4], speed: 1, lift: 3, gravity: 0.05, drag: 0.96, life: 56, alpha: 0.7, add: true, spin: 0.05 },
     bubbles: { count: 2, size: [2, 5], speed: 0.4, lift: 2, gravity: -0.012, drag: 0.97, life: 70, alpha: 0.6, add: true, sway: 0.3 },
     pixels: { count: 2, size: [3, 3], speed: 1, lift: 3, gravity: 0.08, drag: 0.97, life: 50, alpha: 0.9, grid: 3 },
+    neon: { count: 2, size: [3, 3], speed: 1.1, lift: 3.6, gravity: 0.07, drag: 0.96, life: 56, alpha: 0.95, add: true, spin: 0.12 },
+    foil: { count: 3, size: [3, 2.5], speed: 0.8, lift: 3.4, gravity: 0.04, drag: 0.95, life: 45, alpha: 0.8, add: true, spin: 0.1, sway: 0.5, maxFall: 1.1 },
 };
-const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4 }; // rows of the confetti atlas (pixels are plain rects)
+// Rows of the confetti atlas (pixels are plain rects). Foil's columns are hues, not the colours: FOIL_HUES of them
+// round the wheel
+const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4, neon: 5, foil: 6 };
+// Neon: a tube's hum (alpha swing) and how often and how deep it drops out for a frame or two
+const NEON_CONFETTI_HUM = 0.15, NEON_CONFETTI_DROPOUT = 0.96, NEON_CONFETTI_DIM = 0.25;
+// Foil: a flake's hue turns FOIL_HUE_SWING degrees as it turns over (and with the Holo sheen's), and it glints
+// white while nearly face-on, past FOIL_GLINT
+const FOIL_HUE_SWING = 80, FOIL_GLINT = 0.96;
+const FOIL_HUES = CONFETTI_COLORS.length; // the atlas's columns
 // TGM3 Easy's fireworks: bursts of confetti around the well, at most FIREWORK_MAX_BURSTS a frame
 // (a stream fires one every 10 frames; the end can fire dozens at once)
 const FIREWORK_SPARKS = 26, FIREWORK_SPEED = 3.2, FIREWORK_LIFE = 70, FIREWORK_MAX_BURSTS = 6;
@@ -2066,7 +2076,14 @@ class Engine {
             twinkle: Math.random() * Math.PI * 2,
             phase: Math.random() * Math.PI * 2, // flutter
             rot: Math.random() * Math.PI * 2, spin: (Math.random() * 2 - 1) * spin,
+            hue: style === "foil" ? this.foilHue(color) : 0,
         };
+    }
+
+    // A foil flake's hue face-on: its colour's, or any for the greys and white
+    foilHue(color) {
+        const [h, s] = rgbToHsl(parseColor(color));
+        return s > 20 ? h : Math.random() * 360;
     }
 
     // Lives and speeds are in game frames; dt is the time passed in them
@@ -2517,6 +2534,30 @@ class Engine {
                         r.rect(Math.round(p.x / g) * g - p.size / 2, Math.round(p.y / g) * g - p.size / 2, p.size, p.size, p.color);
                         break;
                     }
+                    case "neon": { // a lit tube tumbling end over end, humming and now and then dropping out
+                        const turn = 0.3 + 0.7 * Math.abs(Math.cos(p.twinkle * 0.4)), hw = p.size * 2;
+                        r.globalAlpha *= 1 - NEON_CONFETTI_HUM + NEON_CONFETTI_HUM * Math.sin(p.twinkle * 2.3);
+                        if (Math.sin(p.twinkle * 0.9 + p.phase * 7) > NEON_CONFETTI_DROPOUT) r.globalAlpha *= NEON_CONFETTI_DIM;
+                        this.confettiQuad(atlas.tex, sx, sy, p.x, p.y, hw * turn, hw, p.rot);
+                        break;
+                    }
+                    case "foil": { // a flake turning over: its hue swings with the turn, between two hue sprites
+                        const flip = Math.cos(p.phase * 1.7), hw = p.size * 1.1, hh = hw * Math.max(0.12, Math.abs(flip));
+                        const hue = p.hue + flip * FOIL_HUE_SWING + (this.sheen ? this.sheen.hue : 0);
+                        const at = (hue / 360 * FOIL_HUES % FOIL_HUES + FOIL_HUES) % FOIL_HUES;
+                        const i = Math.floor(at), mix = at - i, a = r.globalAlpha;
+                        r.globalAlpha = a * (1 - mix);
+                        this.confettiQuad(atlas.tex, i * GLOW_SPRITE, sy, p.x, p.y, hw, hh, p.rot);
+                        r.globalAlpha = a * mix;
+                        this.confettiQuad(atlas.tex, (i + 1) % FOIL_HUES * GLOW_SPRITE, sy, p.x, p.y, hw, hh, p.rot);
+                        const glint = (Math.abs(flip) - FOIL_GLINT) / (1 - FOIL_GLINT);
+                        if (glint > 0) { // the white star sprite
+                            r.globalAlpha = a * glint;
+                            this.confettiQuad(atlas.tex, atlas.index.get("#ffffff") * GLOW_SPRITE, CONFETTI_SPRITE_ROWS.stars * GLOW_SPRITE,
+                                p.x, p.y, p.size * 1.3, p.size * 1.3, p.rot * 0.5);
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -2607,6 +2648,39 @@ class Engine {
             g.beginPath();
             g.arc(cx - 10, cy - 10, 4, 0, Math.PI * 2);
             g.fill();
+            // Neon: a short tube lying across, glowing in the colour round a near-white core
+            cy = row("neon") + half;
+            g.save();
+            g.lineCap = "round";
+            g.shadowColor = color;
+            g.shadowBlur = 10;
+            g.strokeStyle = color;
+            g.lineWidth = 7;
+            g.beginPath();
+            g.moveTo(x0 + 14, cy);
+            g.lineTo(x0 + n - 14, cy);
+            g.stroke();
+            g.shadowBlur = 0;
+            g.strokeStyle = "rgba(255, 255, 255, 0.85)";
+            g.lineWidth = 2.5;
+            g.stroke();
+            g.restore();
+            // Foil: a hexagonal flake in this column's hue (FOIL_HUES round the wheel), a lighter band across it
+            cy = row("foil") + half;
+            const h = i * 360 / FOIL_HUES;
+            grad = g.createLinearGradient(cx - 22, cy - 22, cx + 22, cy + 22);
+            grad.addColorStop(0, `hsl(${h}, 95%, 55%)`);
+            grad.addColorStop(0.45, `hsl(${h + 30}, 95%, 72%)`);
+            grad.addColorStop(0.55, `hsl(${h + 40}, 95%, 82%)`);
+            grad.addColorStop(1, `hsl(${h + 60}, 95%, 55%)`);
+            g.fillStyle = grad;
+            g.strokeStyle = `hsla(${h + 40}, 100%, 88%, 0.9)`;
+            g.lineWidth = 2;
+            g.beginPath();
+            for (let j = 0; j < 6; j++) g.lineTo(cx + Math.cos(j * Math.PI / 3) * 26, cy + Math.sin(j * Math.PI / 3) * 26);
+            g.closePath();
+            g.fill();
+            g.stroke();
             index.set(color, i);
         });
         this.confettiAtlas = { tex: this.r.texture(c), index };

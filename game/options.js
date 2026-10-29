@@ -134,6 +134,8 @@ const CONFETTI_STYLES = [
     { id: "stars", name: "Stars" },
     { id: "bubbles", name: "Bubbles" },
     { id: "pixels", name: "Pixels" },
+    { id: "neon", name: "Neon" },
+    { id: "foil", name: "Foil" },
 ];
 const CONFETTI_STYLE_IDS = CONFETTI_STYLES.map(s => s.id);
 
