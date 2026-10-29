@@ -1,6 +1,6 @@
 // Backdrop pass of the WebGL renderer (renderer.js), drawn first each frame: the backdrop
-// picture, its colour wash, field lines, holographic foil or water and drifting lights, the board glow and the line-clear
-// shockwaves. These are large, soft effects computed per pixel in shaders. The engine
+// picture, its colour wash, field lines, holographic foil or water, the line-clear contours or glitter and drifting
+// lights, the board glow and the line-clear shockwaves. These are large, soft effects computed per pixel in shaders. The engine
 // builds a scene description each frame (see Engine.backdropScene).
 // Coordinates are device pixels, y down, unless noted.
 
@@ -192,6 +192,115 @@ void main() {
     gl_FragColor = vec4(uWaterRgb * (0.1 * rays + 0.3 * caustic * reach) * uWater.x, 0.0);
 }`;
 
+// Clear contours (Clear burst: Contours, Field Lines'), added: a packet of fine lines spreading from the
+// cleared rows, the level sets of the distance from the centre (stretched 1.6x horizontally) a line spacing
+// apart, wandering with a slow noise like the field lines round their bumps, each line its own hue a step
+// round the wheel, strongest at the packet's middle. Antialiased by their distance in pixels, as the field lines.
+const CONTOUR_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uView;                                // scale, offset x, offset y of the logical view
+uniform vec4 uContour[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, packet width (logical)
+uniform vec4 uContourColor[${BACKDROP_MAX_RINGS}];  // hue (degrees), alpha (0: unused), noise seed, line spacing (logical)
+const float WANDER = 46.0;   // how far the noise moves a line (logical units)
+const float HUE_STEP = 38.0; // degrees from one line to the next
+vec3 spectrum(float h) {     // HSL at 80 % saturation, 72 % lightness
+    vec3 rgb = clamp(abs(mod(h / 60.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return 0.72 + 0.448 * (rgb - 0.5);
+}
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uView.yz) / uView.x;
+    float s = uView.x;
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < ${BACKDROP_MAX_RINGS}; i++) {
+        if (uContourColor[i].y <= 0.0) continue;
+        float seed = uContourColor[i].z, spacing = uContourColor[i].w;
+        vec2 o = q - uContour[i].xy;
+        vec2 nq = q * 0.006 + seed;
+        o += (vec2(noise(nq), noise(nq + 37.0)) - 0.5) * 2.0 * WANDER;
+        vec2 e = o / vec2(1.6, 1.0);
+        float len = max(length(e), 0.001);
+        float u = (len - uContour[i].z) / uContour[i].w;
+        if (abs(u) > 3.0) continue;
+        float env = exp(-u * u) * smoothstep(0.0, 40.0, len);
+        float slope = length(e / vec2(1.6, 1.0)) / len; // the distance's gradient (the noise's left out)
+        float f = (len - uContour[i].z) / spacing;
+        float dist = abs(fract(f + 0.5) - 0.5) * spacing / slope * s; // to the nearest line, in pixels
+        float w = 1.2 * s;
+        float line = clamp(0.5 * max(w, 1.0) + 0.5 - dist, 0.0, 1.0) * min(w, 1.0);
+        float glow = 0.3 * exp(-dist * dist / (16.0 * s * s));
+        c += spectrum(uContourColor[i].x + floor(f + 0.5) * HUE_STEP) * uContourColor[i].y * env * (line + glow);
+    }
+    gl_FragColor = vec4(c, 0.0);
+}`;
+
+// Clear glitter (Clear burst: Glitter, Hologram's), added: a wave spreading from the cleared rows (stretched
+// 1.3x horizontally) that sets a honeycomb of small hexagonal facets flashing in rainbow colours as it
+// passes their centres, each a little late by its own amount, then glinting again as it turns, the brightest
+// with a white glint. The honeycomb is the Hologram foil's (FOIL_FS), on the backdrop's view, so on its
+// background the foil's own facets light up.
+const GLITTER_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uView;                                // scale, offset x, offset y of the logical view
+uniform vec3 uBgView;                              // the same of the backdrop's (the honeycomb's)
+uniform float uFacet;                              // a facet's width (backdrop logical)
+uniform vec4 uGlitter[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, front width (logical)
+uniform vec2 uGlitterColor[${BACKDROP_MAX_RINGS}];  // hue (degrees), alpha (0: unused)
+vec3 spectrum(float h) {     // HSL at 85 % saturation, 62 % lightness
+    vec3 rgb = clamp(abs(mod(h / 60.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return 0.62 + 0.646 * (rgb - 0.5);
+}
+float hairline(float distPx, float width) {
+    return clamp(0.5 * max(width, 1.0) + 0.5 - distPx, 0.0, 1.0) * min(width, 1.0);
+}
+float hash(vec2 v) {
+    return fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453);
+}
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 qb = (p - uBgView.yz) / uBgView.x;
+    float sb = uBgView.x;
+    // the facet this pixel is on, as FOIL_FS finds it, and its centre in the logical view
+    float size = uFacet;
+    vec2 hs = vec2(1.0, 1.7320508), hp = qb / size;
+    vec2 ha = mod(hp, hs) - 0.5 * hs, hb = mod(hp - 0.5 * hs, hs) - 0.5 * hs;
+    vec2 hl = dot(ha, ha) < dot(hb, hb) ? ha : hb;
+    vec2 id = floor((hp - hl) / (0.5 * hs) + 0.5) * 0.5 * hs; // snapped, so the hashes hold across the facet
+    vec2 qc = (uBgView.yz + id * size * sb - uView.yz) / uView.x;
+    float turn = hash(id), shine = hash(id + 17.0), late = hash(id + 31.0);
+    float hex = max(abs(hl.x), dot(abs(hl), vec2(0.5, 0.8660254)));
+    float face = clamp((0.44 - hex) * size * sb + 0.5, 0.0, 1.0); // a hairline gap between facets
+    float edge = hairline(abs(0.44 - hex) * size * sb, sb * 0.7);
+    float bright = shine * shine * shine; // most facets faint, a few bright
+    float along = dot(qb, vec2(0.8, 0.6));
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < ${BACKDROP_MAX_RINGS}; i++) {
+        if (uGlitterColor[i].y <= 0.0) continue;
+        float d = length((qc - uGlitter[i].xy) / vec2(1.3, 1.0));
+        float u = (uGlitter[i].z - d) / uGlitter[i].w - 1.2 * late; // > 0: the front has passed the facet
+        if (u < -0.6 || u > 5.0) continue;
+        float flash = u < 0.0 ? exp(-u * u * 12.0) : exp(-1.2 * u);
+        float facing = pow(0.5 + 0.5 * cos(turn * 6.2832 + u * 2.2), 6.0); // turning as it goes on glinting
+        float lit = flash * bright * (0.15 + 0.85 * facing);
+        vec3 col = spectrum(uGlitterColor[i].x + along * 0.32 + turn * 140.0);
+        float glint = pow(facing, 10.0) * step(0.7, shine) * flash;
+        c += uGlitterColor[i].y * ((col * face + 0.6 * edge * mix(col, vec3(1.0), 0.5)) * lit + vec3(1.0) * face * glint * 0.8);
+    }
+    gl_FragColor = vec4(c, 0.0);
+}`;
+
 // Drifting lights: one quad each, added
 const ORB_VS = `
 attribute vec2 aPos;
@@ -348,6 +457,7 @@ class GLBackdrop {
         this.glowSigma = new Float32Array(2);
         this.glowColor = new Float32Array(2 * 4);
         this.waveAmp = new Float32Array(BACKDROP_MAX_RINGS);
+        this.burstColor = new Float32Array(BACKDROP_MAX_RINGS * 4);
         this.bump = new Float32Array(BACKDROP_MAX_BUMPS * 4);
         this.bumpColor = new Float32Array(BACKDROP_MAX_BUMPS * 3);
         renderer.restoreHandlers.push(() => this.setup());
@@ -360,6 +470,8 @@ class GLBackdrop {
         this.lines = this.r.program(FULLSCREEN_VS, LINES_FS, [["aPos", 2]]);
         this.foil = this.r.program(FULLSCREEN_VS, FOIL_FS, [["aPos", 2]]);
         this.water = this.r.program(FULLSCREEN_VS, WATER_FS, [["aPos", 2]]);
+        this.contour = this.r.program(FULLSCREEN_VS, CONTOUR_FS, [["aPos", 2]]);
+        this.glitter = this.r.program(FULLSCREEN_VS, GLITTER_FS, [["aPos", 2]]);
         this.orbProgram = this.r.program(ORB_VS, ORB_FS, [["aPos", 2], ["aOrb", 3], ["aColor", 4]]);
         this.board = this.r.program(FULLSCREEN_VS, BOARD_FS, [["aPos", 2]]);
         this.refraction = this.r.program(FULLSCREEN_VS, REFRACT_FS, [["aPos", 2]]);
@@ -395,6 +507,8 @@ class GLBackdrop {
     //   lines: null or {spacing, ink: [r, g, b, a], bumps: [{x, y, r, amp, rgb}]} (same),
     //   foil: null or {hue, band, strength, time, facets: [x, y, width, fade]} (same),
     //   water: null or {rgb, strength, time},
+    //   contours: [{x, y, r, width, hue, a, seed, spacing}] (view logical; Engine.contourShapes),
+    //   glitter: [{x, y, r, width, hue, a}] (same; Engine.glitterShapes), facet: the glitter's facet width (backdrop logical),
     //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
     //   glows: up to two of {rect: [x0, y0, x1, y1], sigma, rgb, a}, a board glow each }
     render(scene) {
@@ -476,6 +590,42 @@ class GLBackdrop {
             gl.uniform3fv(p.u("uBgView"), scene.bgView);
             gl.uniform3f(p.u("uWaterRgb"), rgb[0], rgb[1], rgb[2]);
             gl.uniform2f(p.u("uWater"), strength, time);
+            this.drawFullscreen(p);
+        }
+
+        // Clear contours and glitter
+        if (scene.contours.length) {
+            p = this.contour;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uView"), scene.view);
+            const shape = this.ring, color = this.burstColor;
+            color.fill(0); // alpha 0: slot unused
+            scene.contours.slice(-BACKDROP_MAX_RINGS).forEach((c, i) => {
+                shape[i * 4] = c.x; shape[i * 4 + 1] = c.y; shape[i * 4 + 2] = c.r; shape[i * 4 + 3] = c.width;
+                color[i * 4] = c.hue; color[i * 4 + 1] = c.a; color[i * 4 + 2] = c.seed; color[i * 4 + 3] = c.spacing;
+            });
+            gl.uniform4fv(p.u("uContour"), shape);
+            gl.uniform4fv(p.u("uContourColor"), color);
+            this.drawFullscreen(p);
+        }
+        if (scene.glitter.length) {
+            p = this.glitter;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uView"), scene.view);
+            gl.uniform3fv(p.u("uBgView"), scene.bgView);
+            gl.uniform1f(p.u("uFacet"), scene.facet);
+            const shape = this.ring, color = this.burstColor;
+            color.fill(0); // alpha 0: slot unused
+            scene.glitter.slice(-BACKDROP_MAX_RINGS).forEach((g, i) => {
+                shape[i * 4] = g.x; shape[i * 4 + 1] = g.y; shape[i * 4 + 2] = g.r; shape[i * 4 + 3] = g.width;
+                color[i * 2] = g.hue; color[i * 2 + 1] = g.a;
+            });
+            gl.uniform4fv(p.u("uGlitter"), shape);
+            gl.uniform2fv(p.u("uGlitterColor"), color.subarray(0, BACKDROP_MAX_RINGS * 2));
             this.drawFullscreen(p);
         }
 

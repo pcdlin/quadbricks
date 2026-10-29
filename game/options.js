@@ -116,12 +116,15 @@ const SHAKE_LEVELS = [
 const DEFAULT_SHAKE = 2;
 
 // Line clear shockwaves: off, glowing rings, a ripple refracting the whole screen (splitting the
-// colours at its front), or a lens flare along the cleared rows
+// colours at its front), a lens flare along the cleared rows, a packet of fine contour lines
+// (Field Lines') or a wave of holographic facets flashing (Hologram's)
 const RING_MODES = [
     { id: "off", name: "Off" },
     { id: "rings", name: "Rings" },
     { id: "ripple", name: "Ripple" },
     { id: "flare", name: "Flare" },
+    { id: "contours", name: "Contours" },
+    { id: "glitter", name: "Glitter" },
 ];
 const RING_MODE_IDS = RING_MODES.map(m => m.id);
 

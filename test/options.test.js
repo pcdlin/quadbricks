@@ -89,7 +89,7 @@ for (const [id, theme] of Object.entries(THEMES)) {
     const o = loaded({ theme: "lines", tileset: "flat", confetti: "glow", rings: "flare" });
     check("Saved before themes: the theme stays, settings left at their old defaults follow it",
         [o.theme, o.background, o.tileset, o.confetti, o.rings, looks(o)],
-        ["lines", FOLLOW_THEME, FOLLOW_THEME, "glow", FOLLOW_THEME, ["lines", "chalk", "glow", "flare", "chalk"]]);
+        ["lines", FOLLOW_THEME, FOLLOW_THEME, "glow", FOLLOW_THEME, ["lines", "chalk", "glow", "contours", "chalk"]]);
     const p = loaded({ theme: "lines", background: "space", tileset: "flat", confetti: FOLLOW_THEME, rings: "flare" });
     check("Saved with themes: every setting as saved", [p.theme, looks(p)], ["lines", ["space", "flat", "paper", "flare", "chalk"]]);
     check("A drop trail saved on or off: following the theme, or off",

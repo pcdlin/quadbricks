@@ -523,6 +523,14 @@ const RIPPLE_AMP = 1.94; // refraction strength at the Normal effects level
 const RIPPLE_SPREAD = 0.5; // red bends this much less than green, blue this much more
 const FLARE_LIFE = 26; // frames a clear flare lasts (Clear burst: Flare)
 const FLARE_ALPHA = 1; // flare brightness at the Normal effects level
+const CONTOUR_LIFE = 56; // frames a clear's contour lines spread (Clear burst: Contours)
+const CONTOUR_REACH = 520; // logical units the contours' middle travels (before their 1.6x horizontal stretch)
+const CONTOUR_SPACING = LINES_SPACING; // logical units between them, as between the field lines
+const CONTOUR_ALPHA = 0.9; // their brightness at the Normal effects level
+const GLITTER_LIFE = 64; // frames a clear's glitter wave runs (Clear burst: Glitter)
+const GLITTER_REACH = 640; // logical units its front travels (before its 1.3x horizontal stretch)
+const GLITTER_FACET = HOLOGRAM_FACETS[2]; // a facet's width, the Hologram foil's (backdrop logical units)
+const GLITTER_ALPHA = 1; // the facets' light at the Normal effects level
 const FLASH_LIFE = 16; // frames a cleared row glows
 const STACK_BORDER_W = 3; // TGM-style stack border: width of the line, drawn on the blocks' edges
 const STACK_BORDER_COLOR = "rgba(222,222,232,0.9)";
@@ -1243,7 +1251,8 @@ class Engine {
                 a: this.boardGlowAlpha() * m.fly.alpha * m.fly.alpha,
             };
         });
-        const rings = this.ringMode() === "rings" ? this.ringShapes().map(r => ({
+        const mode = this.ringMode();
+        const rings = mode === "rings" ? this.ringShapes().map(r => ({
             ...r, rgb: hslToRgb(r.hue, 90, 75), glowRgb: hslToRgb(r.hue, 95, 65),
         })) : [];
         return {
@@ -1257,6 +1266,9 @@ class Engine {
             lines: this.background.lines ? this.background.lines(this) : null,
             foil: this.background.foil ? this.background.foil(this) : null,
             water: this.background.water ? this.background.water(this) : null,
+            contours: mode === "contours" ? this.contourShapes() : [],
+            glitter: mode === "glitter" ? this.glitterShapes() : [],
+            facet: GLITTER_FACET,
             rings,
             ringSigma: 6, // like a shadowBlur of 12
             glows,
@@ -2036,12 +2048,12 @@ class Engine {
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
             const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
             const mode = this.options.look("rings");
-            const span = mode === "ripple" ? RIPPLE_LIFE : mode === "flare" ? FLARE_LIFE : RING_LIFE;
+            const span = { ripple: RIPPLE_LIFE, flare: FLARE_LIFE, contours: CONTOUR_LIFE, glitter: GLITTER_LIFE }[mode] || RING_LIFE;
             this.rings.push({
                 gx: this.board.gx, // the board's group: the burst spreads from its well
                 y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
                 life: span, span, power: rows.size,
-                chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale,
+                chain: Math.max(0, chain), hue: this.hue, k: this.options.effectScale, seed: Math.random() * 100,
             });
             this.hueTarget += HUE_STEP * rows.size / 2 * (this.background.hueStep ?? 1);
             this.pulse = Math.min(1, this.pulse + (0.15 + 0.1 * rows.size) * this.options.effectScale);
@@ -2751,6 +2763,38 @@ class Engine {
                 half: (ring.bottom - ring.top) / 2,
                 width: 4 * (1 - k) + 2,
                 a: (1 - k) * (1 - k) * (0.5 + 0.12 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * FLARE_ALPHA,
+            };
+        });
+    }
+
+    // Clear contours: a packet of fine lines spreading from the cleared rows, stretched 1.6x
+    // horizontally like the rings, wandering like the field lines, each line a hue further round the
+    // wheel. Centre, the packet's middle radius and its width in logical units.
+    contourShapes() {
+        return this.rings.map(ring => {
+            const k = 1 - ring.life / ring.span; // 0 -> 1
+            const ease = 1 - Math.pow(1 - k, 2.2);
+            return {
+                x: ring.gx + BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue + 20, seed: ring.seed,
+                r: 20 + ease * (CONTOUR_REACH + 60 * ring.power),
+                width: (10 + 4 * ring.power) * (1 + 1.2 * k), // more lines as it spreads
+                spacing: CONTOUR_SPACING,
+                a: Math.pow(1 - k, 1.6) * (0.5 + 0.15 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * CONTOUR_ALPHA,
+            };
+        });
+    }
+
+    // Clear glitter: a wave from the cleared rows, stretched 1.3x horizontally, setting the facets of
+    // a honeycomb flashing as it passes them. Centre, the front's radius and how far behind it the
+    // facets glint (its width) in logical units.
+    glitterShapes() {
+        return this.rings.map(ring => {
+            const k = 1 - ring.life / ring.span; // 0 -> 1
+            return {
+                x: ring.gx + BOARD_X + BOARD_W / 2, y: ring.y, hue: ring.hue,
+                r: 10 + (1 - Math.pow(1 - k, 1.5)) * GLITTER_REACH,
+                width: 16 + 5 * ring.power,
+                a: Math.pow(1 - k, 1.4) * (0.6 + 0.15 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * GLITTER_ALPHA,
             };
         });
     }

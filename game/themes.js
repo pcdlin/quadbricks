@@ -1033,8 +1033,8 @@ const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; //
 const THEMES = {
     space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare", trail: "streak" },
     gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "neon", rings: "rings", trail: "neon" },
-    lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare", trail: "chalk" },
-    hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "foil", rings: "ripple", trail: "prism" },
+    lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "contours", trail: "chalk" },
+    hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "foil", rings: "glitter", trail: "prism" },
     undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple", trail: "water" },
 };
 const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order; the first is the default
