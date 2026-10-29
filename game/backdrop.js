@@ -192,6 +192,53 @@ void main() {
     gl_FragColor = vec4(uWaterRgb * (0.1 * rays + 0.3 * caustic * reach) * uWater.x, 0.0);
 }`;
 
+// Light rays in fog (the Eclipse background), added: from a light behind each occluder (a well, or the
+// menu's wordmark: a rounded box), rays fan out past its edges, brightest there and fading with the
+// distance; drifting fog, a slowly flowing noise, is what makes them visible, so they break up where it thins.
+const BEAMS_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uView;              // scale, offset x, offset y of the logical view
+uniform vec4 uBeam[2];           // the light: x, y (logical); strength (0: unused); the occluder's corner radius
+uniform vec4 uOccluder[2];       // the occluder: centre x, y, half width, half height (logical)
+uniform vec3 uBeamRgb;
+uniform float uTime;             // seconds
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uView.yz) / uView.x;
+    float t = uTime;
+    vec2 fq = q * 0.0045 + vec2(t * 0.018, -t * 0.011);
+    float fog = 0.5 * noise(fq) + 0.3 * noise(fq * 2.3 + vec2(-t * 0.03, 7.0)) + 0.2 * noise(fq * 5.1 + 3.0);
+    fog = 0.25 + 0.75 * smoothstep(0.2, 0.8, fog);
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < 2; i++) {
+        if (uBeam[i].z <= 0.0) continue;
+        vec2 d = q - uBeam[i].xy;
+        float len = max(length(d), 1.0);
+        vec2 dir = d / len; // the rays' noise runs round the light (no seam)
+        float rays = pow(noise(dir * 5.0 + vec2(t * 0.04, 0.0)), 3.0)
+            + 0.7 * pow(noise(dir * 11.0 + vec2(5.0, -t * 0.06)), 4.0)
+            + 0.4 * pow(noise(dir * 23.0 + vec2(-t * 0.05, 9.0)), 5.0);
+        vec2 b = abs(q - uOccluder[i].xy) - uOccluder[i].zw + uBeam[i].w;
+        float dist = length(max(b, 0.0)) + min(max(b.x, b.y), 0.0) - uBeam[i].w; // outside the occluder
+        float edge = smoothstep(-6.0, 14.0, dist);
+        float fall = 1.0 / (1.0 + dist * 0.012) / (1.0 + dist * 0.004);
+        float halo = exp(-max(dist, 0.0) / 40.0);
+        c += uBeamRgb * uBeam[i].z * edge * (fall * (0.15 + 1.6 * rays) * fog + 0.5 * halo);
+    }
+    gl_FragColor = vec4(c, 0.0);
+}`;
+
 // Clear contours (Clear burst: Contours, Field Lines'), added: a packet of fine lines spreading from the
 // cleared rows, the level sets of the distance from the centre (stretched 1.6x horizontally) a line spacing
 // apart, wandering with a slow noise like the field lines round their bumps, each line its own hue a step
@@ -459,6 +506,8 @@ class GLBackdrop {
         this.waveAmp = new Float32Array(BACKDROP_MAX_RINGS);
         this.burstColor = new Float32Array(BACKDROP_MAX_RINGS * 4);
         this.bump = new Float32Array(BACKDROP_MAX_BUMPS * 4);
+        this.beam = new Float32Array(2 * 4);
+        this.occluder = new Float32Array(2 * 4);
         this.bumpColor = new Float32Array(BACKDROP_MAX_BUMPS * 3);
         renderer.restoreHandlers.push(() => this.setup());
         this.setup();
@@ -470,6 +519,7 @@ class GLBackdrop {
         this.lines = this.r.program(FULLSCREEN_VS, LINES_FS, [["aPos", 2]]);
         this.foil = this.r.program(FULLSCREEN_VS, FOIL_FS, [["aPos", 2]]);
         this.water = this.r.program(FULLSCREEN_VS, WATER_FS, [["aPos", 2]]);
+        this.beamProgram = this.r.program(FULLSCREEN_VS, BEAMS_FS, [["aPos", 2]]);
         this.contour = this.r.program(FULLSCREEN_VS, CONTOUR_FS, [["aPos", 2]]);
         this.glitter = this.r.program(FULLSCREEN_VS, GLITTER_FS, [["aPos", 2]]);
         this.orbProgram = this.r.program(ORB_VS, ORB_FS, [["aPos", 2], ["aOrb", 3], ["aColor", 4]]);
@@ -507,6 +557,7 @@ class GLBackdrop {
     //   lines: null or {spacing, ink: [r, g, b, a], bumps: [{x, y, r, amp, rgb}]} (same),
     //   foil: null or {hue, band, strength, time, facets: [x, y, width, fade]} (same),
     //   water: null or {rgb, strength, time},
+    //   beams: null or {lights: up to two of {x, y, strength, radius, occluder: [cx, cy, hw, hh]} (view logical), rgb, time},
     //   contours: [{x, y, r, width, hue, a, seed, spacing}] (view logical; Engine.contourShapes),
     //   glitter: [{x, y, r, width, hue, a}] (same; Engine.glitterShapes), facet: the glitter's facet width (backdrop logical),
     //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
@@ -590,6 +641,28 @@ class GLBackdrop {
             gl.uniform3fv(p.u("uBgView"), scene.bgView);
             gl.uniform3f(p.u("uWaterRgb"), rgb[0], rgb[1], rgb[2]);
             gl.uniform2f(p.u("uWater"), strength, time);
+            this.drawFullscreen(p);
+        }
+
+        // Light rays in fog
+        if (scene.beams) {
+            const { lights, rgb, time } = scene.beams;
+            p = this.beamProgram;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uView"), scene.view);
+            const beam = this.beam, occluder = this.occluder;
+            beam.fill(0); // strength 0: unused
+            for (let i = 0; i < Math.min(lights.length, 2); i++) {
+                const l = lights[i];
+                beam[i * 4] = l.x; beam[i * 4 + 1] = l.y; beam[i * 4 + 2] = l.strength; beam[i * 4 + 3] = l.radius;
+                occluder.set(l.occluder, i * 4);
+            }
+            gl.uniform4fv(p.u("uBeam"), beam);
+            gl.uniform4fv(p.u("uOccluder"), occluder);
+            gl.uniform3f(p.u("uBeamRgb"), rgb[0], rgb[1], rgb[2]);
+            gl.uniform1f(p.u("uTime"), time);
             this.drawFullscreen(p);
         }
 

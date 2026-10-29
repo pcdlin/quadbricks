@@ -559,6 +559,12 @@ const CHALK_TRAIL_STRENGTH = 1.9;
 const PRISM_TRAIL_LINE = 2, PRISM_TRAIL_GAP = 0.45, PRISM_TRAIL_SPAN = 0.9, PRISM_TRAIL_TURN = 1.2;
 const PRISM_TRAIL_KEEP = 0.25, PRISM_TRAIL_STRENGTH = 0.95;
 const PRISM_TRAIL_FADE = 15; // frames it takes to fade out (the others' DROP_TRAIL_FADE)
+// The Light rays trail: per column a haze RAYS_TRAIL_HAZE times the column's width and thin shafts in it (RAYS_TRAIL_SHAFTS
+// of them, RAYS_TRAIL_SHAFT wide, flickering), added, in slices RAYS_TRAIL_SLICE high whose light drifting fog breaks
+// up (RAYS_TRAIL_FOG: least, and the most added); the colour taken RAYS_TRAIL_WHITE of the way to white; the strength
+const RAYS_TRAIL_HAZE = 1.7, RAYS_TRAIL_HAZE_ALPHA = 0.45, RAYS_TRAIL_SHAFTS = 3, RAYS_TRAIL_SHAFT = 1.5;
+const RAYS_TRAIL_SLICE = 3, RAYS_TRAIL_FOG = [0.35, 0.65], RAYS_TRAIL_WHITE = 0.35, RAYS_TRAIL_STRENGTH = 1.5;
+const RAYS_TRAIL_FADE = 16; // frames it takes to fade out, lingering like Prism's
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 
 // The staff roll's credits, made up: [role, ...names], or a heading alone. They scroll up behind
@@ -640,6 +646,7 @@ const LAMP_SPOT_MIN = 0.15, LAMP_SPOT_MAX = 0.85; // the spot's range inside the
 const LAMP_STEPS = 5; // spot positions per axis in the atlas, drawn blended between the nearest four
 const LAMP_LOCKED = 0.7; // the stack's light relative to the falling piece's
 const LAMP_TILT_ALPHA = 0.6; // the other styles' lamp at Normal tilt and above (none at Off)
+const RAY_FLICKER = [0.6, 1.2]; // the lamp through the rays (rayFlicker()): least, and the most added
 const BOARD_LAYER_MARGIN = 18; // room around the frame in the tilted layer for block glows
 const BOARD_GLOW_BLUR = [44, 74]; // board glow blur (device px) at rest and at full pulse
 
@@ -1266,6 +1273,7 @@ class Engine {
             lines: this.background.lines ? this.background.lines(this) : null,
             foil: this.background.foil ? this.background.foil(this) : null,
             water: this.background.water ? this.background.water(this) : null,
+            beams: this.background.beams ? this.background.beams(this) : null,
             contours: mode === "contours" ? this.contourShapes() : [],
             glitter: mode === "glitter" ? this.glitterShapes() : [],
             facet: GLITTER_FACET,
@@ -2165,14 +2173,15 @@ class Engine {
 
     // Frames a drop trail in the style in effect takes to fade out (Prism's lingers)
     trailFade() {
-        return this.options.look("trail") === "prism" ? PRISM_TRAIL_FADE : DROP_TRAIL_FADE;
+        const style = this.options.look("trail");
+        return style === "prism" ? PRISM_TRAIL_FADE : style === "rays" ? RAYS_TRAIL_FADE : DROP_TRAIL_FADE;
     }
 
     // Drop trail streaks, one per column ({ col, y0, y1, index, yEnd, alpha }): each from y0 down
     // to y1 (the blocks' cell edge), fading in towards them, and on to yEnd inside the blocks; drawn
     // only down to yEnd while it grows, at `alpha` while it fades. Neighbouring streaks are joined
     // across the gap between their blocks where both are above the blocks, so a piece's trail is
-    // one area, inset only at its outer sides (but Neon's and Chalk's, lines down each column).
+    // one area, inset only at its outer sides (but Neon's, Chalk's and Light rays', lines down each column).
     // In the trail style in effect (TRAIL_STYLES)
     drawTrails(streaks) {
         const r = this.r, [inset] = this.trailFit(), scale = DROP_TRAIL_ALPHA * this.softEffectScale();
@@ -2234,11 +2243,36 @@ class Engine {
                     }
                     return;
                 }
+                case "rays": {
+                    // light streaming down through fog: a soft haze spilling past the column and thin shafts in it,
+                    // flickering, added; in slices whose light the drifting fog breaks up
+                    const c = color.map((v, i) => i < 3 ? v + (1 - v) * RAYS_TRAIL_WHITE : v);
+                    const fill = fade(c), hw = w * RAYS_TRAIL_HAZE, shafts = [];
+                    for (let i = 0; i < RAYS_TRAIL_SHAFTS; i++) {
+                        const at = 0.2 + 0.6 * trailNoise(s.col * 5 + i, 3), sway = Math.sin(t * 0.05 + s.col + i * 2.1) * w * 0.06;
+                        shafts.push([x + w * at + sway, 0.5 + 0.5 * Math.sin(t * (0.3 + 0.2 * i) + s.col * 1.3 + i)]);
+                    }
+                    r.save();
+                    r.blendMode = "add";
+                    for (let y = ya; y < yb; y += RAYS_TRAIL_SLICE) {
+                        const h = Math.min(RAYS_TRAIL_SLICE, yb - y);
+                        const fog = RAYS_TRAIL_FOG[0] + RAYS_TRAIL_FOG[1] * (0.5 + 0.5 * Math.sin(y * 0.045 - t * 0.04 + s.col * 0.7)) * (0.6 + 0.4 * Math.sin(y * 0.11 + t * 0.07));
+                        const a = scale * s.alpha * RAYS_TRAIL_STRENGTH * fog;
+                        r.globalAlpha = a * RAYS_TRAIL_HAZE_ALPHA;
+                        r.shape(x + w / 2 - hw / 2, y, hw, h, { fill, fillY });
+                        for (const [sx, flicker] of shafts) {
+                            r.globalAlpha = a * (0.4 + 0.6 * flicker);
+                            r.shape(sx - RAYS_TRAIL_SHAFT / 2, y, RAYS_TRAIL_SHAFT, h, { fill, fillY });
+                        }
+                    }
+                    r.restore();
+                    return;
+                }
             }
             r.globalAlpha = scale * s.alpha;
             r.shape(x, ya, w, yb - ya, { fill: fade(color), fillY });
         };
-        const joins = style !== "neon" && style !== "chalk";
+        const joins = style !== "neon" && style !== "chalk" && style !== "rays";
         // whichever way up (Rev): the span drawn, and the part of it above the blocks
         const span = (s, yEnd) => [Math.min(s.y0, yEnd), Math.max(s.y0, yEnd)];
         const above = s => span(s, (s.yEnd - s.y1) * (s.y1 - s.y0) > 0 ? s.y1 : s.yEnd);
@@ -3028,7 +3062,8 @@ class Engine {
         const gy = (clamp(0.5 + dv * LAMP_SPOT_SHIFT, LAMP_SPOT_MIN, LAMP_SPOT_MAX) - LAMP_SPOT_MIN) / span * last;
         const ix = Math.min(Math.floor(gx), last - 1), iy = Math.min(Math.floor(gy), last - 1);
         const fx = gx - ix, fy = gy - iy;
-        const a = r.globalAlpha * Math.min(1, pool * strength * (style === "active" ? 1 : LAMP_LOCKED));
+        const rays = set.rays ? this.rayFlicker(du, dv) : 1;
+        const a = r.globalAlpha * Math.min(1, pool * strength * rays * (style === "active" ? 1 : LAMP_LOCKED));
         const sprites = atlas.lamp[type];
         r.save();
         r.blendMode = "add";
@@ -3040,6 +3075,19 @@ class Engine {
             r.image(atlas.tex, x, y, size, size, sp.sx, sp.sy, sp.px, sp.px);
         }
         r.restore();
+    }
+
+    // How much of the lamp reaches a block (du, dv from it to the lamp, in well widths and heights) through
+    // the rays (Backlit, rays: true): bands round the lamp drifting and breathing like the Eclipse
+    // background's rays in fog (BEAMS_FS), so the rims brighten and fade as they pass. Still with the
+    // animated backdrop or effects off
+    rayFlicker(du, dv) {
+        const t = this.options.effects && this.options.backdrop ? this.clock / 60 : 0;
+        const a = Math.atan2(dv * this.boardH, du * BOARD_W);
+        const k1 = 0.5 + 0.5 * Math.sin(5 * a + t * 0.45 + 1.3 * Math.sin(3 * a - t * 0.3));
+        const k2 = 0.5 + 0.5 * Math.sin(11 * a - t * 0.6 + 2 + Math.sin(2 * a + t * 0.2));
+        const fog = 0.8 + 0.2 * Math.sin(t * 0.9 + a * 4 + Math.sin(t * 0.37));
+        return RAY_FLICKER[0] + RAY_FLICKER[1] * (0.65 * k1 * k1 + 0.35 * k2 * k2) * fog;
     }
 
     // Holo blocks: how strong the colour sheen is and which hue it starts at, from the

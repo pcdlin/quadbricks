@@ -219,6 +219,17 @@ const UNDERSEA_LABEL = "rgba(127,224,240,0.9)";
 const UNDERSEA_EDGE = "rgba(120,215,235,0.2)";
 const UNDERSEA_WELL_ALPHA = 0.74; // the well's fill (0.94 with effects off)
 
+// Eclipse: a near-black view with light rays in fog fanning out from a lamp behind the well (the
+// backdrop's BEAMS_FS, the hook beams()), from behind the wordmark in menus
+const ECLIPSE_RGB = [0.62, 0.6, 0.9]; // the light's colour
+const ECLIPSE_STRENGTH = 0.26; // the rays at Normal effects
+const ECLIPSE_SWELL = 1.4; // extra on a line clear's pulse
+const ECLIPSE_MARK = [400, 150, 215, 28, 24]; // the wordmark's occluder: centre, half width and height, corners
+const ECLIPSE_WELL_ALPHA = 0.9; // the well's fill (0.96 with effects off)
+const ECLIPSE_POOL = 0.14; // the lamp seen through the well
+const ECLIPSE_EDGE = "rgba(160,150,235,0.16)";
+const ECLIPSE_LABEL = "rgba(190,184,240,0.85)";
+
 const BACKGROUNDS = {
     // Night gallery: deep gradient, soft spotlight, receding floor grid
     gallery: {
@@ -1025,8 +1036,110 @@ const BACKGROUNDS = {
             return this.glint;
         },
     },
+
+    // Eclipse: near black, lit only by a lamp behind the well whose rays fan out past its edges through
+    // drifting fog (the backdrop's BEAMS_FS); it moves with the field's tilt, as the Backlit blocks' rims
+    // do. Black panels and cards with a faint rim, as if the light caught their edges.
+    eclipse: {
+        name: "Eclipse",
+        ink: [222 / 255, 220 / 255, 240 / 255],
+        picture(g, x0, y0, x1, y1) {
+            g.fillStyle = "#030305";
+            g.fillRect(x0, y0, x1 - x0, y1 - y0);
+            vignette(g, x0, y0, x1, y1, 0.5);
+        },
+        ambient() { return { blobs: [], orbs: [] }; },
+        // still with the animated backdrop or effects off
+        beams(e) {
+            const moving = e.options.effects && e.options.backdrop;
+            const strength = ECLIPSE_STRENGTH * e.softEffectScale() * (1 + ECLIPSE_SWELL * e.pulse);
+            let lights;
+            if (e.GAMESTATE === STATE_GAME) {
+                lights = e.boards().filter(view => !e.layout.mini || view === e.ownBoard).map(view => {
+                    const m = view === e.ownBoard ? e.motion : e.boardMotion(view);
+                    const [u, v] = this.lampAt(e, m), fs = e.flyScale(m);
+                    const ox = view.gx + m.dx, oy = m.dy, cx = BOARD_X + BOARD_W / 2, cy = e.boardY + e.boardH / 2;
+                    return {
+                        x: ox + cx + (u - 0.5) * BOARD_W * fs, y: oy + cy + (v - 0.5) * e.boardH * fs,
+                        strength: strength * m.fly.alpha, radius: 6 * fs,
+                        occluder: [ox + cx, oy + cy, (BOARD_W / 2 + 8) * fs, (e.boardH / 2 + 8) * fs],
+                    };
+                });
+            } else {
+                const [x, y, hw, hh, radius] = ECLIPSE_MARK;
+                lights = [{ x, y: y - 6, strength: strength * 0.8, radius, occluder: [x, y, hw, hh] }];
+            }
+            return { lights, rgb: ECLIPSE_RGB, time: moving ? e.clock / 60 : 0 };
+        },
+        // where the lamp shines through the well for the motion m, as Engine.updateSheen() places it
+        lampAt(e, m) {
+            const moves = e.options.effectScale > 0 ? 180 / Math.PI : 0;
+            return [LAMP_REST[0] - m.ry * moves * LAMP_PER_DEG[1], LAMP_REST[1] + m.rx * moves * LAMP_PER_DEG[0]];
+        },
+        glowRgb() { return null; },
+        // a black well with a faint rim; the lamp a soft pool through it
+        frame(e, [x, y, w, h], exam) {
+            const r = e.r;
+            r.shape(x, y, w, h, { radius: 4, fill: [2 / 255, 2 / 255, 4 / 255, e.options.effects ? ECLIPSE_WELL_ALPHA : 0.96] });
+            if (e.lamp) {
+                const px = BOARD_X + e.lamp.u * BOARD_W, py = e.boardY + e.lamp.v * e.boardH, rad = BOARD_W * 1.1;
+                r.save();
+                r.clip(x, y, w, h);
+                r.blendMode = "add";
+                r.globalAlpha *= ECLIPSE_POOL * e.softEffectScale() * (1 + 0.5 * e.pulse);
+                r.image(this.poolTexture(r), px - rad, py - rad, rad * 2, rad * 2);
+                r.restore();
+            }
+            r.shape(x, y, w, h, { radius: 4, stroke: exam ? goldAlpha(0.6 + 0.35 * e.pulse) : [170 / 255, 160 / 255, 240 / 255, 0.28 + 0.3 * e.pulse], lineWidth: 1 });
+        },
+        panel(e, x, y, w, h) {
+            e.r.shape(x, y, w, h, { radius: 6, fill: "rgba(3,3,6,0.88)", stroke: ECLIPSE_EDGE, lineWidth: 1 });
+        },
+        label(e, s, x, y, w, size, spacing) {
+            e.text(s, x, y, { size, weight: 700, color: ECLIPSE_LABEL, spacing });
+        },
+        card(e, x, y, w, h, radius, selected, accent) {
+            const r = e.r;
+            if (selected) r.shape(x - 2, y - 2, w + 4, h + 4, { radius: radius + 2, stroke: "rgba(170,160,240,0.12)", lineWidth: 3 });
+            r.shape(x, y, w, h, {
+                radius, lineWidth: 1,
+                fill: selected ? "rgba(14,13,24,0.92)" : "rgba(3,3,6,0.84)",
+                stroke: selected ? "rgba(190,180,250,0.55)" : ECLIPSE_EDGE,
+            });
+            if (selected) r.shape(x + 2, y + 8, 2, h - 16, { radius: 1, fill: accent }); // clear of the text on tight cards
+        },
+        // the seven colours as small backlit blocks: dark, with a coloured rim
+        stripe(e, x, y, w, h) {
+            const d = h + 6, gap = (w - d) / 6;
+            for (let t = 1; t <= 7; t++) {
+                e.r.shape(x + (t - 1) * gap, y + h / 2 - d / 2, d, d, { radius: 1.5, fill: "#060609", stroke: PIECE_COLORS[t].light, lineWidth: 1 });
+            }
+        },
+        // a thin wordmark, the rays fanning out from behind it
+        wordmark(e, cx) {
+            const size = Math.min(72, Math.floor(72 * (e.layout.view[2] - 48) / e.measureText("QUADBRICKS", 72, 300, 18)));
+            e.text("QUADBRICKS", cx, 150, { size, weight: 300, align: "center", spacing: Math.round(size * 18 / 72) });
+            this.stripe(e, cx - 120, 205, 240, 4);
+        },
+        // A soft round pool of the light's colour, rendered once
+        poolTexture(r) {
+            if (this.pool) return this.pool;
+            const c = document.createElement("canvas");
+            c.width = c.height = 128;
+            const g = c.getContext("2d");
+            const [cr, cg, cb] = ECLIPSE_RGB.map(v => Math.round(v * 255));
+            const pool = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+            pool.addColorStop(0, `rgba(${cr},${cg},${cb},1)`);
+            pool.addColorStop(0.25, `rgba(${cr},${cg},${cb},0.35)`);
+            pool.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+            g.fillStyle = pool;
+            g.fillRect(0, 0, 128, 128);
+            this.pool = r.texture(c);
+            return this.pool;
+        },
+    },
 };
-const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order
+const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse"]; // menu order
 
 // Themes (Options → Customization → Theme): a background with the block style, confetti, clear burst and drop
 // trail that go with it, which those settings take while they are on Follow theme (Options.look())
@@ -1036,8 +1149,9 @@ const THEMES = {
     lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "contours", trail: "chalk" },
     hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "foil", rings: "glitter", trail: "prism" },
     undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple", trail: "water" },
+    eclipse: { name: "Eclipse", background: "eclipse", tileset: "backlit", confetti: "glow", rings: "flare", trail: "rays" },
 };
-const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order; the first is the default
+const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse"]; // menu order; the first is the default
 
 // [r, g, b] (0..1) to [h, s, l] (degrees, percent), as hslToRgb() takes them
 function rgbToHsl([r, g, b]) {

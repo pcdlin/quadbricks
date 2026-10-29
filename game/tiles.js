@@ -55,6 +55,24 @@ function stainedSeam(g, size, index, color, lineWidth) {
     g.stroke();
 }
 
+// Backlit: light coming through a block's edges, fading inward over depth (a share of the size) from
+// alpha at the edge, in "r,g,b"
+const BACKLIT_LAMP_DEPTH = 0.2; // how far in the lamp lights the rims
+function backlitRim(g, size, inset, alpha, rgb, depth) {
+    const d = size * depth, a = inset, b = size - inset;
+    for (const [x0, y0, x1, y1, x, y, w, h] of [
+        [a, 0, a + d, 0, a, a, d, b - a], [b, 0, b - d, 0, b - d, a, d, b - a],
+        [0, a, 0, a + d, a, a, b - a, d], [0, b, 0, b - d, a, b - d, b - a, d],
+    ]) {
+        const grad = g.createLinearGradient(x0, y0, x1, y1);
+        grad.addColorStop(0, `rgba(${rgb},${alpha})`);
+        grad.addColorStop(0.25, `rgba(${rgb},${alpha * 0.3})`);
+        grad.addColorStop(1, `rgba(${rgb},0)`);
+        g.fillStyle = grad;
+        g.fillRect(x, y, w, h);
+    }
+}
+
 // A repeatable pseudo-random sequence in [0, 1), so a style's texture is the same every time
 function seededRandom(seed) {
     let s = seed;
@@ -412,6 +430,64 @@ const TILESETS = {
                 g.fillStyle = "rgba(6,8,22,0.16)";
                 g.fillRect(inset, inset, w, w);
             }
+        },
+    },
+
+    // Dark blocks lit only from behind: a near-black body whose edges let the light through in its
+    // colour, as through something thin (subsurface scattering). The edges glow faintly by themselves;
+    // the engine's lamp (lamp: "always"), behind the well and moving with the field's tilt, lights the
+    // rims facing it (lampMask: the edges only)
+    backlit: {
+        name: "Backlit",
+        face: [1, 0.08],
+        lamp: "always",
+        lampStrength: 1.6, // the rims carry the light, so they read across the well
+        rays: true, // the lamp on them flickers with the Eclipse background's rays (Engine.rayFlicker())
+        lampMask(g, size) {
+            backlitRim(g, size, 0, 1, "255,255,255", BACKLIT_LAMP_DEPTH);
+        },
+        pad: (style) => style === "active" ? 10 : 0,
+        draw(g, col, size, style) {
+            const [inset, round] = this.face, w = size - inset * 2, r = size * round;
+            const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
+            const rgb = (hex) => [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16)).join(",");
+            if (style === "ghost") { // only a rim, lit, with a little of its light inside
+                g.save();
+                path();
+                g.clip();
+                backlitRim(g, size, inset, 0.2, rgb(col.light), 0.18);
+                g.restore();
+                path();
+                g.strokeStyle = col.light + "78";
+                g.lineWidth = 1.5;
+                g.stroke();
+                return;
+            }
+            const active = style === "active";
+            if (active) { // light spilling round the falling piece
+                g.shadowColor = col.base + "88";
+                g.shadowBlur = 12;
+            }
+            path();
+            g.fillStyle = "#040406";
+            g.fill();
+            g.shadowBlur = 0;
+            g.save();
+            path();
+            g.clip();
+            // a trace of colour in the body, lighter towards the middle where the light scatters
+            const body = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, w * 0.7);
+            body.addColorStop(0, col.base + (active ? "24" : "16"));
+            body.addColorStop(1, col.base + "03");
+            g.fillStyle = body;
+            g.fillRect(0, 0, size, size);
+            // the edges' own faint glow, and a fine line on the very edge
+            backlitRim(g, size, inset, active ? 0.6 : 0.45, rgb(col.light), 0.22);
+            g.restore();
+            path();
+            g.strokeStyle = col.light + (active ? "b0" : "90");
+            g.lineWidth = 1;
+            g.stroke();
         },
     },
 

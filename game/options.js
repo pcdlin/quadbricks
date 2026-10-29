@@ -143,7 +143,7 @@ const CONFETTI_STYLES = [
 const CONFETTI_STYLE_IDS = CONFETTI_STYLES.map(s => s.id);
 
 // Drop trails behind hard drops and rows falling into clears (Engine.drawTrails()): off, a streak of light, neon
-// tubes, chalk strokes, a spectrum in scanlines, or water (a rippling streak that lets bubbles go)
+// tubes, chalk strokes, a spectrum in scanlines, water (a rippling streak that lets bubbles go) or light rays in fog
 const TRAIL_STYLES = [
     { id: "off", name: "Off" },
     { id: "streak", name: "Streak" },
@@ -151,6 +151,7 @@ const TRAIL_STYLES = [
     { id: "chalk", name: "Chalk" },
     { id: "prism", name: "Prism" },
     { id: "water", name: "Water" },
+    { id: "rays", name: "Light rays" },
 ];
 const TRAIL_STYLE_IDS = TRAIL_STYLES.map(s => s.id);
 
