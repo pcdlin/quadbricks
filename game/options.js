@@ -117,7 +117,8 @@ const DEFAULT_SHAKE = 2;
 
 // Line clear shockwaves: off, glowing rings, a ripple refracting the whole screen (splitting the
 // colours at its front), a lens flare along the cleared rows, a packet of fine contour lines
-// (Field Lines'), a wave of holographic facets flashing (Hologram's) or shafts of light breaking through (Eclipse's)
+// (Field Lines'), a wave of holographic facets flashing (Hologram's), shafts of light breaking through (Eclipse's) or
+// shards of ice flying out (Glacier's)
 const RING_MODES = [
     { id: "off", name: "Off" },
     { id: "rings", name: "Rings" },
@@ -126,6 +127,7 @@ const RING_MODES = [
     { id: "contours", name: "Contours" },
     { id: "glitter", name: "Glitter" },
     { id: "shafts", name: "Shafts" },
+    { id: "shards", name: "Shards" },
 ];
 const RING_MODE_IDS = RING_MODES.map(m => m.id);
 
@@ -141,11 +143,13 @@ const CONFETTI_STYLES = [
     { id: "neon", name: "Neon" },
     { id: "foil", name: "Foil" },
     { id: "dust", name: "Dust" },
+    { id: "snow", name: "Snow" },
 ];
 const CONFETTI_STYLE_IDS = CONFETTI_STYLES.map(s => s.id);
 
 // Drop trails behind hard drops and rows falling into clears (Engine.drawTrails()): off, a streak of light, neon
-// tubes, chalk strokes, a spectrum in scanlines, water (a rippling streak that lets bubbles go) or light rays in fog
+// tubes, chalk strokes, a spectrum in scanlines, water (a rippling streak that lets bubbles go), light rays in fog or rime
+// (an icy streak with frost crystals along it)
 const TRAIL_STYLES = [
     { id: "off", name: "Off" },
     { id: "streak", name: "Streak" },
@@ -154,6 +158,7 @@ const TRAIL_STYLES = [
     { id: "prism", name: "Prism" },
     { id: "water", name: "Water" },
     { id: "rays", name: "Light rays" },
+    { id: "rime", name: "Rime" },
 ];
 const TRAIL_STYLE_IDS = TRAIL_STYLES.map(s => s.id);
 

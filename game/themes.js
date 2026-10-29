@@ -230,6 +230,36 @@ const ECLIPSE_POOL = 0.14; // the lamp seen through the well
 const ECLIPSE_EDGE = "rgba(160,150,235,0.16)";
 const ECLIPSE_LABEL = "rgba(190,184,240,0.85)";
 
+// Glacier: a glacier lake by day, painted soft like a watercolour (after the user's reference picture). The picture has a
+// pale sky, hazy snowy mountains to the left, a tall glacier of blue ice to the right and the calm lake before them
+// mirroring them, with snow-capped floes; the backdrop's GLACIER_FS (the hook glacier()) adds clouds drifting across the
+// sky and light glinting on the water. Its text is dark (ink), its well and panels the deep blue of the lake,
+// its cards frosted white
+const GLACIER_LAKE = 560; // the shore, where the lake begins
+// the left massif's skyline ([x, y], logical, a little uneven between them: glacierMassif()); the glacier's wall to the right
+// (where it rises from the water, and its top), and its pinnacles before it ([x, y] of the tip, how far its foot reaches to
+// the left and the right of it, logical), back to front
+const GLACIER_MASSIF = [[-260, 160], [0, 130], [60, 105], [115, 70], [165, 98], [215, 128], [265, 138], [315, 175], [365, 230],
+    [415, 300], [465, 370], [515, 440], [560, 500], [610, 545], [660, 562]];
+const GLACIER_WALL = [745, 30];
+const GLACIER_PEAKS = [[790, 20, 70, 90], [700, 95, 75, 85], [622, 245, 65, 70], [562, 370, 52, 55], [518, 462, 34, 38]];
+const GLACIER_STRENGTH = 1; // the clouds and glints at Normal effects
+const GLACIER_SWELL = 0.8; // the glints' extra on a line clear's pulse
+const GLACIER_WELL_ALPHA = 0.9; // the well's fill (0.96 with effects off)
+const GLACIER_INK = [20 / 255, 52 / 255, 82 / 255]; // its text, dark on the pale scene
+const GLACIER_LABEL = "rgba(36,92,136,0.9)";
+const GLACIER_RULE = "rgba(36,92,136,0.22)";
+const GLACIER_EDGE = "rgba(255,255,255,0.55)"; // a panel's rim
+const GLACIER_CARD_EDGE = "rgba(60,130,180,0.35)";
+const GLACIER_LIT = "rgba(40,140,210,0.85)"; // a selected card's rim and bar
+
+function glacierMassif(x) {
+    const p = GLACIER_MASSIF, i = p.findIndex(([px]) => px > x);
+    const y = i < 0 ? p[p.length - 1][1] : i === 0 ? p[0][1]
+        : p[i - 1][1] + (p[i][1] - p[i - 1][1]) * (x - p[i - 1][0]) / (p[i][0] - p[i - 1][0]);
+    return y + 4 * Math.sin(x * 0.045) + 1.5 * Math.sin(x * 0.13 + 1);
+}
+
 const BACKGROUNDS = {
     // Night gallery: deep gradient, soft spotlight, receding floor grid
     gallery: {
@@ -1139,8 +1169,415 @@ const BACKGROUNDS = {
             return this.pool;
         },
     },
+
+    // Glacier: a glacier lake by day, soft as a watercolour. A pale sky with clouds drifting across it (the backdrop's
+    // GLACIER_FS), hazy snowy mountains to the left, a glacier of tall blue ice spires to the right, the calm lake
+    // mirroring them with snow-capped floes and light glinting on it. Dark text; the well and panels the lake's deep blue,
+    // the cards frosted white, with rime growing in from their corners
+    glacier: {
+        name: "Glacier",
+        ink: GLACIER_INK,
+        picture(g, x0, y0, x1, y1) {
+            const s = g.getTransform().a; // device pixels per unit, for the soft layers' blur
+            const sky = g.createLinearGradient(0, y0, 0, GLACIER_LAKE);
+            sky.addColorStop(0, "#d4e9f3");
+            sky.addColorStop(0.55, "#eaf5f9");
+            sky.addColorStop(1, "#f8fbfb");
+            g.fillStyle = sky;
+            g.fillRect(x0, y0, x1 - x0, GLACIER_LAKE - y0 + 1);
+            // what the lake mirrors is painted on its own layer
+            const layer = document.createElement("canvas");
+            layer.width = g.canvas.width;
+            layer.height = g.canvas.height;
+            const a = layer.getContext("2d");
+            a.setTransform(g.getTransform());
+            const rnd = themeRandom(11);
+            const range = (fill, from, to, step, y) => {
+                a.fillStyle = fill;
+                a.beginPath();
+                a.moveTo(from, GLACIER_LAKE + 2);
+                for (let x = from; x <= to; x += step) a.lineTo(x, y(x));
+                a.lineTo(to, GLACIER_LAKE + 2);
+                a.fill();
+            };
+            // far peaks along the horizon, faint in the haze
+            a.filter = `blur(${2 * s}px)`;
+            range("#d0e4ee", x0 - 10, x1 + 10, 4, x => 505 - 34 * Math.pow(1 - Math.abs(Math.sin(x * 0.009 + 1)), 1.5) - 16 * Math.pow(1 - Math.abs(Math.sin(x * 0.023)), 1.5));
+            // the massif: pale snow, the faces turned from the light (to the right) in blue-grey washes down from the crest,
+            // gullies running down them and lit snow on the faces turned to the light
+            a.filter = `blur(${0.7 * s}px)`;
+            range("#dde9f0", x0 - 10, 700, 3, glacierMassif);
+            // its shade by the way the slope faces, smoothed over 30 units so the washes are broad, painted soft
+            a.filter = `blur(${2.5 * s}px)`;
+            const shadeAt = x => {
+                let sum = 0;
+                for (let k = -15; k <= 15; k += 3) sum += (glacierMassif(x + k + 3) - glacierMassif(x + k - 3)) / 6;
+                return clamp(0.45 + sum / 11 * 1.2, 0.08, 1);
+            };
+            for (let x = x0; x <= 680; x += 1.5) {
+                const y = glacierMassif(x), shade = shadeAt(x), d = 90 + 190 * shade * (0.75 + 0.25 * Math.sin(x * 0.021));
+                const wash = a.createLinearGradient(0, y, 0, y + d);
+                wash.addColorStop(0, `rgba(122,160,188,${0.75 * shade})`);
+                wash.addColorStop(0.5, `rgba(140,176,200,${0.4 * shade})`);
+                wash.addColorStop(1, "rgba(140,176,200,0)");
+                a.fillStyle = wash;
+                a.fillRect(x, y, 1.6, d);
+                if (shade < 0.4) { // a face turned to the light: snow lit white down from the crest
+                    const lit = a.createLinearGradient(0, y, 0, y + 60);
+                    lit.addColorStop(0, `rgba(255,255,255,${0.9 - shade})`);
+                    lit.addColorStop(1, "rgba(255,255,255,0)");
+                    a.fillStyle = lit;
+                    a.fillRect(x, y, 1.6, 60);
+                }
+            }
+            // haze over the mountains' feet
+            a.filter = "none";
+            const haze = a.createLinearGradient(0, 420, 0, GLACIER_LAKE);
+            haze.addColorStop(0, "rgba(248,251,252,0)");
+            haze.addColorStop(1, "rgba(248,251,252,0.6)");
+            a.fillStyle = haze;
+            a.fillRect(x0, 380, 720 - x0, GLACIER_LAKE - 380);
+            // the foothills, a darker blue-grey band low on the left
+            a.filter = `blur(${0.8 * s}px)`;
+            const hill = a.createLinearGradient(0, 512, 0, GLACIER_LAKE);
+            hill.addColorStop(0, "#8ba8bb");
+            hill.addColorStop(1, "#7393a8");
+            range(hill, x0 - 10, 480, 4, x => 524 + 8 * Math.sin(x * 0.012 + 0.5) + 4 * Math.sin(x * 0.041) + clamp((x - 240) / 240, 0, 1) * 40);
+            // the glacier: a wall of blue ice to the right, its face in soft flutes, and pinnacles before it whose flanks
+            // curve out to wide feet and in to rounded tips, light blue on the side turned to the light (left), deep blue on
+            // the other, streaked softly down from the tip, with a faint darker rim against the sky; the nearer, lower ones
+            // drawn over the ones behind
+            const base = GLACIER_LAKE + 4, [wx, wy] = GLACIER_WALL, wr = Math.max(x1 + 10, 900);
+            const ice = (from, to) => {
+                const grad = a.createLinearGradient(from, 0, to, 0);
+                grad.addColorStop(0, "#cbe9f8");
+                grad.addColorStop(0.35, "#9fd4f1");
+                grad.addColorStop(0.62, "#6fb2e1");
+                grad.addColorStop(1, "#3f87c3");
+                return grad;
+            };
+            const streaks = (count, from, to, top, clip) => {
+                a.save();
+                clip();
+                a.clip();
+                a.filter = `blur(${2 * s}px)`;
+                for (let k = 0; k < count; k++) {
+                    const x = from + (to - from) * rnd(), bend = (rnd() - 0.5) * 30;
+                    a.strokeStyle = rnd() < 0.5 ? `rgba(255,255,255,${0.14 + rnd() * 0.16})` : `rgba(40,105,160,${0.1 + rnd() * 0.14})`;
+                    a.lineWidth = 2 + rnd() * 5;
+                    a.beginPath();
+                    a.moveTo(x + bend * 0.3, top);
+                    a.quadraticCurveTo(x + bend, top + (base - top) * 0.5, x + bend * 0.4, base);
+                    a.stroke();
+                }
+                a.restore();
+            };
+            a.filter = `blur(${0.6 * s}px)`;
+            const wall = () => {
+                a.beginPath();
+                a.moveTo(wx, base);
+                a.bezierCurveTo(wx + 10, base - (base - wy) * 0.5, wx + 4, wy + 60, wx + 40, wy + 6);
+                a.quadraticCurveTo(wx + 90, wy - 24, wr, wy - 30);
+                a.lineTo(wr, base);
+                a.closePath();
+            };
+            wall();
+            a.fillStyle = ice(wx - 40, wx + 260);
+            a.fill();
+            streaks(14, wx, wr, wy, wall);
+            for (const [px, py, left, right] of GLACIER_PEAKS) {
+                const lx = px - left, rx = px + right, w = rx - lx, h = base - py;
+                const peak = () => {
+                    a.beginPath();
+                    a.moveTo(lx, base);
+                    a.bezierCurveTo(lx + w * 0.12, base - h * 0.4, px - w * 0.2, py + h * 0.22, px - w * 0.05, py + h * 0.02);
+                    a.quadraticCurveTo(px, py - 3, px + w * 0.05, py + h * 0.03);
+                    a.bezierCurveTo(px + w * 0.22, py + h * 0.28, rx - w * 0.1, base - h * 0.38, rx, base);
+                    a.closePath();
+                };
+                a.filter = `blur(${0.6 * s}px)`;
+                peak();
+                a.fillStyle = ice(lx, rx);
+                a.fill();
+                a.strokeStyle = "rgba(60,120,175,0.35)";
+                a.lineWidth = 1;
+                a.stroke();
+                streaks(5, lx + w * 0.15, rx - w * 0.1, py + h * 0.08, peak);
+                // light along the lit flank
+                a.save();
+                peak();
+                a.clip();
+                a.filter = `blur(${1.5 * s}px)`;
+                a.strokeStyle = "rgba(255,255,255,0.6)";
+                a.lineWidth = 3;
+                a.beginPath();
+                a.moveTo(lx + w * 0.06, base);
+                a.bezierCurveTo(lx + w * 0.16, base - h * 0.4, px - w * 0.16, py + h * 0.22, px - w * 0.03, py + h * 0.04);
+                a.stroke();
+                a.restore();
+            }
+            // deeper blue towards the water
+            a.filter = "none";
+            const low = a.createLinearGradient(0, base - 140, 0, base);
+            low.addColorStop(0, "rgba(40,110,170,0)");
+            low.addColorStop(1, "rgba(40,110,170,0.28)");
+            a.save();
+            a.beginPath();
+            a.rect(GLACIER_WALL[0], 0, wr - GLACIER_WALL[0], base);
+            for (const [px, py, left, right] of GLACIER_PEAKS) {
+                a.moveTo(px, py);
+                a.lineTo(px - left, base);
+                a.lineTo(px + right, base);
+                a.closePath();
+            }
+            a.clip();
+            a.fillStyle = low;
+            a.fillRect(x0, base - 140, x1 - x0 + 10, 140);
+            a.restore();
+            // snow banks along the left shore and slabs of ice at the glacier's foot
+            a.filter = `blur(${0.5 * s}px)`;
+            for (const [bx, bw, bh, tint] of [[-60, 300, 34, "#c9e2ee"], [140, 220, 20, "#c9e2ee"], [330, 170, 12, "#c9e2ee"], [610, 130, 10, "#a9d6ee"], [730, 170, 12, "#a9d6ee"]]) {
+                const bank = a.createLinearGradient(0, GLACIER_LAKE - bh, 0, GLACIER_LAKE + 3);
+                bank.addColorStop(0, "#f8fcfe");
+                bank.addColorStop(1, tint);
+                a.fillStyle = bank;
+                a.beginPath();
+                a.moveTo(bx - bw / 2, GLACIER_LAKE + 3);
+                a.bezierCurveTo(bx - bw * 0.35, GLACIER_LAKE - bh, bx + bw * 0.2, GLACIER_LAKE - bh * 1.1, bx + bw / 2, GLACIER_LAKE + 3);
+                a.fill();
+            }
+            a.filter = "none";
+            g.save();
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.drawImage(layer, 0, 0);
+            g.restore();
+            // the lake: pale where it mirrors the sky, deeper blue nearer; the mountains and glacier mirrored, softened, in it
+            const lake = g.createLinearGradient(0, GLACIER_LAKE, 0, GLACIER_LAKE + 220);
+            lake.addColorStop(0, "#d4ecf4");
+            lake.addColorStop(0.3, "#a0d0e5");
+            lake.addColorStop(1, "#5fa8d0");
+            g.fillStyle = lake;
+            g.fillRect(x0, GLACIER_LAKE, x1 - x0, y1 - GLACIER_LAKE);
+            const T = g.getTransform(), shore = T.f + GLACIER_LAKE * T.d;
+            g.save();
+            g.setTransform(1, 0, 0, 1, 0, 0);
+            g.beginPath();
+            g.rect(0, shore, g.canvas.width, g.canvas.height - shore);
+            g.clip();
+            g.setTransform(1, 0, 0, -1, 0, 2 * shore);
+            g.globalAlpha = 0.5;
+            g.filter = `blur(${2.2 * s}px)`;
+            g.drawImage(layer, 0, 0);
+            g.restore();
+            g.save();
+            g.globalAlpha = 0.3;
+            g.fillStyle = lake;
+            g.fillRect(x0, GLACIER_LAKE, x1 - x0, y1 - GLACIER_LAKE);
+            g.restore();
+            // ripples across it
+            for (let i = 0; i < 120; i++) {
+                const y = GLACIER_LAKE + 2 + Math.pow(rnd(), 1.3) * (y1 - GLACIER_LAKE), x = x0 + rnd() * (x1 - x0);
+                g.fillStyle = rnd() < 0.7 ? `rgba(255,255,255,${0.15 + rnd() * 0.2})` : `rgba(40,110,160,${0.06 + rnd() * 0.06})`;
+                g.fillRect(x, y, 10 + rnd() * 110, 0.6 + rnd() * 0.6);
+            }
+            // floes with snow on them, smaller further off, each over its blue underside and reflection
+            for (let i = 0; i < 30; i++) {
+                const k = Math.pow(rnd(), 1.4), y = GLACIER_LAKE + 8 + k * (Math.max(y1, VIEW_H) - GLACIER_LAKE);
+                const rx = (5 + k * 34) * (0.5 + rnd()), ry = rx * (0.14 + rnd() * 0.1), x = x0 + rnd() * (x1 - x0);
+                g.fillStyle = "rgba(70,140,185,0.25)";
+                g.beginPath();
+                g.ellipse(x, y + ry * 1.3, rx * 0.95, ry * 0.9, 0, 0, Math.PI * 2);
+                g.fill();
+                g.fillStyle = "#8cc3df";
+                g.beginPath();
+                g.ellipse(x, y + ry * 0.35, rx, ry * 0.6, 0, 0, Math.PI * 2);
+                g.fill();
+                const cap = g.createLinearGradient(x - rx, 0, x + rx, 0);
+                cap.addColorStop(0, "#ffffff");
+                cap.addColorStop(0.6, "#f2f9fc");
+                cap.addColorStop(1, "#bcdcec");
+                g.fillStyle = cap;
+                g.beginPath();
+                g.moveTo(x - rx, y);
+                g.bezierCurveTo(x - rx * 0.7, y - ry * 2.2, x + rx * 0.6, y - ry * 2.4, x + rx, y);
+                g.closePath();
+                g.fill();
+            }
+            // the paper's grain
+            for (let i = 0; i < 3000; i++) {
+                g.fillStyle = rnd() < 0.5 ? "rgba(255,255,255,0.06)" : "rgba(20,60,90,0.025)";
+                g.fillRect(x0 + rnd() * (x1 - x0), y0 + rnd() * (y1 - y0), 1.2, 1.2);
+            }
+        },
+        ambient() { return { blobs: [], orbs: [] }; },
+        // still with the animated backdrop or effects off
+        glacier(e) {
+            const moving = e.options.effects && e.options.backdrop;
+            return {
+                strength: GLACIER_STRENGTH * e.softEffectScale(), time: moving ? e.clock / 60 : 0,
+                shore: GLACIER_LAKE, pulse: GLACIER_SWELL * e.pulse,
+            };
+        },
+        glowRgb() { return null; },
+        // the lake's deep blue: a faint grid, a white rim, rime in two corners
+        frame(e, [x, y, w, h], exam) {
+            const r = e.r, fill = e.options.effects ? this.wellFill[0] : this.wellFill[1];
+            r.shape(x - 3, y - 3, w + 6, h + 6, { radius: 9, stroke: [1, 1, 1, 0.3 + 0.2 * e.pulse], lineWidth: 3 });
+            r.shape(x, y, w, h, { radius: 6, fill, fillY: [y, y + h] });
+            for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL - 0.5, e.boardY, 1, e.boardH, "rgba(255,255,255,0.05)");
+            for (let row = 1; row * CELL < e.boardH; row++) r.rect(BOARD_X, e.boardY + row * CELL - 0.5, BOARD_W, 1, "rgba(255,255,255,0.05)");
+            if (!exam) {
+                r.image(this.frostTexture(r, 0), x + 1, y + 1, 60, 60);
+                r.image(this.frostTexture(r, 1), x + w - 47, y + h - 47, 46, 46);
+            }
+            r.shape(x, y, w, h, { radius: 6, stroke: exam ? goldAlpha(0.6 + 0.35 * e.pulse) : [1, 1, 1, 0.6 + 0.3 * e.pulse], lineWidth: 1.2 });
+        },
+        wellFill: [GLACIER_WELL_ALPHA, 0.96].map(a => [`rgba(32,92,134,${a})`, `rgba(18,62,98,${a})`]),
+        // the HOLD and NEXT boxes: the lake's blue behind glass, so the pale ice pieces show in them
+        panel(e, x, y, w, h) {
+            const r = e.r;
+            r.shape(x, y, w, h, { radius: 10, lineWidth: 1, fillY: [y, y + h], fill: ["rgba(48,116,158,0.86)", "rgba(24,76,116,0.88)"], stroke: GLACIER_EDGE });
+            r.rect(x + 10, y + 1, w - 20, 1, "rgba(255,255,255,0.45)");
+            const s = Math.min(40, h * 0.55);
+            r.image(this.frostTexture(r, 0), x + 1, y + 1, s, s);
+            r.image(this.frostTexture(r, 1), x + w - 1 - s * 0.75, y + h - 1 - s * 0.75, s * 0.75, s * 0.75);
+        },
+        label(e, s, x, y, w, size, spacing) {
+            e.text(s, x, y, { size, weight: 700, color: GLACIER_LABEL, spacing });
+            const tw = e.measureText(s, size, 700, spacing);
+            if (w - tw - 8 > 4) e.r.rect(x + tw + 8, y, w - tw - 8, 1, GLACIER_RULE);
+        },
+        // frosted white, blue rime in two corners; selected, a blue rim, glow and bar
+        card(e, x, y, w, h, radius, selected) {
+            const r = e.r;
+            if (selected) r.shape(x - 3, y - 3, w + 6, h + 6, { radius: radius + 3, stroke: "rgba(80,170,230,0.22)", lineWidth: 4 });
+            r.shape(x, y, w, h, {
+                radius, lineWidth: 1, fillY: [y, y + h],
+                fill: selected ? ["rgba(255,255,255,0.94)", "rgba(226,243,251,0.92)"] : ["rgba(255,255,255,0.74)", "rgba(230,244,250,0.7)"],
+                stroke: selected ? GLACIER_LIT : GLACIER_CARD_EDGE,
+            });
+            const s = Math.min(40, h * 0.55);
+            r.image(this.frostTexture(r, 2), x + 1, y + 1, s, s);
+            r.image(this.frostTexture(r, 3), x + w - 1 - s * 0.75, y + h - 1 - s * 0.75, s * 0.75, s * 0.75);
+            if (selected) r.shape(x + 2, y + 8, 3, h - 16, { radius: 1.5, fill: GLACIER_LIT }); // clear of the text on tight cards
+        },
+        // seven small snowflakes in shades of blue, pale to deep
+        stripe(e, x, y, w, h) {
+            const d = Math.min(h + 9, w / 7 * 1.05);
+            for (let t = 1; t <= 7; t++) e.r.image(this.flakeTexture(e.r, t), x + (t - 0.5) / 7 * w - d / 2, y + h / 2 - d / 2, d, d);
+        },
+        // letters of blue ice dusted with frost, a white glow round them against the sky
+        wordmark(e, cx) {
+            const size = Math.min(76, Math.floor(76 * (e.layout.view[2] - 48) / e.measureText("QUADBRICKS", 76, 900, 14)));
+            const mark = this.markTexture(e, size);
+            e.r.image(mark.tex, cx - mark.w / 2, 150 - mark.h / 2, mark.w, mark.h);
+            this.stripe(e, cx - 70, 205, 140, 4);
+        },
+        // The wordmark at a size, rendered once per resolution (and again once the font has loaded)
+        markTexture(e, size) {
+            const r = e.r, res = r.s, ready = !document.fonts || document.fonts.check(`900 ${size}px Archivo`);
+            const key = `${res}:${size}:${ready}`;
+            if (this.mark && this.mark.key === key) return this.mark;
+            if (this.mark) r.releaseTexture(this.mark.tex);
+            const spacing = Math.round(size * 14 / 76), glow = 22;
+            const w = Math.ceil(e.measureText("QUADBRICKS", size, 900, spacing)) + glow * 2, h = Math.ceil(size * 1.4) + glow * 2;
+            const letters = document.createElement("canvas");
+            letters.width = Math.ceil(w * res);
+            letters.height = Math.ceil(h * res);
+            const g = letters.getContext("2d");
+            g.scale(res, res);
+            const top = h / 2 - size / 2, ice = g.createLinearGradient(0, top, 0, top + size);
+            ice.addColorStop(0, "#9ad8f3");
+            ice.addColorStop(0.45, "#3f97d2");
+            ice.addColorStop(0.55, "#226ea9");
+            ice.addColorStop(1, "#5bb2e0");
+            fillText2D(g, "QUADBRICKS", w / 2, h / 2, { size, weight: 900, color: ice, align: "center", spacing });
+            // frost settled on the letters' tops, and fine cracks
+            g.globalCompositeOperation = "source-atop";
+            const rnd = themeRandom(23);
+            for (let i = 0; i < 1600; i++) {
+                g.fillStyle = `rgba(255,255,255,${0.3 + rnd() * 0.7})`;
+                g.fillRect(rnd() * w, top + Math.pow(rnd(), 2.5) * size, 0.6 + rnd() * 0.8, 0.6 + rnd() * 0.8);
+            }
+            g.strokeStyle = "rgba(255,255,255,0.45)";
+            g.lineWidth = 0.6;
+            for (let i = 0; i < 40; i++) {
+                const x = rnd() * w, y = top + rnd() * size;
+                g.beginPath();
+                g.moveTo(x, y);
+                g.lineTo(x + (rnd() - 0.5) * size * 0.13, y + rnd() * size * 0.16);
+                g.stroke();
+            }
+            const c = document.createElement("canvas");
+            c.width = letters.width;
+            c.height = letters.height;
+            const out = c.getContext("2d");
+            out.shadowColor = "rgba(255,255,255,0.95)";
+            out.shadowBlur = glow * 0.7 * res;
+            out.drawImage(letters, 0, 0);
+            this.mark = { key, tex: r.texture(c), w, h };
+            return this.mark;
+        },
+        // Rime growing in from a corner (0: top left, 1: bottom right; 2 and 3 the same in blue, for the white cards),
+        // branching at 60 degrees, rendered once per resolution
+        frostTexture(r, kind) {
+            const res = r.s;
+            if (this.frost && this.frost.res === res) return this.frost.tex[kind];
+            if (this.frost) this.frost.tex.forEach(t => r.releaseTexture(t));
+            const n = 48;
+            const tex = [0, 1, 2, 3].map(k => {
+                const c = document.createElement("canvas");
+                c.width = c.height = Math.ceil(n * res);
+                const g = c.getContext("2d");
+                g.scale(res, res);
+                if (k % 2) {
+                    g.translate(n, n);
+                    g.rotate(Math.PI);
+                }
+                const rnd = themeRandom(31 + (k % 2) * 7), ink = k < 2 ? "220,245,255" : "60,130,185";
+                g.lineCap = "round";
+                g.lineWidth = 0.7;
+                const branch = (x, y, a, len, depth) => {
+                    const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+                    g.strokeStyle = `rgba(${ink},${0.12 + depth * 0.08})`;
+                    g.beginPath();
+                    g.moveTo(x, y);
+                    g.lineTo(x2, y2);
+                    g.stroke();
+                    if (!depth) return;
+                    const steps = 2 + Math.floor(rnd() * 2);
+                    for (let i = 1; i <= steps; i++) {
+                        const t = i / (steps + 1), bx = x + (x2 - x) * t, by = y + (y2 - y) * t, l = len * (0.45 - t * 0.2) * (0.7 + rnd() * 0.5);
+                        branch(bx, by, a - Math.PI / 3, l, depth - 1);
+                        branch(bx, by, a + Math.PI / 3, l, depth - 1);
+                    }
+                };
+                branch(3.5, 3.5, 0, 26 * (0.8 + rnd() * 0.4), 2);
+                branch(3.5, 3.5, Math.PI / 2, 26 * (0.6 + rnd() * 0.4), 2);
+                branch(3.5, 3.5, Math.PI / 4, 14, 2);
+                return r.texture(c);
+            });
+            this.frost = { res, tex };
+            return tex[kind];
+        },
+        // The stripe's t-th snowflake (1..7, pale to deep blue), rendered once per resolution
+        flakeTexture(r, t) {
+            const res = r.s;
+            if (!this.flakes || this.flakes.res !== res) {
+                if (this.flakes) this.flakes.tex.forEach(x => x && r.releaseTexture(x));
+                this.flakes = { res, tex: [] };
+            }
+            if (this.flakes.tex[t]) return this.flakes.tex[t];
+            const n = 16, c = document.createElement("canvas");
+            c.width = c.height = Math.ceil(n * res);
+            const g = c.getContext("2d");
+            g.scale(res, res);
+            paintSnowflake(g, n / 2, n / 2, n * 0.46, `hsl(${198 + t * 2},${55 + t * 3}%,${66 - t * 4}%)`, 1.2);
+            return (this.flakes.tex[t] = r.texture(c));
+        },
+    },
 };
-const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse"]; // menu order
+const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse", "glacier"]; // menu order
 
 // Themes (Options → Customization → Theme): a background with the block style, confetti, clear burst and drop
 // trail that go with it, which those settings take while they are on Follow theme (Options.look())
@@ -1151,8 +1588,9 @@ const THEMES = {
     hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "foil", rings: "glitter", trail: "prism" },
     undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple", trail: "water" },
     eclipse: { name: "Eclipse", background: "eclipse", tileset: "backlit", confetti: "dust", rings: "shafts", trail: "rays" },
+    glacier: { name: "Glacier", background: "glacier", tileset: "frost", confetti: "snow", rings: "shards", trail: "rime" },
 };
-const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse"]; // menu order; the first is the default
+const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse", "glacier"]; // menu order; the first is the default
 
 // [r, g, b] (0..1) to [h, s, l] (degrees, percent), as hslToRgb() takes them
 function rgbToHsl([r, g, b]) {
@@ -1203,6 +1641,40 @@ function bubbleSprite(r, color) {
     tex = r.texture(canvas);
     BUBBLE_SPRITES.set(color, tex);
     return tex;
+}
+
+// A six-armed snowflake of radius rad in a CSS colour, each arm with two pairs of branches; lw scales its lines
+// (Glacier's stripe and the Snow confetti)
+function paintSnowflake(g, x, y, rad, color, lw) {
+    const k = rad / 8.5;
+    g.save();
+    g.translate(x, y);
+    g.strokeStyle = color;
+    g.lineCap = "round";
+    for (let a = 0; a < 6; a++) {
+        g.save();
+        g.rotate(a * Math.PI / 3);
+        g.lineWidth = 1.3 * k * lw;
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.lineTo(0, -8.5 * k);
+        g.stroke();
+        g.lineWidth = 0.9 * k * lw;
+        for (const [d, l] of [[3.6, 2.6], [6, 1.9]]) {
+            g.beginPath();
+            g.moveTo(-l * k, -(d + l) * k);
+            g.lineTo(0, -d * k);
+            g.lineTo(l * k, -(d + l) * k);
+            g.stroke();
+        }
+        g.restore();
+    }
+    g.restore();
+}
+
+// A "#rrggbb" colour taken k of the way to white, as "rgb(...)"
+function whiten(hex, k) {
+    return `rgb(${[1, 3, 5].map(i => Math.round(parseInt(hex.substr(i, 2), 16) * (1 - k) + 255 * k)).join(",")})`;
 }
 
 // Darker toward the corners

@@ -1,5 +1,5 @@
 // Backdrop pass of the WebGL renderer (renderer.js), drawn first each frame: the backdrop
-// picture, its colour wash, field lines, holographic foil or water, the line-clear shafts, contours or glitter and drifting
+// picture, its colour wash, field lines, holographic foil, water, light rays or clouds over a glacier lake, the line-clear shafts, contours or glitter and drifting
 // lights, the board glow and the line-clear shockwaves. These are large, soft effects computed per pixel in shaders. The engine
 // builds a scene description each frame (see Engine.backdropScene).
 // Coordinates are device pixels, y down, unless noted.
@@ -237,6 +237,52 @@ void main() {
         c += uBeamRgb * uBeam[i].z * edge * (fall * (0.15 + 1.6 * rays) * fog + 0.5 * halo);
     }
     gl_FragColor = vec4(c, 0.0);
+}`;
+
+// The noise the Glacier background uses
+const GLACIER_GLSL = `
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm3(vec2 p) {
+    return (0.5 * noise(p) + 0.25 * noise(p * 2.07 + 11.3) + 0.125 * noise(p * 4.28 + 34.7)) / 0.875;
+}`;
+
+// The Glacier background's moving parts, laid over its picture (premultiplied, so they show on the pale scene): soft
+// clouds drifting slowly across the sky, stretched sideways and wisped by a warped noise, white with greyer edges like a
+// watercolour wash, thinning out towards the mountains; and light glinting on the lake below the shore in drifting
+// broken streaks, brighter on a clear's pulse.
+const GLACIER_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uBgView;    // scale, offset x, offset y of the backdrop's logical view
+uniform vec4 uGlacier;   // strength, time (seconds), the shore's y (logical), the clear's pulse
+${GLACIER_GLSL}
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uBgView.yz) / uBgView.x;
+    float t = uGlacier.y, shore = uGlacier.z;
+    vec3 c = vec3(0.0);
+    float a = 0.0;
+    if (q.y < 420.0) {
+        vec2 cp = vec2(q.x * 0.0035 - t * 0.008, q.y * 0.011);
+        float n = fbm3(cp + vec2(fbm3(cp * 1.7 + 3.1) * 0.6, 0.0));
+        a = smoothstep(0.52, 0.78, n) * smoothstep(420.0, 250.0, q.y) * smoothstep(-40.0, 60.0, q.y) * 0.55 * uGlacier.x;
+        c = mix(vec3(0.84, 0.91, 0.96), vec3(1.0), smoothstep(0.55, 0.9, n)) * a;
+    } else if (q.y > shore) {
+        float dy = q.y - shore;
+        float n = noise(vec2(q.x * 0.018 + t * 0.06, q.y * 0.32 - t * 0.1)) * noise(vec2(q.x * 0.05 - t * 0.04, q.y * 0.6 + 3.0));
+        a = min(0.6, smoothstep(0.3, 0.55, n) * smoothstep(0.0, 30.0, dy) * 0.3 * uGlacier.x * (1.0 + uGlacier.w));
+        c = vec3(a);
+    }
+    gl_FragColor = vec4(c, a);
 }`;
 
 // Clear shafts (Clear burst: Shafts, Eclipse's), added: light breaking through where rows cleared, a fan of rays from
@@ -562,6 +608,7 @@ class GLBackdrop {
         this.foil = this.r.program(FULLSCREEN_VS, FOIL_FS, [["aPos", 2]]);
         this.water = this.r.program(FULLSCREEN_VS, WATER_FS, [["aPos", 2]]);
         this.beamProgram = this.r.program(FULLSCREEN_VS, BEAMS_FS, [["aPos", 2]]);
+        this.glacierProgram = this.r.program(FULLSCREEN_VS, GLACIER_FS, [["aPos", 2]]);
         this.contour = this.r.program(FULLSCREEN_VS, CONTOUR_FS, [["aPos", 2]]);
         this.shaftProgram = this.r.program(FULLSCREEN_VS, SHAFTS_FS, [["aPos", 2]]);
         this.glitter = this.r.program(FULLSCREEN_VS, GLITTER_FS, [["aPos", 2]]);
@@ -601,6 +648,7 @@ class GLBackdrop {
     //   foil: null or {hue, band, strength, time, facets: [x, y, width, fade]} (same),
     //   water: null or {rgb, strength, time},
     //   beams: null or {lights: up to two of {x, y, strength, radius, occluder: [cx, cy, hw, hh]} (view logical), rgb, time},
+    //   glacier: null or {strength, time, shore (backdrop logical y), pulse},
     //   shafts: [{x, y, r, spread, rgb, a}] (view logical; Engine.shaftShapes),
     //   contours: [{x, y, r, width, hue, a, seed, spacing}] (view logical; Engine.contourShapes),
     //   glitter: [{x, y, r, width, hue, a}] (same; Engine.glitterShapes), facet: the glitter's facet width (backdrop logical),
@@ -707,6 +755,18 @@ class GLBackdrop {
             gl.uniform4fv(p.u("uOccluder"), occluder);
             gl.uniform3f(p.u("uBeamRgb"), rgb[0], rgb[1], rgb[2]);
             gl.uniform1f(p.u("uTime"), time);
+            this.drawFullscreen(p);
+        }
+
+        // The glacier lake's clouds and glints, laid over the picture
+        if (scene.glacier) {
+            const { strength, time, shore, pulse } = scene.glacier;
+            p = this.glacierProgram;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uBgView"), scene.bgView);
+            gl.uniform4f(p.u("uGlacier"), strength, time, shore, pulse);
             this.drawFullscreen(p);
         }
 

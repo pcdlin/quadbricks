@@ -487,7 +487,7 @@ const FIREWORK_COLORS = CONFETTI_COLORS.filter(c => !PIECE_COLORS.slice(8).some(
 // By confetti style (options.look("confetti"), none when off; fireworks are always glow): bits per cell, size (least,
 // random extra), burst speed factor and upward lift, gravity and air drag per frame, life in
 // frames, alpha, additive blending; spin (radians per frame, at most), sideways flutter, fastest
-// fall, grid (positions and sizes snapped to it), plain (only the piece's colour, no party colours)
+// fall, grid (positions and sizes snapped to it), plain (only the piece's colour, no party colours), white (all white)
 const CONFETTI_SPECS = {
     glow: { count: 2, size: [3, 5], speed: 1, lift: 3, gravity: 0.06, drag: 0.97, life: 50, alpha: 0.45, add: true },
     paper: { count: 2, size: [5, 4], speed: 0.8, lift: 3.4, gravity: 0.03, drag: 0.95, life: 100, alpha: 0.9, spin: 0.15, sway: 0.6, maxFall: 1.2 },
@@ -498,10 +498,11 @@ const CONFETTI_SPECS = {
     neon: { count: 2, size: [3, 3], speed: 1.1, lift: 3.6, gravity: 0.07, drag: 0.96, life: 56, alpha: 0.95, add: true, spin: 0.12 },
     foil: { count: 3, size: [3, 2.5], speed: 0.8, lift: 3.4, gravity: 0.04, drag: 0.95, life: 45, alpha: 0.8, add: true, spin: 0.1, sway: 0.5, maxFall: 1.1 },
     dust: { count: 2, size: [1.2, 1.4], speed: 0.35, lift: 0.8, gravity: 0.004, drag: 0.95, life: 120, alpha: 0.4, add: true, sway: 0.15, maxFall: 0.3, plain: true },
+    snow: { count: 2, size: [3.5, 3.5], speed: 0.9, lift: 3.2, gravity: 0.03, drag: 0.95, life: 62, alpha: 0.78, add: true, spin: 0.04, sway: 0.5, maxFall: 0.7, white: true },
 };
 // Rows of the confetti atlas (pixels are plain rects). Foil's columns are hues, not the colours: FOIL_HUES of them
 // round the wheel
-const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4, neon: 5, foil: 6, dust: 7 };
+const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4, neon: 5, foil: 6, dust: 7, snow: 8 };
 // Neon: a tube's hum (alpha swing) and how often and how deep it drops out for a frame or two
 const NEON_CONFETTI_HUM = 0.15, NEON_CONFETTI_DROPOUT = 0.96, NEON_CONFETTI_DIM = 0.25;
 // Foil: a flake's hue turns FOIL_HUE_SWING degrees as it turns over (and with the Holo sheen's), and it glints
@@ -511,6 +512,8 @@ const FOIL_HUES = CONFETTI_COLORS.length; // the atlas's columns
 // Dust: a mote glints as it drifts through a ray: how often (radians of its twinkle per glint cycle), how sharply, and
 // how faint it is between glints
 const DUST_GLINT_RATE = 0.22, DUST_GLINT_SHARP = 6, DUST_DIM = 0.3;
+// Snow: a flake tumbles (SNOW_TUMBLE radians of its twinkle per turn) and glints white while nearly face-on, past SNOW_GLINT
+const SNOW_TUMBLE = 0.25, SNOW_GLINT = 0.95;
 // TGM3 Easy's fireworks: bursts of confetti around the well, at most FIREWORK_MAX_BURSTS a frame
 // (a stream fires one every 10 frames; the end can fire dozens at once)
 const FIREWORK_SPARKS = 26, FIREWORK_SPEED = 3.2, FIREWORK_LIFE = 70, FIREWORK_MAX_BURSTS = 6;
@@ -534,6 +537,11 @@ const CONTOUR_ALPHA = 0.9; // their brightness at the Normal effects level
 const SHAFTS_LIFE = 60; // frames a clear's shafts of light last (Clear burst: Shafts)
 const SHAFTS_REACH = 760; // logical units their front travels
 const SHAFTS_ALPHA = 1.5; // their light at the Normal effects level
+// Clear shards (Clear burst: Shards): shards of ice breaking off the well's sides where rows cleared, SHARDS_COUNT of them
+// (at least, more per row), flying out SHARDS_REACH (least, random extra; further for more rows) and dropping a little,
+// turning as they go and fading over SHARDS_LIFE frames; their size (least, random extra) and strength at Normal effects
+const SHARDS_LIFE = 70, SHARDS_COUNT = [8, 4], SHARDS_REACH = [70, 230], SHARDS_DROP = 40;
+const SHARDS_SIZE = [9, 15], SHARDS_ALPHA = 0.95;
 const GLITTER_LIFE = 64; // frames a clear's glitter wave runs (Clear burst: Glitter)
 const GLITTER_REACH = 640; // logical units its front travels (before its 1.3x horizontal stretch)
 const GLITTER_FACET = HOLOGRAM_FACETS[2]; // a facet's width, the Hologram foil's (backdrop logical units)
@@ -572,6 +580,12 @@ const PRISM_TRAIL_FADE = 15; // frames it takes to fade out (the others' DROP_TR
 const RAYS_TRAIL_HAZE = 1.7, RAYS_TRAIL_HAZE_ALPHA = 0.45, RAYS_TRAIL_SHAFTS = 3, RAYS_TRAIL_SHAFT = 1.5;
 const RAYS_TRAIL_SLICE = 3, RAYS_TRAIL_FOG = [0.35, 0.65], RAYS_TRAIL_WHITE = 0.35, RAYS_TRAIL_STRENGTH = 1.5;
 const RAYS_TRAIL_FADE = 16; // frames it takes to fade out, lingering like Prism's
+// The Rime trail: a pale streak (the colour RIME_TRAIL_WHITE of the way to white) with light edges, and frost crystals
+// along those edges above the blocks, one every RIME_TRAIL_STEP or so, RIME_TRAIL_CRYSTAL in size (least, random extra),
+// growing as the streak fades and twinkling; the streak goes faster than they do (its alpha squared, theirs rooted)
+const RIME_TRAIL_WHITE = 0.5, RIME_TRAIL_STRENGTH = 1.05, RIME_TRAIL_EDGE = 0.85;
+const RIME_TRAIL_STEP = 13, RIME_TRAIL_CRYSTAL = [2.6, 2.6], RIME_TRAIL_GLINT = 2.2;
+const RIME_TRAIL_FADE = 20; // frames it takes to fade out, the crystals outlasting the streak
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 
 // The staff roll's credits, made up: [role, ...names], or a heading alone. They scroll up behind
@@ -1221,6 +1235,11 @@ class Engine {
 
         if (this.GAMESTATE === STATE_GAME) this.drawGame();
         else this.drawMenu();
+        // Clear shards, flying over everything
+        if (mode === "shards" && this.rings.length) {
+            r.setTransform(this.pixelScale, this.offX, this.offY);
+            this.drawShards();
+        }
         // Clear flares: light on the lens, over everything
         if (mode === "flare" && this.rings.length) {
             this.backdrop.flares([this.pixelScale, this.offX, this.offY], this.flareShapes().map(f => ({
@@ -1280,6 +1299,7 @@ class Engine {
             foil: this.background.foil ? this.background.foil(this) : null,
             water: this.background.water ? this.background.water(this) : null,
             beams: this.background.beams ? this.background.beams(this) : null,
+            glacier: this.background.glacier ? this.background.glacier(this) : null,
             shafts: mode === "shafts" ? this.shaftShapes() : [],
             contours: mode === "contours" ? this.contourShapes() : [],
             glitter: mode === "glitter" ? this.glitterShapes() : [],
@@ -2068,7 +2088,7 @@ class Engine {
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
             const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
             const mode = this.options.look("rings");
-            const span = { ripple: RIPPLE_LIFE, flare: FLARE_LIFE, contours: CONTOUR_LIFE, glitter: GLITTER_LIFE, shafts: SHAFTS_LIFE }[mode] || RING_LIFE;
+            const span = { ripple: RIPPLE_LIFE, flare: FLARE_LIFE, contours: CONTOUR_LIFE, glitter: GLITTER_LIFE, shafts: SHAFTS_LIFE, shards: SHARDS_LIFE }[mode] || RING_LIFE;
             this.rings.push({
                 gx: this.board.gx, // the board's group: the burst spreads from its well
                 y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
@@ -2091,7 +2111,7 @@ class Engine {
             const speed = (1 + Math.random() * 4.5) * spec.speed;
             const size = spec.grid ? spec.grid * (1 + Math.floor(Math.random() * 2))
                 : spec.size[0] + Math.random() * spec.size[1];
-            const color = spec.plain || Math.random() < 0.85 ? PIECE_COLORS[cell.type].light
+            const color = spec.white ? "#ffffff" : spec.plain || Math.random() < 0.85 ? PIECE_COLORS[cell.type].light
                 : CONFETTI_EXTRA[Math.floor(Math.random() * CONFETTI_EXTRA.length)];
             this.board.particles.push(this.confettiBit(style,
                 cx + (Math.random() - 0.5) * CELL * 0.8, cy + (Math.random() - 0.5) * CELL * 0.8,
@@ -2186,7 +2206,7 @@ class Engine {
     // Frames a drop trail in the style in effect takes to fade out (Prism's lingers)
     trailFade() {
         const style = this.options.look("trail");
-        return style === "prism" ? PRISM_TRAIL_FADE : style === "rays" ? RAYS_TRAIL_FADE : DROP_TRAIL_FADE;
+        return style === "prism" ? PRISM_TRAIL_FADE : style === "rays" ? RAYS_TRAIL_FADE : style === "rime" ? RIME_TRAIL_FADE : DROP_TRAIL_FADE;
     }
 
     // Drop trail streaks, one per column ({ col, y0, y1, index, yEnd, alpha }): each from y0 down
@@ -2276,6 +2296,34 @@ class Engine {
                             r.globalAlpha = a * (0.4 + 0.6 * flicker);
                             r.shape(sx - RAYS_TRAIL_SHAFT / 2, y, RAYS_TRAIL_SHAFT, h, { fill, fillY });
                         }
+                    }
+                    r.restore();
+                    return;
+                }
+                case "rime": {
+                    // a pale icy streak, fading first, with light edges; frost crystals forming along them above the
+                    // blocks (where they sit from the column and the height, the same at every drop), twinkling as they
+                    // outlast it. A join between columns gets the streak alone
+                    const pale = color.map((v, i) => i < 3 ? v + (1 - v) * RIME_TRAIL_WHITE : v);
+                    r.globalAlpha = scale * s.alpha * s.alpha * RIME_TRAIL_STRENGTH;
+                    r.shape(x, ya, w, yb - ya, { fill: fade(pale), fillY });
+                    if (w < CELL / 2) return;
+                    const edge = fade([1, 1, 1, 1]);
+                    r.globalAlpha = scale * s.alpha * RIME_TRAIL_EDGE;
+                    r.shape(x, ya, 1, yb - ya, { fill: edge, fillY });
+                    r.shape(x + w - 1, ya, 1, yb - ya, { fill: edge, fillY });
+                    const atlas = this.confettiSprites(), sx = atlas.index.get("#ffffff") * GLOW_SPRITE, sy = CONFETTI_SPRITE_ROWS.stars * GLOW_SPRITE;
+                    const lo = Math.max(ya, Math.min(s.y0, s.y1)), hi = Math.min(yb, Math.max(s.y0, s.y1)) - 4;
+                    const grow = Math.min(1, 0.35 + (1 - s.alpha) * 2.5), shown = Math.sqrt(s.alpha);
+                    r.save();
+                    r.blendMode = "add";
+                    for (let k = Math.floor(lo / RIME_TRAIL_STEP); k * RIME_TRAIL_STEP < hi; k++) {
+                        const y = (k + trailNoise(s.col * 3, k)) * RIME_TRAIL_STEP;
+                        if (y < lo || y > hi) continue;
+                        const side = trailNoise(k, s.col * 5 + 1), phase = trailNoise(s.col + 9, k * 7) * 6.28;
+                        const size = (RIME_TRAIL_CRYSTAL[0] + RIME_TRAIL_CRYSTAL[1] * trailNoise(k * 3, s.col)) * grow;
+                        r.globalAlpha = scale * shown * RIME_TRAIL_GLINT * (0.55 + 0.45 * Math.sin(t * 0.3 + phase));
+                        this.confettiQuad(atlas.tex, sx, sy, side < 0.5 ? x + 1.5 : x + w - 1.5, y, size, size, phase);
                     }
                     r.restore();
                     return;
@@ -2606,6 +2654,17 @@ class Engine {
                         r.image(atlas.tex, p.x - size * 2, p.y - size * 2, size * 4, size * 4, sx, sy, GLOW_SPRITE, GLOW_SPRITE);
                         break;
                     }
+                    case "snow": { // a snowflake tumbling as it drifts down, glinting as it turns face-on
+                        const face = Math.cos(p.twinkle * SNOW_TUMBLE + p.phase), hw = p.size * 1.2;
+                        this.confettiQuad(atlas.tex, sx, sy, p.x, p.y, hw * Math.max(0.2, Math.abs(face)), hw, p.rot);
+                        const glint = (Math.abs(face) - SNOW_GLINT) / (1 - SNOW_GLINT);
+                        if (glint > 0) { // the white star sprite
+                            r.globalAlpha *= glint;
+                            this.confettiQuad(atlas.tex, atlas.index.get("#ffffff") * GLOW_SPRITE, CONFETTI_SPRITE_ROWS.stars * GLOW_SPRITE,
+                                p.x, p.y, p.size * 1.4, p.size * 1.4, p.rot);
+                        }
+                        break;
+                    }
                     case "foil": { // a flake turning over: its hue swings with the turn, between two hue sprites
                         const flip = Math.cos(p.phase * 1.7), hw = p.size * 1.1, hh = hw * Math.max(0.12, Math.abs(flip));
                         const hue = p.hue + flip * FOIL_HUE_SWING + (this.sheen ? this.sheen.hue : 0);
@@ -2755,6 +2814,14 @@ class Engine {
             grad.addColorStop(1, color + "00");
             g.fillStyle = grad;
             g.fillRect(x0, row("dust"), n, n);
+            // Snow: a six-armed flake in the colour taken halfway to white (the confetti uses the white one), over a faint glow of it
+            cy = row("snow") + half;
+            grad = g.createRadialGradient(cx, cy, 0, cx, cy, half);
+            grad.addColorStop(0, color + "44");
+            grad.addColorStop(1, color + "00");
+            g.fillStyle = grad;
+            g.fillRect(x0, row("snow"), n, n);
+            paintSnowflake(g, cx, cy, half * 0.82, whiten(color, 0.5), 1.3);
             index.set(color, i);
         });
         this.confettiAtlas = { tex: this.r.texture(c), index };
@@ -2860,6 +2927,67 @@ class Engine {
                 a: Math.pow(1 - k, 1.5) * (0.5 + 0.15 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * SHAFTS_ALPHA,
             };
         });
+    }
+
+    // Clear shards: ice breaking off where rows cleared, the shards flying out from under the well's sides, fast then
+    // slowing, dropping a little and turning, fading as they go. Placed from the ring's seed, so they need no state of their
+    // own. Drawn over everything, like the Flare (draw()), so the side columns don't hide them
+    drawShards() {
+        const r = this.r, tex = this.shardTexture();
+        r.save();
+        for (const ring of this.rings) {
+            const k = 1 - ring.life / ring.span, ease = 1 - Math.pow(1 - k, 3); // 0 -> 1
+            const rnd = seededRandom(Math.floor(ring.seed * 1000) + 1);
+            const count = SHARDS_COUNT[0] + SHARDS_COUNT[1] * ring.power;
+            r.globalAlpha = Math.min(1, k * 12) * Math.pow(1 - k, 1.2) * ring.k * SHARDS_ALPHA;
+            for (let i = 0; i < count; i++) {
+                const side = i % 2 ? -1 : 1, up = (rnd() - 0.6) * 1.6; // mostly level or a little upward
+                const a = side > 0 ? up : Math.PI - up;
+                const reach = (SHARDS_REACH[0] + SHARDS_REACH[1] * rnd()) * (0.8 + 0.1 * ring.power);
+                const x0 = ring.gx + BOARD_X + (side > 0 ? BOARD_W - 12 : 12), y0 = ring.top + rnd() * (ring.bottom - ring.top);
+                const size = SHARDS_SIZE[0] + SHARDS_SIZE[1] * rnd(), spin = (rnd() - 0.5) * 5;
+                this.confettiQuad(tex, 0, 0, x0 + Math.cos(a) * reach * ease, y0 + Math.sin(a) * reach * ease + SHARDS_DROP * k * k,
+                    size, size * 0.75, a + spin * ease);
+            }
+        }
+        r.restore();
+    }
+
+    // A shard of ice pointing right, rendered once: a lit upper facet and a shadowed lower one along a light ridge, with a
+    // darker rim, so it shows on light backgrounds and dark ones; GLOW_SPRITE texels square, as confettiQuad() takes
+    shardTexture() {
+        if (this.shardTex) return this.shardTex;
+        const n = GLOW_SPRITE, c = document.createElement("canvas");
+        c.width = c.height = n;
+        const g = c.getContext("2d"), s = n / 64;
+        g.scale(s, s);
+        const back = [5, 33], upper = [22, 12], tip = [62, 29], lower = [20, 53];
+        const facet = (pts, from, to) => {
+            const grad = g.createLinearGradient(0, 12, 0, 53);
+            grad.addColorStop(0, from);
+            grad.addColorStop(1, to);
+            g.fillStyle = grad;
+            g.beginPath();
+            pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+            g.closePath();
+            g.fill();
+        };
+        facet([back, upper, tip], "#f2fbff", "#a9dbf3");
+        facet([back, tip, lower], "#74b7e2", "#2f7cb8");
+        g.strokeStyle = "rgba(255,255,255,0.95)";
+        g.lineWidth = 1.4;
+        g.beginPath();
+        g.moveTo(...back);
+        g.lineTo(...tip);
+        g.stroke();
+        g.strokeStyle = "rgba(25,75,120,0.6)";
+        g.lineWidth = 1;
+        g.beginPath();
+        [back, upper, tip, lower].forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+        g.closePath();
+        g.stroke();
+        this.shardTex = this.r.texture(c);
+        return this.shardTex;
     }
 
     // Clear glitter: a wave from the cleared rows, stretched 1.3x horizontally, setting the facets of
@@ -3087,7 +3215,7 @@ class Engine {
 
     drawLights(type, x, y, size, style = "locked", tileset = this.options.look("tileset")) {
         if (!type || style === "ghost") return;
-        if (TILESETS[tileset].sheen) this.drawSheen(x, y, size);
+        if (TILESETS[tileset].sheen) this.drawSheen(x, y, size, TILESETS[tileset].sheen);
         this.drawLamp(type, x, y, size, style, tileset);
     }
 
@@ -3147,6 +3275,7 @@ class Engine {
             rx: m.rx * deg, ry: m.ry * deg, // the tilt in degrees (the Hologram background follows it too)
         };
         this.sheenColors = this.sheenColors || [];
+        this.tintColors = this.tintColors || new Map(); // a tinted sheen's colours, by its style's sheen
         this.sheenY = this.sheenY || [0, 0];
         // the lamp: where it shines through the well, and the other styles' strength at this tilt
         // and effects level. With effects off they get none, and Stained glass's stays at rest.
@@ -3158,23 +3287,28 @@ class Engine {
     }
 
     // Additive coloured gloss over a block: the hue follows the tilt and also changes across
-    // the well, so a tilted field shimmers in bands
-    drawSheen(x, y, size) {
+    // the well, so a tilted field shimmers in bands. sheen is the style's: true for Holo's, the whole
+    // wheel; or { hue, swing, sat, light, alpha } to keep it within hue ± swing (Frost's blues), at
+    // that saturation and lightness and alpha times the strength
+    drawSheen(x, y, size, sheen = true) {
         const s = this.sheen;
         if (!s || s.strength <= 0.004) return;
-        const r = this.r;
-        const hue = s.hue + (x - BOARD_X) / BOARD_W * HOLO_HUE_ACROSS + (y - this.boardY) / this.boardH * HOLO_HUE_ACROSS * 0.5;
+        const r = this.r, tint = sheen === true ? null : sheen;
+        let hue = s.hue + (x - BOARD_X) / BOARD_W * HOLO_HUE_ACROSS + (y - this.boardY) / this.boardH * HOLO_HUE_ACROSS * 0.5;
+        if (tint) hue = tint.hue + tint.swing * Math.sin(hue * Math.PI / 180);
         const step = (Math.round(hue / 360 * HOLO_HUE_STEPS) % HOLO_HUE_STEPS + HOLO_HUE_STEPS) % HOLO_HUE_STEPS;
-        let pair = this.sheenColors[step];
+        const colors = tint ? (this.tintColors.get(tint) || this.tintColors.set(tint, []).get(tint)) : this.sheenColors;
+        let pair = colors[step];
         if (!pair) {
             const h = step / HOLO_HUE_STEPS * 360;
-            pair = this.sheenColors[step] = [hsla(h, 95, 62), hsla(h + 70, 95, 50)];
+            pair = colors[step] = tint ? [hsla(h, tint.sat, tint.light), hsla(h + 12, tint.sat, tint.light - 14)]
+                : [hsla(h, 95, 62), hsla(h + 70, 95, 50)];
         }
         const inset = 3, a = r.globalAlpha;
         const sy = this.sheenY;
         sy[0] = y; sy[1] = y + size;
         r.save();
-        r.globalAlpha = a * s.strength;
+        r.globalAlpha = a * s.strength * (tint ? tint.alpha : 1);
         r.blendMode = "add";
         r.shape(x + inset, y + inset, size - inset * 2, size - inset * 2, { radius: size * 0.1, fill: pair, fillY: sy });
         r.restore();

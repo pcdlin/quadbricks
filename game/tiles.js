@@ -491,6 +491,170 @@ const TILESETS = {
         },
     },
 
+    // Blocks of clear ice, the same for every piece (Glacier's): pale and see-through, lighter towards the top left, a
+    // darker inner face for their depth, a crack and a bubble or two inside (their course from the colour index, so the
+    // stack isn't uniform), frost along the edges and a chip of light at the top left. A slight blue shimmer plays over
+    // them as the field tilts (sheen: the Holo sheen kept to blue hues). The ghost is a frosted outline; versus garbage is
+    // darker, clouded ice
+    frost: {
+        name: "Frost",
+        face: [1, 0.13],
+        sheen: { hue: 200, swing: 16, sat: 85, light: 68, alpha: 0.45 },
+        pad: (style) => style === "active" ? 10 : 0,
+        trail: () => "rgb(196,232,252)",
+        draw(g, col, size, style, index) {
+            const [inset, round] = this.face, w = size - inset * 2, r = size * round, u = size / 30;
+            const path = (d = 0, rd = r) => { g.beginPath(); g.roundRect(inset + d, inset + d, w - d * 2, w - d * 2, rd); };
+            const rnd = seededRandom(index * 7919 + 17);
+            const murky = index === GARBAGE_COLOR, lift = ((index * 5) % 7 - 3) * 1.5; // a little lighter or darker by piece
+            // the ice's colour at a lightness, taken this.tint of the way to the piece's hue (Tinted frost; not for greys)
+            const [hue, sat] = rgbToHsl(parseColor(col.base)), tint = !murky && sat > 20 ? this.tint || 0 : 0;
+            const ice = (l, a) => {
+                const L = Math.max(4, l + lift - (murky ? 22 : 0));
+                if (!tint) return `hsla(203,${murky ? 22 : 58}%,${L}%,${a})`;
+                const base = hslToRgb(203, 58, L), toward = hslToRgb(hue, 62, L);
+                return `rgba(${base.map((v, i) => Math.round((v + (toward[i] - v) * tint) * 255)).join(",")},${a})`;
+            };
+            // frost: specks crowding the edges, thinning inward
+            const frost = (count, alpha) => {
+                for (let i = 0; i < count; i++) {
+                    const side = Math.floor(rnd() * 4), along = inset + rnd() * w, depth = Math.pow(rnd(), 2.2) * w * 0.26;
+                    const x = side === 1 ? inset + w - depth : side === 3 ? inset + depth : along;
+                    const y = side === 0 ? inset + depth : side === 2 ? inset + w - depth : along;
+                    g.fillStyle = `rgba(255,255,255,${alpha * (0.3 + 0.7 * rnd()) * (1 - depth / (w * 0.3))})`;
+                    g.beginPath();
+                    g.arc(x, y, (0.25 + 0.55 * rnd()) * u, 0, Math.PI * 2);
+                    g.fill();
+                }
+            };
+            if (style === "ghost") {
+                path(1, r - 1);
+                g.fillStyle = "rgba(190,230,255,0.07)";
+                g.fill();
+                g.strokeStyle = "rgba(200,236,255,0.55)";
+                g.lineWidth = 1.2;
+                g.stroke();
+                g.save();
+                path();
+                g.clip();
+                frost(50, 0.45);
+                g.restore();
+                return;
+            }
+            const active = style === "active";
+            if (active) { // the cold light the falling piece gives off
+                g.shadowColor = "rgba(170,225,255,0.65)";
+                g.shadowBlur = 12;
+            }
+            const body = g.createLinearGradient(inset, inset, inset + w, inset + w);
+            body.addColorStop(0, ice(90, 0.9));
+            body.addColorStop(0.5, ice(66, 0.66));
+            body.addColorStop(1, ice(38, 0.84));
+            path();
+            g.fillStyle = body;
+            g.fill();
+            g.shadowBlur = 0;
+            g.save();
+            path();
+            g.clip();
+            // the cube's depth: a darker inner face, towards the bottom right
+            g.beginPath();
+            g.roundRect(inset + 5 * u, inset + 5 * u, w - 8 * u, w - 8 * u, 3 * u);
+            g.fillStyle = ice(22, 0.26);
+            g.fill();
+            // a crack from one edge across, with its shadow, and a short branch off it
+            const pts = [];
+            let x = inset + (3 + rnd() * (w / u - 6)) * u, y = inset, a = Math.PI / 2 + (rnd() - 0.5) * 1.2;
+            if (index % 2) { x = inset; y = inset + (4 + rnd() * (w / u - 8)) * u; a = (rnd() - 0.5) * 1.2; }
+            pts.push([x, y]);
+            for (let i = 0; i < 8; i++) {
+                const len = (3 + rnd() * 3) * u;
+                a += (rnd() - 0.5) * 1.1;
+                x += Math.cos(a) * len;
+                y += Math.sin(a) * len;
+                pts.push([x, y]);
+            }
+            const line = (d, color, lw) => {
+                g.beginPath();
+                pts.forEach(([px, py], i) => i ? g.lineTo(px + d, py + d) : g.moveTo(px + d, py + d));
+                g.strokeStyle = color;
+                g.lineWidth = lw * u;
+                g.stroke();
+            };
+            line(0.65 * u, ice(16, 0.35), 0.8);
+            line(0, "rgba(255,255,255,0.55)", 0.65);
+            const [bx, by] = pts[3];
+            g.beginPath();
+            g.moveTo(bx, by);
+            g.lineTo(bx + (rnd() - 0.5) * 9 * u, by + (rnd() - 0.2) * 7 * u);
+            g.strokeStyle = "rgba(255,255,255,0.32)";
+            g.lineWidth = 0.5 * u;
+            g.stroke();
+            // bubbles caught in the ice
+            for (let i = 0; i < 1 + index % 2; i++) {
+                const cx = inset + (7 + rnd() * (w / u - 12)) * u, cy = inset + (9 + rnd() * (w / u - 14)) * u, cr = (0.7 + rnd() * 1.1) * u;
+                g.beginPath();
+                g.arc(cx, cy, cr, 0, Math.PI * 2);
+                g.strokeStyle = "rgba(255,255,255,0.4)";
+                g.lineWidth = 0.5 * u;
+                g.stroke();
+            }
+            frost(murky ? 110 : 70, active ? 0.55 : 0.42);
+            if (active) {
+                g.globalCompositeOperation = "lighter";
+                g.fillStyle = "rgba(190,235,255,0.14)";
+                g.fillRect(0, 0, size, size);
+                g.globalCompositeOperation = "source-over";
+            } else { // settled ice a shade deeper
+                g.fillStyle = "rgba(4,16,32,0.12)";
+                g.fillRect(0, 0, size, size);
+            }
+            g.restore();
+            // the rim: dark outside, frosted light just inside
+            path(0.5, r);
+            g.strokeStyle = ice(18, 0.75);
+            g.lineWidth = 1;
+            g.stroke();
+            path(1.6 * u, r - 1.2 * u);
+            g.strokeStyle = `rgba(235,250,255,${active ? 0.6 : 0.4})`;
+            g.lineWidth = 0.9 * u;
+            g.stroke();
+            // the chip of light
+            g.globalCompositeOperation = "lighter";
+            const sx = inset + 6 * u, sy = inset + 5 * u, spot = g.createRadialGradient(sx, sy, 0, sx, sy, 8 * u);
+            spot.addColorStop(0, "rgba(255,255,255,0.42)");
+            spot.addColorStop(1, "rgba(255,255,255,0)");
+            g.fillStyle = spot;
+            g.fillRect(inset, inset, 16 * u, 16 * u);
+            g.beginPath();
+            g.moveTo(inset + 3 * u, inset + 7 * u);
+            g.lineTo(inset + 4 * u, inset + 3.2 * u);
+            g.lineTo(inset + 9 * u, inset + 2.6 * u);
+            g.strokeStyle = "rgba(255,255,255,0.85)";
+            g.lineWidth = 1.1 * u;
+            g.lineCap = "round";
+            g.stroke();
+            g.globalCompositeOperation = "source-over";
+        },
+    },
+
+    // Frost with a hint of the Guideline piece colours: the same ice, taken a little way towards each piece's hue, its
+    // trail and flash too
+    frostTint: {
+        name: "Tinted frost",
+        face: [1, 0.13],
+        sheen: { hue: 200, swing: 16, sat: 85, light: 68, alpha: 0.45 },
+        tint: 0.38,
+        pad: (style) => style === "active" ? 10 : 0,
+        trail: (index) => {
+            const [r, g, b] = parseColor(PIECE_COLORS[index].light);
+            return `rgb(${Math.round(196 + (r * 255 - 196) * 0.42)},${Math.round(232 + (g * 255 - 232) * 0.42)},${Math.round(252 + (b * 255 - 252) * 0.42)})`;
+        },
+        draw(g, col, size, style, index) {
+            TILESETS.frost.draw.call(this, g, col, size, style, index);
+        },
+    },
+
     // Bevelled pyramid blocks: four lit facets around a flat face, as on 8- and 16-bit consoles
     faceted: {
         name: "Faceted",
