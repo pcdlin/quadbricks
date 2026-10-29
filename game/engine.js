@@ -654,7 +654,7 @@ const SHAKE_TIP = 0.25; // degrees the field tips back per unit it is knocked do
 const HOLO_FULL_TILT = 3.5; // degrees of field tilt at which the Holo sheen is at full strength
 const HOLO_HUE_PER_DEG = [95, 70]; // hue shift per degree of tilt about the x and y axes
 const HOLO_HUE_ACROSS = 140; // hue spread across the well, as a viewing angle changes over it
-const HOLO_HUE_STEPS = 48; // hues are quantised so their colours can be cached
+const HOLO_HUE_STEPS = 48; // hues whose colours are cached, the sheen blended between the two nearest
 const HOLO_ALPHA = 0.55; // sheen opacity at full strength
 // Lamp light (tiles.js lamp): a soft light on the blocks, as from a lamp behind the well, whose
 // pool moves over the well and whose spot moves inside each block as the field tilts
@@ -3275,6 +3275,7 @@ class Engine {
             rx: m.rx * deg, ry: m.ry * deg, // the tilt in degrees (the Hologram background follows it too)
         };
         this.sheenColors = this.sheenColors || [];
+        this.sheenMix = this.sheenMix || [[0, 0, 0, 1], [0, 0, 0, 1]]; // the two colours drawn, blended between steps (drawSheen())
         this.tintColors = this.tintColors || new Map(); // a tinted sheen's colours, by its style's sheen
         this.sheenY = this.sheenY || [0, 0];
         // the lamp: where it shines through the well, and the other styles' strength at this tilt
@@ -3289,21 +3290,19 @@ class Engine {
     // Additive coloured gloss over a block: the hue follows the tilt and also changes across
     // the well, so a tilted field shimmers in bands. sheen is the style's: true for Holo's, the whole
     // wheel; or { hue, swing, sat, light, alpha } to keep it within hue ± swing (Frost's blues), at
-    // that saturation and lightness and alpha times the strength
+    // that saturation and lightness and alpha times the strength. The colours are cached at HOLO_HUE_STEPS hues round
+    // the wheel and blended between the two nearest, so the sheen changes smoothly as the tilt turns its hue
     drawSheen(x, y, size, sheen = true) {
         const s = this.sheen;
         if (!s || s.strength <= 0.004) return;
         const r = this.r, tint = sheen === true ? null : sheen;
         let hue = s.hue + (x - BOARD_X) / BOARD_W * HOLO_HUE_ACROSS + (y - this.boardY) / this.boardH * HOLO_HUE_ACROSS * 0.5;
         if (tint) hue = tint.hue + tint.swing * Math.sin(hue * Math.PI / 180);
-        const step = (Math.round(hue / 360 * HOLO_HUE_STEPS) % HOLO_HUE_STEPS + HOLO_HUE_STEPS) % HOLO_HUE_STEPS;
         const colors = tint ? (this.tintColors.get(tint) || this.tintColors.set(tint, []).get(tint)) : this.sheenColors;
-        let pair = colors[step];
-        if (!pair) {
-            const h = step / HOLO_HUE_STEPS * 360;
-            pair = colors[step] = tint ? [hsla(h, tint.sat, tint.light), hsla(h + 12, tint.sat, tint.light - 14)]
-                : [hsla(h, 95, 62), hsla(h + 70, 95, 50)];
-        }
+        const at = hue / 360 * HOLO_HUE_STEPS, below = Math.floor(at), k = at - below;
+        const step = (below % HOLO_HUE_STEPS + HOLO_HUE_STEPS) % HOLO_HUE_STEPS;
+        const p0 = this.sheenPair(colors, step, tint), p1 = this.sheenPair(colors, (step + 1) % HOLO_HUE_STEPS, tint), pair = this.sheenMix;
+        for (let j = 0; j < 2; j++) for (let c = 0; c < 4; c++) pair[j][c] = p0[j][c] + (p1[j][c] - p0[j][c]) * k;
         const inset = 3, a = r.globalAlpha;
         const sy = this.sheenY;
         sy[0] = y; sy[1] = y + size;
@@ -3312,6 +3311,16 @@ class Engine {
         r.blendMode = "add";
         r.shape(x + inset, y + inset, size - inset * 2, size - inset * 2, { radius: size * 0.1, fill: pair, fillY: sy });
         r.restore();
+    }
+
+    // The sheen's two colours (its gradient's top and bottom) at a hue step, made once into colors
+    sheenPair(colors, step, tint) {
+        if (!colors[step]) {
+            const h = step / HOLO_HUE_STEPS * 360;
+            colors[step] = tint ? [hsla(h, tint.sat, tint.light), hsla(h + 12, tint.sat, tint.light - 14)]
+                : [hsla(h, 95, 62), hsla(h + 70, 95, 50)];
+        }
+        return colors[step];
     }
 
     // A block that carries an item: a versus item's icon (items.js) with a light pulsing over it in
