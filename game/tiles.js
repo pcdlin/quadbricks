@@ -582,14 +582,27 @@ const TILESETS = {
                 points.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
                 g.closePath();
             };
-            if (style === "ghost") {
-                g.fillStyle = col.base + "1a";
-                g.fillRect(a, a, b - a, b - a);
+            if (style === "ghost") { // the facets' light and shade, faint, in the block's outline
+                const ghostFacets = [
+                    [[tl, t1, t8], col.light, 0.4],
+                    [[tl, tr, t2, t1], col.light, 0.3],
+                    [[bl, tl, t8, t7], col.light, 0.22],
+                    [[tr, t3, t2], col.base, 0.2],
+                    [[bl, t7, t6], col.base, 0.2],
+                    [[tr, br, t4, t3], col.dark, 0.2],
+                    [[br, bl, t6, t5], col.dark, 0.15],
+                    [[br, t5, t4], col.dark, 0.12],
+                ];
+                for (const [points, fill, alpha] of ghostFacets) {
+                    poly(points);
+                    g.fillStyle = fill;
+                    g.globalAlpha = alpha;
+                    g.fill();
+                }
+                g.globalAlpha = 1;
                 g.strokeStyle = col.light + "99";
                 g.lineWidth = 1.2;
                 g.strokeRect(a + 0.6, a + 0.6, b - a - 1.2, b - a - 1.2);
-                poly(table);
-                g.stroke();
                 return;
             }
             const active = style === "active";
