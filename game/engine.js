@@ -702,6 +702,9 @@ const CUTIN_BAND_H = 150, CUTIN_EMBLEM = 92, CUTIN_EMBLEM_Y = 20;
 const MEDAL_COLORS = [INK_DIM, "#d9965c", "#dce3ea", MESSAGE_GOLD]; // by tier
 const SPLIT_AHEAD = "#86e3a8", SPLIT_BEHIND = "#ff8f7f";
 const SPLIT_MARKS = { cool: "#7fd8ff", regret: "#ff5f4a" };
+// Medals (TAP Master and Death, TGM3 Master and Shirase): a chip each at the foot of the stats, faint
+// until earned, then in its tier's colour; one earned or raised pops for MEDAL_POP_LIFE frames
+const MEDAL_POP_LIFE = 40, MEDAL_POP_SCALE = 0.45;
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
 const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
@@ -751,6 +754,7 @@ class BoardView {
         this.gaugeShown = 0; // the item gauge as drawn (0..1), eased toward the game's
         this.gaugeFlash = 0; // frames left of its flash as an item comes
         this.lastNextItem = null; // the item in the NEXT box at the last frame (a new one flashes the gauge)
+        this.medalPops = {}; // frames left of each medal's pop, by id, as it is earned or raised
     }
 }
 
@@ -1114,6 +1118,7 @@ class Engine {
         if (!game.getCurPiece_type()) view.enterGlow = 0; // or knocked out by an item (a snipe), unlocked
         // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
         if (game.takeHolds() && this.options.effects) view.holdFlash = view.enterGlow = HOLD_FLASH_LIFE;
+        for (const { id } of game.takeMedals ? game.takeMedals() : []) if (this.options.effects) view.medalPops[id] = MEDAL_POP_LIFE;
         for (const dir of game.takeBumps()) if (own && this.options.shakeScale) this.bumpShake(dir);
         for (const rows of game.takeSoftLandings()) if (own && this.options.shakeScale) this.kickShake(rows, SHAKE_SOFT);
         const fireworks = game.takeFireworks();
@@ -2084,6 +2089,33 @@ class Engine {
         return labelY;
     }
 
+    // The game's medals from (x, y), the chips' centre line: a row (compact: rows of three), each chip
+    // faint until earned, then in its tier's colour, popping as it is earned or raised
+    drawMedals(x, y, w, compact) {
+        const game = this.board.game, ids = Object.keys(game.medals);
+        const perRow = compact ? 3 : TAP_MEDALS.length, gap = compact ? 4 : 5;
+        const chipW = (w - gap * (perRow - 1)) / perRow, chipH = compact ? 14 : 20, size = compact ? 8 : 10;
+        ids.forEach((id, i) => {
+            const tier = game.medals[id], color = tier ? MEDAL_COLORS[tier] : INK_FAINT;
+            const cx = x + (i % perRow) * (chipW + gap) + chipW / 2, cy = y + Math.floor(i / perRow) * (chipH + gap);
+            const pop = (this.board.medalPops[id] || 0) / MEDAL_POP_LIFE; // 1 as it is earned, easing to 0
+            const [r, g, b] = parseColor(color);
+            // scaled about its centre as it pops (the text keeps its size, so no new texture per frame)
+            this.r.save();
+            this.r.translate(cx, cy);
+            this.r.scale(1 + MEDAL_POP_SCALE * pop * pop);
+            if (pop > 0) { // a soft glow behind it
+                this.r.save();
+                this.r.blendMode = "add";
+                this.r.shape(-chipW * 0.75, -chipH * 0.9, chipW * 1.5, chipH * 1.8, { radius: chipH, fill: [r, g, b, 0.35 * pop * this.options.effectScale] });
+                this.r.restore();
+            }
+            this.r.shape(-chipW / 2, -chipH / 2, chipW, chipH, { radius: 4, fill: tier ? [r, g, b, 0.16] : [0, 0, 0, 0.25], stroke: color, lineWidth: 1 });
+            this.text(id, 0, 0, { size, weight: 900, color, align: "center", spacing: 1 });
+            this.r.restore();
+        });
+    }
+
     // -----------------------------------
     // SECTION TIMES (the TGM modes)
 
@@ -2292,6 +2324,7 @@ class Engine {
         }
         view.trailBubbles = age(view.trailBubbles);
         view.holdFlash = Math.max(0, view.holdFlash - dt);
+        for (const id in view.medalPops) view.medalPops[id] = Math.max(0, view.medalPops[id] - dt);
         view.enterGlow = Math.max(0, view.enterGlow - dt);
         view.itemBursts = age(view.itemBursts);
         view.gaugeFlash = Math.max(0, view.gaugeFlash - dt);
@@ -4431,6 +4464,9 @@ class Engine {
             y += step;
         });
 
+        // Medals, between the stats and the wordmark
+        if (game.medals && !this.match) this.drawMedals(LEFT_X, this.boardY + this.boardH - 60, SIDE_W, false);
+
         // Wordmark (not in a match: versus stats take its room)
         if (!this.match) {
             this.colorStripe(LEFT_X, this.boardY + this.boardH - 26, 70, 3);
@@ -4501,6 +4537,7 @@ class Engine {
             else this.text(value, leftX, y + 20, opts);
             y += 46;
         });
+        if (game.medals && !this.match) this.drawMedals(leftX, y, sideW, true);
 
         const splits = this.showsSplits(), table = splits && game.isGameOver() && game.splits.length > 0;
         const bestTop = this.drawGameBest(rightX, sideW, this.boardY + this.boardH - 6, true);

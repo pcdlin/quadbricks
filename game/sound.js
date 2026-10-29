@@ -10,6 +10,7 @@ const SOUND_MUTE_KEY = "quadbricks.muted";
 // one chord tone higher for every step of a combo
 const CLEAR_NOTES = [220.00, 261.63, 329.63, 392.00, 440.00, 523.25, 659.25, 783.99, 880.00, 1046.50, 1318.51];
 const CLEAR_MAX_COMBO_STEP = 6; // combos beyond this keep the same pitch
+const MEDAL_NOTES = [1046.50, 1318.51, 1567.98, 2093.00]; // C major up to the octave
 
 class Sound {
     constructor() {
@@ -94,6 +95,8 @@ class Sound {
             default: {
                 const clear = /^clear(\d)(?:c(\d+))?$/.exec(name); // "clear2" or "clear2c3"
                 if (clear) this.lineClear(t, Number(clear[1]), Number(clear[2] || 0));
+                const medal = /^medal(\d)$/.exec(name); // a medal earned or raised to tier 1-3
+                if (medal) this.medal(t, Number(medal[1]));
             }
         }
     }
@@ -152,6 +155,15 @@ class Sound {
         // Low thud with a soft click of body, fuller for more lines
         this.tone(t, 100, 40, 0.28, 0.22 + 0.03 * lines, "sine");
         this.noise(t, 0.08, "lowpass", 300, 0.08 + 0.01 * lines);
+    }
+
+    // A medal: a bright rising chime, a note more for each tier (bronze two, gold four)
+    medal(t, tier) {
+        for (let i = 0; i <= tier; i++) {
+            const f = MEDAL_NOTES[i];
+            this.tone(t + i * 0.075, f, f, 0.32, 0.045, "sine");
+            this.tone(t + i * 0.075, f * 2, f * 2, 0.18, 0.012, "triangle"); // a little shine above it
+        }
     }
 
     envelope(t, attack, duration, gain, destination = this.master) {
