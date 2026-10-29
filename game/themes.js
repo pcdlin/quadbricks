@@ -1,4 +1,4 @@
-// Backgrounds (Options → Visuals → Background): the look around the blocks: the backdrop, the well's
+// Backgrounds (Options → Customization → Background): the look around the blocks: the backdrop, the well's
 // frame, the side panels, the menu cards and the wordmark. The block styles (tiles.js) and effects are
 // chosen separately and work with every background; a theme (THEMES, below) picks one of each.
 // Each background has a name and picture(g, x0, y0, x1, y1), the static backdrop picture drawn with
@@ -557,7 +557,7 @@ const BACKGROUNDS = {
 };
 const BACKGROUND_IDS = ["space", "gallery", "lines"]; // menu order
 
-// Themes (Options → Visuals → Theme): a background with the block style, confetti and clear burst that
+// Themes (Options → Customization → Theme): a background with the block style, confetti and clear burst that
 // go with it, which those settings take while they are on Follow theme (Options.look())
 const THEMES = {
     space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare" },

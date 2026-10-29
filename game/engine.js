@@ -21,8 +21,8 @@ const RELEASE_BITS = { left: LEFT_RELEASE, right: RIGHT_RELEASE, soft: SOFT_RELE
 
 // Menu screens
 const MENU_MAIN = 0, MENU_RULES = 1, MENU_MODES = 2, MENU_OPTIONS = 3, MENU_CONTROLS = 4, MENU_VISUALS = 5, MENU_HANDLING = 6, MENU_SETUP = 7, MENU_GAMEPAD = 8, MENU_QUICK = 9,
-    MENU_SINGLE = 10, MENU_MULTI = 11, MENU_JOIN = 12, MENU_DEBUG = 13;
-const MENU_DEPTH = [0, 2, 3, 1, 2, 2, 2, 4, 2, 2, 1, 1, 2, 1];   // by screen; deeper = slide in from the right
+    MENU_SINGLE = 10, MENU_MULTI = 11, MENU_JOIN = 12, MENU_DEBUG = 13, MENU_CUSTOM = 14;
+const MENU_DEPTH = [0, 2, 3, 1, 2, 2, 2, 4, 2, 2, 1, 1, 2, 1, 2];   // by screen; deeper = slide in from the right
 const MENU_SLIDE_MS = 220, MENU_SLIDE_DIST = 120;
 
 const CONTINUE_ITEM = { name: "Continue", desc: "Back to the game in progress", accent: tetI, resume: true };
@@ -299,20 +299,24 @@ const QUICK_PLAY = [
 const OPTIONS_ITEMS = [
     { name: "Keybinds", desc: "Change key bindings", accent: tetS, screen: MENU_CONTROLS, bindings: true },
     { name: "Gamepad", desc: "Change each gamepad's buttons", accent: tetI, screen: MENU_GAMEPAD, bindings: true },
-    { name: "Visuals", desc: "Theme, block style, scale, effects and motion", accent: tetT, screen: MENU_VISUALS },
+    { name: "Customization", desc: "Theme, background, block style, confetti and clear burst", accent: tetO, screen: MENU_CUSTOM },
+    { name: "Visuals", desc: "Scale, effects, backdrop and motion", accent: tetT, screen: MENU_VISUALS },
     { name: "Guideline", desc: "Handling for the Guideline modes: DAS, ARR, soft drop…", accent: tetL, screen: MENU_HANDLING },
 ];
 // Settings changed with ← →, by screen; descriptions show the current setting (optionValue())
 // (preview: the card is a little taller and shows the block style preview at its right; fx: the
 // setting does nothing with effects off, and its card is greyed out then)
-const VISUAL_ITEMS = [
+// The theme and the settings it can choose (Options → Customization)
+const CUSTOM_ITEMS = [
     { id: "theme", name: "Theme", accent: tetJ },
     { id: "background", name: "Background", accent: tetI },
     { id: "tileset", name: "Block style", accent: tetO, preview: true },
-    { id: "scale", name: "Scale", accent: tetL },
-    { id: "effects", name: "Effects", accent: tetT },
     { id: "confetti", name: "Confetti", accent: tetS, fx: true },
     { id: "rings", name: "Clear burst", accent: tetZ, fx: true },
+];
+const VISUAL_ITEMS = [
+    { id: "scale", name: "Scale", accent: tetL },
+    { id: "effects", name: "Effects", accent: tetT },
     { id: "flash", name: "Row flash", accent: tetI, fx: true },
     { id: "backdrop", name: "Backdrop", accent: tetJ, fx: true },
     { id: "tilt", name: "3D tilt", accent: tetI, fx: true },
@@ -354,7 +358,7 @@ function padWords(s) {
         .replace(/ENTER/g, "A").replace(/ESC/g, "B");
 }
 
-const SETTING_ITEMS = { [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
+const SETTING_ITEMS = { [MENU_CUSTOM]: CUSTOM_ITEMS, [MENU_VISUALS]: VISUAL_ITEMS, [MENU_HANDLING]: HANDLING_ITEMS };
 const VISUALS_ROWS = { rowH: 48, gap: 4 }; // the Visuals and mode cards, tighter than the other menus
 const VISUALS_LIST_H = 364; // height of the Visuals list; it scrolls to keep the selection in view
 const HANDLING_ROWS = { rowH: 44, gap: 4 }; // the Guideline handling cards, a little tighter still
@@ -362,6 +366,7 @@ const HANDLING_LIST_H = 7 * 48 - 4; // seven cards show; the help for the select
 // Setting lists that scroll to keep the selection in view: by screen, the items, the position
 // field, the cards' size and the height shown (menuScroll keeps how far each is scrolled)
 const SCROLLED_LISTS = {
+    [MENU_CUSTOM]: { items: CUSTOM_ITEMS, pos: "custompos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
     [MENU_VISUALS]: { items: VISUAL_ITEMS, pos: "visualspos", ...VISUALS_ROWS, listH: VISUALS_LIST_H },
     [MENU_HANDLING]: { items: HANDLING_ITEMS, pos: "handlingpos", ...HANDLING_ROWS, listH: HANDLING_LIST_H },
     // a mode's setup cards (items: null, they depend on the mode and the cards' choices), when there are more than
@@ -682,6 +687,7 @@ class Engine {
         this.rulesetpos = 0;  // rule set
         this.quickpos = 0;    // Quick Play
         this.optionspos = 0;  // Keybinds, Gamepad, Visuals or Guideline handling
+        this.custompos = 0;
         this.visualspos = 0;
         this.handlingpos = 0;
         this.setuppos = 0;    // setup card
@@ -1527,6 +1533,7 @@ class Engine {
             [MENU_OPTIONS]: { pos: "optionspos", count: () => this.optionsItems().length, back: MENU_MAIN },
             [MENU_CONTROLS]: { pos: "controlspos", count: () => KEY_ACTIONS.length + 1, back: MENU_OPTIONS },
             [MENU_GAMEPAD]: { pos: "padpos", count: () => this.gamepad.connected ? KEY_ACTIONS.length + 2 : 1, back: MENU_OPTIONS },
+            [MENU_CUSTOM]: { pos: "custompos", count: () => CUSTOM_ITEMS.length, back: MENU_OPTIONS },
             [MENU_VISUALS]: { pos: "visualspos", count: () => VISUAL_ITEMS.length, back: MENU_OPTIONS },
             [MENU_HANDLING]: { pos: "handlingpos", count: () => HANDLING_ITEMS.length, back: MENU_OPTIONS },
             [MENU_SETUP]: { pos: "setuppos", count: () => this.setupItems().length, back: this.setupFrom },
@@ -3015,19 +3022,25 @@ class Engine {
                 hint = `← →  CHANGE      ENTER  ${this.chosenMode().join ? "SELECT" : "START"}      ESC  BACK`;
                 break;
             }
-            case MENU_OPTIONS:
-                heading("OPTIONS");
-                this.drawMenuList(this.optionsItems(), this.optionspos, listTop);
+            case MENU_OPTIONS: {
+                // five cards (not with the touch controls): from a little higher up, the hint under them
+                const items = this.optionsItems(), top = items.length > 4 ? listTop - 20 : listTop;
+                heading("OPTIONS", INK_DIM, top - 26);
+                this.drawMenuList(items, this.optionspos, top);
+                hintY = Math.max(hintY, top + menuListHeight(items, 64, 10) + 22);
                 hint = "ENTER  SELECT      ESC  BACK";
                 break;
+            }
+            case MENU_CUSTOM:
             case MENU_VISUALS: {
                 const top = TALL_TOP; // heading in the tagline's place: leaves room for the hint
-                heading("OPTIONS  ·  VISUALS", INK_DIM, top - 16);
-                const items = this.settingCards(VISUAL_ITEMS);
+                const custom = this.menuStep === MENU_CUSTOM;
+                heading(custom ? "OPTIONS  ·  CUSTOMIZATION" : "OPTIONS  ·  VISUALS", INK_DIM, top - 16);
+                const items = this.settingCards(custom ? CUSTOM_ITEMS : VISUAL_ITEMS);
                 // Tighter cards leave room for the hint; the list shows VISUALS_LIST_H of them,
                 // scrolled to keep the selection in view
-                this.drawScrolledList(MENU_VISUALS, items, top);
-                hintY = Math.max(hintY, top + VISUALS_LIST_H + 22);
+                this.drawScrolledList(this.menuStep, items, top);
+                hintY = Math.max(hintY, top + (custom ? menuListHeight(items, VISUALS_ROWS.rowH, VISUALS_ROWS.gap) : VISUALS_LIST_H) + 22);
                 hint = "← →  CHANGE      ESC  BACK";
                 break;
             }
