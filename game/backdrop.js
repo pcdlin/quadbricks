@@ -1,5 +1,5 @@
 // Backdrop pass of the WebGL renderer (renderer.js), drawn first each frame: the backdrop
-// picture, its colour wash, field lines or holographic foil and drifting lights, the board glow and the line-clear
+// picture, its colour wash, field lines, holographic foil or water and drifting lights, the board glow and the line-clear
 // shockwaves. These are large, soft effects computed per pixel in shaders. The engine
 // builds a scene description each frame (see Engine.backdropScene).
 // Coordinates are device pixels, y down, unless noted.
@@ -150,6 +150,39 @@ void main() {
     }
     c += spectrum(uFoil.x + degrees(a) * 0.5 + q.x * 0.3) * ring * (0.08 + 0.1 * lit);
     gl_FragColor = vec4(c * uFoil.z, 0.0);
+}`;
+
+// Water (the Undersea background), added over the picture: light shafts slanting down from the surface,
+// swaying and fading with depth, and caustics, the net of light the waves focus (Dave Hoskins's tileable
+// water caustic), strong near the surface and again on the sea floor, faint in between.
+const WATER_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uBgView;    // scale, offset x, offset y of the backdrop's logical view
+uniform vec3 uWaterRgb;  // the light's colour
+uniform vec2 uWater;     // strength, time (seconds)
+const float TAU = 6.2831853;
+const float TILE = 360.0;    // logical units per caustic tile
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uBgView.yz) / uBgView.x;
+    float t = uWater.y, depth = clamp(q.y / 720.0, 0.0, 1.0);
+    float s = q.x + q.y * 0.35; // along the surface, the shafts slanting down to the left
+    float rays = pow(0.5 + 0.5 * sin(s * 0.021 + 0.6 * sin(t * 0.23)), 8.0)
+        + 0.7 * pow(0.5 + 0.5 * sin(s * 0.013 + 1.7 + 0.5 * sin(t * 0.17 + 1.0)), 10.0)
+        + 0.5 * pow(0.5 + 0.5 * sin(s * 0.034 + 4.0 + 0.8 * sin(t * 0.31 + 2.0)), 12.0);
+    rays *= (1.0 - smoothstep(0.0, 0.85, depth)) * (0.7 + 0.3 * sin(t * 0.5 + s * 0.004));
+    vec2 c0 = mod(q / TILE * TAU, TAU) - 250.0, i = c0;
+    float c = 1.0, ct = t * 0.55 + 23.0;
+    for (int n = 0; n < 4; n++) {
+        float tn = ct * (1.0 - 3.5 / float(n + 1));
+        i = c0 + vec2(cos(tn - i.x) + sin(tn + i.y), sin(tn - i.y) + cos(tn + i.x));
+        c += 1.0 / length(vec2(c0.x / (sin(i.x + tn) / 0.005), c0.y / (cos(i.y + tn) / 0.005)));
+    }
+    c = 1.17 - pow(c / 4.0, 1.4);
+    float caustic = min(1.0, pow(abs(c), 8.0));
+    float reach = max(pow(1.0 - depth, 2.2), 0.55 * pow(clamp((depth - 0.72) / 0.28, 0.0, 1.0), 1.5)) + 0.06;
+    gl_FragColor = vec4(uWaterRgb * (0.1 * rays + 0.3 * caustic * reach) * uWater.x, 0.0);
 }`;
 
 // Drifting lights: one quad each, added
@@ -319,6 +352,7 @@ class GLBackdrop {
         this.wash = this.r.program(FULLSCREEN_VS, WASH_FS, [["aPos", 2]]);
         this.lines = this.r.program(FULLSCREEN_VS, LINES_FS, [["aPos", 2]]);
         this.foil = this.r.program(FULLSCREEN_VS, FOIL_FS, [["aPos", 2]]);
+        this.water = this.r.program(FULLSCREEN_VS, WATER_FS, [["aPos", 2]]);
         this.orbProgram = this.r.program(ORB_VS, ORB_FS, [["aPos", 2], ["aOrb", 3], ["aColor", 4]]);
         this.board = this.r.program(FULLSCREEN_VS, BOARD_FS, [["aPos", 2]]);
         this.refraction = this.r.program(FULLSCREEN_VS, REFRACT_FS, [["aPos", 2]]);
@@ -353,6 +387,7 @@ class GLBackdrop {
     //   shade: [[x, y, r]] (backdrop logical, at most 2) circles in front of the blobs,
     //   lines: null or {spacing, ink: [r, g, b, a], bumps: [{x, y, r, amp, rgb}]} (same),
     //   foil: null or {hue, band, strength, time, rosette: [x, y, radius, amplitude]} (same),
+    //   water: null or {rgb, strength, time},
     //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
     //   glows: up to two of {rect: [x0, y0, x1, y1], sigma, rgb, a}, a board glow each }
     render(scene) {
@@ -421,6 +456,19 @@ class GLBackdrop {
             gl.uniform3fv(p.u("uBgView"), scene.bgView);
             gl.uniform4f(p.u("uFoil"), hue, band, strength, time);
             gl.uniform4f(p.u("uRosette"), rosette[0], rosette[1], rosette[2], rosette[3]);
+            this.drawFullscreen(p);
+        }
+
+        // Water's light shafts and caustics
+        if (scene.water) {
+            const { rgb, strength, time } = scene.water;
+            p = this.water;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uBgView"), scene.bgView);
+            gl.uniform3f(p.u("uWaterRgb"), rgb[0], rgb[1], rgb[2]);
+            gl.uniform2f(p.u("uWater"), strength, time);
             this.drawFullscreen(p);
         }
 

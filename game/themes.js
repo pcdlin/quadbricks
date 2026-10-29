@@ -197,6 +197,27 @@ const HOLOGRAM_CHROME = "rgba(220,228,242,0.7)";
 const HOLOGRAM_LABEL = "rgba(200,208,224,0.9)";
 const HOLOGRAM_WELL_ALPHA = 0.74; // the well's fill (0.94 with effects off)
 
+// Undersea: the water's hue, swinging between teal and blue with line clears (the backdrop's hue turning a
+// sine), its light's extra strength on a line clear's pulse, the bubbles (how often a vent lets one go, per
+// frame, and how much faster they rise on a clear's pulse), the sinking specks, and the jellyfish (frames
+// between them, the first sooner, its speed up). Bubbles and the jellyfish keep to the lanes beside the
+// side columns (lanes()), so none passes behind their text: a vent needs UNDERSEA_VENT_W of lane, a
+// jellyfish UNDERSEA_JELLY_W; where the window leaves less, there are none
+const UNDERSEA_HUE = 192, UNDERSEA_HUE_SWING = 14;
+const UNDERSEA_SWELL = 1.2;
+const UNDERSEA_BUBBLE_RATE = 0.04;
+const UNDERSEA_RUSH = 3;
+const UNDERSEA_SNOW = 60;
+const UNDERSEA_JELLY_EVERY = [3600, 7200], UNDERSEA_JELLY_FIRST = [600, 1500];
+const UNDERSEA_JELLY_SPEED = 0.35;
+const UNDERSEA_VENT_W = 22, UNDERSEA_JELLY_W = 84;
+const UNDERSEA_LANE_GAP = 8; // kept clear beside the columns
+// the bubbles' colour and strength
+const UNDERSEA_BUBBLE_COLOR = "rgb(190,240,255)", UNDERSEA_BUBBLE_ALPHA = 0.85;
+const UNDERSEA_LABEL = "rgba(127,224,240,0.9)";
+const UNDERSEA_EDGE = "rgba(120,215,235,0.2)";
+const UNDERSEA_WELL_ALPHA = 0.74; // the well's fill (0.94 with effects off)
+
 const BACKGROUNDS = {
     // Night gallery: deep gradient, soft spotlight, receding floor grid
     gallery: {
@@ -680,8 +701,331 @@ const BACKGROUNDS = {
             return this.tex;
         },
     },
+
+    // Undersea: water from a lit teal under the surface to the dark floor, light shafts and caustics
+    // (GLBackdrop's WATER_FS), bubbles rising from vents, specks sinking and now and then a jellyfish;
+    // an aquarium-glass well, sea glass panels and cards
+    undersea: {
+        name: "Undersea",
+        ink: [225 / 255, 242 / 255, 250 / 255],
+        picture(g, x0, y0, x1, y1) {
+            const sea = g.createLinearGradient(0, 0, 0, VIEW_H);
+            sea.addColorStop(0, "#0b5872");
+            sea.addColorStop(0.18, "#073b58");
+            sea.addColorStop(0.55, "#04203a");
+            sea.addColorStop(1, "#020a16");
+            g.fillStyle = sea;
+            g.fillRect(x0, y0, x1 - x0, y1 - y0);
+            const sun = g.createRadialGradient(430, -60, 10, 430, -60, 420);
+            sun.addColorStop(0, "rgba(170,240,255,0.45)");
+            sun.addColorStop(0.4, "rgba(90,200,230,0.12)");
+            sun.addColorStop(1, "rgba(0,0,0,0)");
+            g.fillStyle = sun;
+            g.fillRect(x0, y0, x1 - x0, y1 - y0);
+            const sand = g.createLinearGradient(0, VIEW_H - 120, 0, VIEW_H);
+            sand.addColorStop(0, "rgba(60,110,120,0)");
+            sand.addColorStop(1, "rgba(70,120,125,0.18)");
+            g.fillStyle = sand;
+            g.fillRect(x0, VIEW_H - 120, x1 - x0, y1 - VIEW_H + 120);
+            // rocks, the far ones lighter, down to the bottom of what is in view
+            const rocks = (pts, fill) => {
+                g.fillStyle = fill;
+                g.beginPath();
+                g.moveTo(pts[0][0], y1);
+                for (const [x, y] of pts) g.lineTo(x, y);
+                g.lineTo(pts[pts.length - 1][0], y1);
+                g.fill();
+            };
+            rocks([[x0 - 10, 610], [30, 590], [70, 600], [120, 570], [170, 600], [215, 640], [240, 700], [250, VIEW_H]], "#06192a");
+            rocks([[550, VIEW_H], [560, 700], [590, 650], [640, 610], [690, 620], [730, 585], [780, 600], [x1 + 10, 580]], "#06192a");
+            rocks([[x0 - 10, 660], [50, 640], [100, 655], [150, 680], [190, VIEW_H]], "#030d18");
+            rocks([[600, VIEW_H], [650, 680], [710, 660], [770, 670], [x1 + 10, 650]], "#030d18");
+            // kelp, and a coral fan each side
+            g.strokeStyle = g.fillStyle = "#04192a";
+            g.lineCap = "round";
+            for (const [x, h, lean, w] of [[28, 300, 0.08, 4], [52, 230, -0.05, 3], [205, 170, 0.1, 3], [742, 330, -0.1, 4], [768, 250, 0.04, 3], [612, 190, -0.06, 3]]) {
+                const at = (k) => [x + Math.sin(k / 12 * 5 + x) * 9 * k / 12 + lean * k / 12 * h, VIEW_H - k / 12 * h];
+                g.lineWidth = w;
+                g.beginPath();
+                g.moveTo(x, y1);
+                for (let k = 0; k <= 12; k++) g.lineTo(...at(k));
+                g.stroke();
+                for (let k = 2; k < 12; k += 2) {
+                    const [px, py] = at(k), side = k % 4 ? 1 : -1;
+                    g.beginPath();
+                    g.ellipse(px + 7 * side, py, 9, 3.5, -0.5 * side, 0, Math.PI * 2);
+                    g.fill();
+                }
+            }
+            g.strokeStyle = "rgba(20,48,66,0.9)";
+            g.lineWidth = 1.4;
+            const rnd = themeRandom(5);
+            for (const [x, y, r, a0, a1] of [[130, 650, 70, -2.6, -1.2], [680, 640, 80, -2.0, -0.5]]) {
+                for (let k = 0; k < 14; k++) {
+                    const a = a0 + (a1 - a0) * k / 13, len = r * (0.7 + 0.3 * rnd());
+                    g.beginPath();
+                    g.moveTo(x, y);
+                    g.quadraticCurveTo(x + Math.cos(a) * len * 0.5 + 6, y + Math.sin(a) * len * 0.5, x + Math.cos(a) * len, y + Math.sin(a) * len);
+                    g.stroke();
+                }
+            }
+            vignette(g, x0, y0, x1, y1, 0.5);
+        },
+        // The water's hue now: still with effects or the animated backdrop off
+        hue(e) {
+            const moving = e.options.effects && e.options.backdrop;
+            return UNDERSEA_HUE + (moving ? UNDERSEA_HUE_SWING * Math.sin((e.hue - HUE_DEFAULT) * Math.PI / 180) : 0);
+        },
+        // bubbles rising from the vents (faster on a clear's pulse) and off the wordmark's wave, specks sinking,
+        // and more rarely a jellyfish swimming up
+        update(e, dt) {
+            if (!this.snow) {
+                this.bubbles = [];
+                this.rising = [];
+                this.snow = Array.from({ length: UNDERSEA_SNOW }, () => ({
+                    x: Math.random() * VIEW_W, y: Math.random() * VIEW_H, r: 1.2 + Math.random() * 1.4, v: 0.05 + Math.random() * 0.12, phase: Math.random() * 6.28,
+                }));
+                this.jelly = null;
+                this.jellyIn = UNDERSEA_JELLY_FIRST[0] + Math.random() * (UNDERSEA_JELLY_FIRST[1] - UNDERSEA_JELLY_FIRST[0]);
+            }
+            const rush = 1 + UNDERSEA_RUSH * e.pulse, lanes = this.lanes(e), floor = Math.min(VIEW_H, lanes.bottom) - 8;
+            for (const [l0, l1] of lanes) {
+                const vents = l1 - l0 >= 3 * UNDERSEA_VENT_W ? 2 : l1 - l0 >= UNDERSEA_VENT_W ? 1 : 0; // two in a wide lane
+                for (let n = 0; n < vents; n++) {
+                    if (Math.random() >= UNDERSEA_BUBBLE_RATE * rush * dt) continue;
+                    const x = l0 + (l1 - l0) * (n + 0.5) / vents;
+                    this.bubbles.push({ x: x + (Math.random() - 0.5) * 6, y: floor + 10 * n, r: 1.5 + Math.random() * 3.5, v: 0.6 + Math.random() * 0.5, phase: Math.random() * 6.28 });
+                }
+            }
+            for (const b of this.bubbles) {
+                b.y -= b.v * (0.8 + b.r / 6) * rush * dt;
+                b.x += Math.sin(e.clock / 14 + b.phase) * 0.25 * dt;
+            }
+            this.bubbles = this.bubbles.filter(b => b.y - b.r > lanes.top); // they burst at the surface
+            if (Math.random() < 0.08 * dt) this.rising.push({ color: 1 + Math.floor(Math.random() * 7), dx: 0, dy: -6, life: 40 });
+            for (const b of this.rising) { // gone before they reach the letters
+                b.dy -= 0.2 * dt;
+                b.life -= dt;
+                b.dx = Math.sin(b.life / 8) * 1.5;
+            }
+            this.rising = this.rising.filter(b => b.life > 0);
+            for (const s of this.snow) {
+                s.y += s.v * dt;
+                s.x += Math.sin(e.clock / 90 + s.phase) * 0.05 * dt;
+                if (s.y > VIEW_H + 4) { s.y = -4; s.x = Math.random() * VIEW_W; }
+            }
+            const j = this.jelly;
+            if (j) {
+                const beat = Math.sin(e.clock / 22 + j.phase);
+                j.y -= UNDERSEA_JELLY_SPEED * (0.4 + 0.6 * (0.5 + 0.5 * beat) * 2) * dt; // a push with each beat
+                if (this.jellyFade(lanes) <= 0) this.jelly = null;
+            } else if ((this.jellyIn -= dt) <= 0) {
+                const wide = lanes.filter(([l0, l1]) => l1 - l0 >= UNDERSEA_JELLY_W);
+                this.jellyIn = UNDERSEA_JELLY_EVERY[0] + Math.random() * (UNDERSEA_JELLY_EVERY[1] - UNDERSEA_JELLY_EVERY[0]);
+                if (wide.length) { // else none this time
+                    const [l0, l1] = wide[Math.floor(Math.random() * wide.length)];
+                    this.jelly = { x: (l0 + l1) / 2, y: lanes.bottom + 100, phase: Math.random() * 6.28 };
+                }
+            }
+        },
+        // the debug menu's: a jellyfish from the next update (false when the window leaves no lane wide enough)
+        showJelly(e) {
+            if (!this.lanes(e).some(([l0, l1]) => l1 - l0 >= UNDERSEA_JELLY_W)) return false;
+            this.jelly = null;
+            this.jellyIn = 0;
+            return true;
+        },
+        // The free room beside the side columns, in the backdrop's coordinates: [[x0, x1]], left and right (empty
+        // ones left out), with the surface (under the version and FPS in the view's top corners) and the bottom
+        // of what is in view. The columns are the layout's (both players' groups in a match), wherever the
+        // Options scale draws them; in the menus the wordmark, as wide as the view but 24 each side, too
+        lanes(e) {
+            const L = e.layout, gx = L.duo ? L.duo.gx : [0, 0], [vx, vy, vw] = L.view;
+            const toBg = (v) => (e.offX + v * e.pixelScale - e.bgOffX) / e.bgScale;
+            let left = toBg(L.leftX + gx[0]), right = toBg(L.rightX + L.sideW + gx[1]);
+            if (e.GAMESTATE !== STATE_GAME) {
+                left = Math.min(left, vx + 24);
+                right = Math.max(right, vx + vw - 24);
+            }
+            const x0 = -e.bgOffX / e.bgScale, x1 = (e.canvas.width - e.bgOffX) / e.bgScale;
+            const lanes = [[x0, left - UNDERSEA_LANE_GAP], [right + UNDERSEA_LANE_GAP, x1]].filter(([a, b]) => b > a);
+            lanes.top = vy + 26;
+            lanes.bottom = (e.canvas.height - e.bgOffY) / e.bgScale;
+            return lanes;
+        },
+        // The jellyfish fades out as it nears the surface (so it never passes the version or FPS)
+        jellyFade(lanes) {
+            return clamp((this.jelly.y - lanes.top - 30) / 60, 0, 1);
+        },
+        // Whether something half wide at x is inside a lane (after a resize, what is no longer in one isn't drawn)
+        inLane(lanes, x, half) {
+            return lanes.some(([l0, l1]) => x - half >= l0 && x + half <= l1);
+        },
+        // the specks and the jellyfish's glow, as lights
+        ambient(e) {
+            const orbs = [], t = e.clock / 60, h = this.hue(e);
+            if (!this.snow) return { blobs: [], orbs };
+            for (const s of this.snow) orbs.push({ x: s.x, y: s.y, r: s.r, h, s: 40, l: 88, a: 0.28 + 0.12 * Math.sin(t + s.phase) });
+            const j = this.jelly;
+            const lanes = this.lanes(e);
+            if (j && this.inLane(lanes, j.x, UNDERSEA_JELLY_W / 2)) {
+                const glow = (1 + 0.25 * Math.sin(e.clock / 22 + j.phase)) * this.jellyFade(lanes);
+                orbs.push({ x: this.jellyX(e), y: j.y, r: UNDERSEA_JELLY_W * 0.7, h: 318, s: 90, l: 70, a: 0.14 * glow }, { x: this.jellyX(e), y: j.y - 4, r: 30, h: 318, s: 80, l: 80, a: 0.14 * glow });
+            }
+            return { blobs: [], orbs };
+        },
+        jellyX(e) { return this.jelly.x + 6 * Math.sin(e.clock / 140 + this.jelly.phase); },
+        water(e) {
+            const moving = e.options.effects && e.options.backdrop;
+            return {
+                rgb: hslToRgb(this.hue(e) - 5, 75, 72),
+                strength: e.softEffectScale() * (1 + UNDERSEA_SWELL * e.pulse),
+                time: moving ? e.clock / 60 : 0,
+            };
+        },
+        // Drawn over the backdrop pass in its coordinates: the bubbles, and the jellyfish's bell and tentacles
+        scenery(e) {
+            const r = e.r;
+            if (!this.snow) return;
+            const lanes = this.lanes(e);
+            r.save();
+            r.blendMode = "add";
+            for (const b of this.bubbles) {
+                if (this.inLane(lanes, b.x, b.r * BUBBLE_REACH)) drawBubble(r, b.x, b.y, b.r, UNDERSEA_BUBBLE_COLOR, UNDERSEA_BUBBLE_ALPHA);
+            }
+            const j = this.jelly;
+            if (j && this.inLane(lanes, j.x, UNDERSEA_JELLY_W / 2)) {
+                const beat = Math.sin(e.clock / 22 + j.phase), x = this.jellyX(e);
+                const bw = 26 + 4 * beat, bh = 20 - 3 * beat;
+                r.globalAlpha *= this.jellyFade(lanes);
+                r.image(this.bellTexture(r), x - bw, j.y - bh, bw * 2, bh + 4);
+                for (let k = 0; k < 7; k++) {
+                    const tx = x - bw * 0.8 + k * bw * 1.6 / 6, a = 0.34 - (k % 2) * 0.12;
+                    for (let n = 1; n <= 14; n++) {
+                        const dx = Math.sin(e.clock / 18 + n * 0.5 + k) * 3 * n / 6, dy = n * 6 + beat * n * 0.3;
+                        r.shape(tx + dx - 1, j.y + dy - 1, 2, 2, { radius: 1, fill: [1, 170 / 255, 235 / 255, a * (1 - n / 16)] });
+                    }
+                }
+            }
+            r.restore();
+        },
+        // The jellyfish's bell, rendered once per resolution: a glowing dome with a rim and frills inside
+        bellTexture(r) {
+            const res = r.s;
+            if (this.bell && this.bell.res === res) return this.bell.tex;
+            if (this.bell) r.releaseTexture(this.bell.tex);
+            const w = 60, h = 26;
+            const c = document.createElement("canvas");
+            c.width = Math.ceil(w * res);
+            c.height = Math.ceil(h * res);
+            const g = c.getContext("2d");
+            g.scale(res, res);
+            const cx = w / 2, cy = h - 4, rx = w / 2 - 2, ry = h - 6;
+            const body = g.createRadialGradient(cx, cy - ry * 0.5, 0, cx, cy - ry * 0.5, rx);
+            body.addColorStop(0, "rgba(255,200,245,0.5)");
+            body.addColorStop(1, "rgba(255,120,220,0.18)");
+            g.fillStyle = body;
+            g.beginPath();
+            g.ellipse(cx, cy, rx, ry, 0, Math.PI, 0);
+            g.fill();
+            g.strokeStyle = "rgba(255,190,240,0.6)";
+            g.lineWidth = 1.2;
+            g.stroke();
+            g.strokeStyle = "rgba(255,170,235,0.35)";
+            g.lineWidth = 1;
+            for (let k = -2; k <= 2; k++) {
+                g.beginPath();
+                g.moveTo(cx + k * rx * 0.3, cy);
+                g.quadraticCurveTo(cx + k * rx * 0.2, cy - ry * 0.5, cx + k * rx * 0.08, cy - ry * 0.85);
+                g.stroke();
+            }
+            this.bell = { tex: r.texture(c), res };
+            return this.bell.tex;
+        },
+        glowRgb(e) { return hslToRgb(this.hue(e), 80, 60); },
+        // aquarium glass: a deep translucent fill the water's light shows through, an aqua edge with a light
+        // glint wandering along the top
+        frame(e, [x, y, w, h], exam) {
+            const r = e.r;
+            r.shape(x, y, w, h, { radius: 8, fill: [2 / 255, 16 / 255, 30 / 255, e.options.effects ? UNDERSEA_WELL_ALPHA : 0.94] });
+            for (let c = 1; c < WIDTH; c++) r.rect(BOARD_X + c * CELL - 0.5, e.boardY, 1, e.boardH, "rgba(140,220,240,0.05)");
+            r.shape(x, y, w, h, { radius: 8, stroke: exam ? goldAlpha(0.6 + 0.35 * e.pulse) : [130 / 255, 225 / 255, 240 / 255, 0.5 + 0.35 * e.pulse], lineWidth: 1.2 });
+            if (exam) return;
+            const gw = 90, k = 0.5 + 0.5 * Math.sin(e.clock / 200);
+            r.image(this.glintTexture(r), x + 12 + k * (w - 24 - gw), y - 1, gw, 2);
+        },
+        // sea glass: translucent teal, lighter at the top, with a light rim along it
+        panel(e, x, y, w, h) {
+            this.glass(e, x, y, w, h, 10, false);
+        },
+        glass(e, x, y, w, h, radius, selected) {
+            const r = e.r;
+            if (selected) { // a soft aqua glow round it
+                r.shape(x - 3, y - 3, w + 6, h + 6, { radius: radius + 3, stroke: "rgba(110,230,245,0.1)", lineWidth: 4 });
+                r.shape(x - 1.5, y - 1.5, w + 3, h + 3, { radius: radius + 1.5, stroke: "rgba(110,230,245,0.18)", lineWidth: 2 });
+            }
+            r.shape(x, y, w, h, {
+                radius, lineWidth: 1, fillY: [y, y + h],
+                fill: selected ? ["rgba(26,96,118,0.8)", "rgba(14,64,84,0.8)"] : ["rgba(10,48,68,0.64)", "rgba(4,26,42,0.62)"],
+                stroke: selected ? "rgba(150,240,250,0.7)" : UNDERSEA_EDGE,
+            });
+            const rim = Math.min(14, h / 2);
+            r.shape(x + 1, y + 1, w - 2, rim, {
+                radius: [radius - 1, radius - 1, 0, 0], fillY: [y + 1, y + 1 + rim],
+                fill: [selected ? "rgba(190,250,255,0.2)" : "rgba(170,235,250,0.1)", "rgba(170,235,250,0)"],
+            });
+        },
+        label(e, s, x, y, w, size, spacing) {
+            e.text(s, x, y, { size, weight: 700, color: UNDERSEA_LABEL, spacing });
+        },
+        card(e, x, y, w, h, radius, selected, accent) {
+            this.glass(e, x, y, w, h, radius, selected);
+            if (selected) e.r.shape(x + 2, y + 8, 3, h - 16, { radius: 1.5, fill: accent }); // clear of the text on tight cards
+        },
+        // the seven colours as bubbles on a wave
+        stripe(e, x, y, w, h) {
+            const r = e.r, wave = (k) => y + h / 2 + Math.sin(k * 12 + e.clock / 30) * Math.max(1.5, h * 0.75);
+            for (let i = 0; i <= w; i += 1.5) r.rect(x + i - 0.6, wave(i / w) - 0.6, 1.2, 1.2, "rgba(140,225,240,0.45)");
+            const d = h + 5;
+            for (let t = 1; t <= 7; t++) {
+                const k = (t - 0.5) / 7, px = x + k * w, py = wave(k);
+                r.shape(px - d / 2, py - d / 2, d, d, { radius: d / 2, fill: PIECE_COLORS[t].base });
+                r.shape(px - d * 0.32 - d * 0.12, py - d * 0.32 - d * 0.12, d * 0.24, d * 0.24, { radius: d * 0.12, fill: "rgba(255,255,255,0.6)" });
+            }
+        },
+        // rounded lettering over the wave, small bubbles in the piece colours rising off it
+        wordmark(e, cx) {
+            const size = Math.min(70, Math.floor(70 * (e.layout.view[2] - 48) / e.measureText("QUADBRICKS", 70, 600, 16)));
+            e.text("QUADBRICKS", cx, 150, { size, weight: 600, align: "center", spacing: Math.round(size * 16 / 70) });
+            const x = cx - 150, y = 196, w = 300;
+            this.stripe(e, x, y, w, 4);
+            if (!this.rising || !e.options.effects || !e.options.backdrop) return;
+            const r = e.r;
+            r.save();
+            r.blendMode = "add";
+            for (const b of this.rising) {
+                const k = (b.color - 0.5) / 7;
+                drawBubble(r, x + k * w + b.dx, y + b.dy, 2.2, PIECE_COLORS[b.color].light, UNDERSEA_BUBBLE_ALPHA * Math.min(1, b.life / 25));
+            }
+            r.restore();
+        },
+        // A short glint, fading out at both ends, rendered once
+        glintTexture(r) {
+            if (this.glint) return this.glint;
+            const c = document.createElement("canvas");
+            c.width = 128;
+            c.height = 1;
+            const g = c.getContext("2d");
+            for (let i = 0; i < 128; i++) {
+                g.fillStyle = `rgba(220,255,255,${0.9 * Math.sin(Math.PI * (i + 0.5) / 128)})`;
+                g.fillRect(i, 0, 1, 1);
+            }
+            this.glint = r.texture(c);
+            return this.glint;
+        },
+    },
 };
-const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram"]; // menu order
+const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order
 
 // Themes (Options → Customization → Theme): a background with the block style, confetti and clear burst that
 // go with it, which those settings take while they are on Follow theme (Options.look())
@@ -690,8 +1034,9 @@ const THEMES = {
     gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "sparks", rings: "rings" },
     lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare" },
     hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "stars", rings: "ripple" },
+    undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple" },
 };
-const THEME_IDS = ["space", "gallery", "lines", "hologram"]; // menu order; the first is the default
+const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order; the first is the default
 
 // [r, g, b] (0..1) to [h, s, l] (degrees, percent), as hslToRgb() takes them
 function rgbToHsl([r, g, b]) {
@@ -700,6 +1045,48 @@ function rgbToHsl([r, g, b]) {
     const s = d / (1 - Math.abs(2 * l - 1));
     const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
     return [h * 60, s * 100, l * 100];
+}
+
+// A soft bubble (Undersea's) of radius rad in a colour (CSS), its sprite reaching
+// BUBBLE_REACH times the radius
+const BUBBLE_REACH = 2.2;
+function drawBubble(r, x, y, rad, color, alpha) {
+    const s = rad * BUBBLE_REACH;
+    r.save();
+    r.globalAlpha *= alpha;
+    r.image(bubbleSprite(r, color), x - s, y - s, s * 2, s * 2);
+    r.restore();
+}
+
+// Its sprite, rendered once per colour: a blurred rim fading out on both sides, a faint inside and a soft
+// highlight at its top left. The rim sits at 1 / BUBBLE_REACH of the sprite's radius
+const BUBBLE_SPRITES = new Map();
+function bubbleSprite(r, color) {
+    let tex = BUBBLE_SPRITES.get(color);
+    if (tex) return tex;
+    const n = 48, c = n / 2, [cr, cg, cb] = parseColor(color).map(v => Math.round(v * 255));
+    const rgba = (a) => `rgba(${cr},${cg},${cb},${a})`;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = n;
+    const g = canvas.getContext("2d");
+    const rim = 1 / BUBBLE_REACH;
+    const body = g.createRadialGradient(c, c, 0, c, c, c);
+    body.addColorStop(0, rgba(0.08));
+    body.addColorStop(rim * 0.45, rgba(0.12));
+    body.addColorStop(rim, rgba(0.45));
+    body.addColorStop(Math.min(1, rim * 1.5), rgba(0.12));
+    body.addColorStop(1, rgba(0));
+    g.fillStyle = body;
+    g.fillRect(0, 0, n, n);
+    const hx = c - c * rim * 0.38, hy = c - c * rim * 0.38, hr = c * rim * 0.7;
+    const hi = g.createRadialGradient(hx, hy, 0, hx, hy, hr);
+    hi.addColorStop(0, "rgba(255,255,255,0.35)");
+    hi.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = hi;
+    g.fillRect(0, 0, n, n);
+    tex = r.texture(canvas);
+    BUBBLE_SPRITES.set(color, tex);
+    return tex;
 }
 
 // Darker toward the corners

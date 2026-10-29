@@ -83,6 +83,7 @@ const DEBUG_ENTRIES = {
     bursts: { name: "Firework bursts", desc: "Six bursts of fireworks round the view" },
     sun: { name: "Bright star", desc: "Deep Space: the bright star starts across now" },
     meteor: { name: "Shooting star", desc: "Deep Space: a shooting star now" },
+    jelly: { name: "Jellyfish", desc: "Undersea: a jellyfish starts up across now" },
     flyin: { name: "Fly-in", desc: "The board group flies in again" },
     context: { name: "WebGL context loss", desc: "The context is lost, then restored a second later" },
 };
@@ -1147,6 +1148,11 @@ class Engine {
             r.setScreen(this.sceneLayer);
         }
         this.backdrop.render(this.backdropScene());
+        // the background's own moving things over it (Undersea's bubbles and jellyfish), under everything else
+        if (this.background.scenery && this.options.effects && this.options.backdrop) {
+            r.setTransform(this.bgScale, this.bgOffX, this.bgOffY);
+            this.background.scenery(this);
+        }
         r.setTransform(this.pixelScale, this.offX, this.offY);
 
         if (this.GAMESTATE === STATE_GAME) this.drawGame();
@@ -1172,7 +1178,7 @@ class Engine {
         r.end();
     }
 
-    // What the backdrop pass draws: colour wash, drifting lights, field lines or foil, rings and board glow
+    // What the backdrop pass draws: colour wash, drifting lights, field lines, foil or water, rings and board glow
     backdropScene() {
         const inGame = this.GAMESTATE === STATE_GAME;
         const ambient = this.options.effects && this.options.backdrop ? this.ambientShapes() : { blobs: [], orbs: [] };
@@ -1207,6 +1213,7 @@ class Engine {
             time: this.clock / 60,
             lines: this.background.lines ? this.background.lines(this) : null,
             foil: this.background.foil ? this.background.foil(this) : null,
+            water: this.background.water ? this.background.water(this) : null,
             rings,
             ringSigma: 6, // like a shadowBlur of 12
             glows,
@@ -1818,11 +1825,12 @@ class Engine {
         return entries;
     }
 
-    // The presentation's, in every game (the bright and shooting stars with Deep Space)
+    // The presentation's, in every game (the bright and shooting stars with Deep Space, the jellyfish with Undersea)
     viewDebug() {
         const entries = [{ id: "messages", values: DEBUG_MESSAGES.map((_, i) => i), labels: DEBUG_MESSAGES.map(([name]) => name) },
             { id: "burst" }, { id: "bursts" }];
         if (this.background.showSun) entries.push({ id: "sun" }, { id: "meteor" });
+        if (this.background.showJelly) entries.push({ id: "jelly" });
         return [...entries, { id: "flyin" }, { id: "context" }];
     }
 
@@ -1886,6 +1894,9 @@ class Engine {
                 if (id === "sun") this.background.showSun();
                 else this.background.showMeteor();
                 return true;
+            case "jelly":
+                if (!fx || !this.options.backdrop) return false;
+                return this.background.showJelly(this);
             case "flyin":
                 if (!fx) return false;
                 this.flyReplay = 0;
