@@ -528,6 +528,19 @@ const WATER_TINT = [0.62, 0.95, 1], WATER_TINT_SHARE = 0.12;
 const WATER_BUBBLES_PER_ROW = 0.45, WATER_BUBBLES_MAX = 8;
 const WATER_BUBBLE_LIFE = [40, 80], WATER_BUBBLE_RISE = [0.35, 0.85], WATER_BUBBLE_SIZE = [2, 4.5];
 const WATER_BUBBLE_ALPHA = 1;
+// The Neon trail: a tube down each column, its glow's and core's widths, the glow's share of the strength, how
+// far the core goes to white, its hum (strength, plus a swing), and its strength over the plain streak's
+const NEON_TRAIL_GLOW = 24, NEON_TRAIL_CORE = 6, NEON_TRAIL_GLOW_ALPHA = 0.55, NEON_TRAIL_WHITE = 0.55;
+const NEON_TRAIL_HUM = [0.9, 0.1], NEON_TRAIL_STRENGTH = 1.6;
+// The Chalk trail: strokes across the column (shares of its width), drawn in pieces CHALK_TRAIL_STEP long, the
+// share of them skipped, how far the colour goes to white, and the strength over the plain streak's
+const CHALK_TRAIL_STROKES = [0.28, 0.66], CHALK_TRAIL_STEP = 5, CHALK_TRAIL_GAPS = 0.22, CHALK_TRAIL_WHITE = 0.5;
+const CHALK_TRAIL_STRENGTH = 1.9;
+// The Prism trail: scanlines PRISM_TRAIL_LINE high, every other one at PRISM_TRAIL_GAP; the hue's change per
+// logical unit down the trail and per frame; the share of the block's own colour kept; the strength
+const PRISM_TRAIL_LINE = 2, PRISM_TRAIL_GAP = 0.45, PRISM_TRAIL_SPAN = 0.9, PRISM_TRAIL_TURN = 1.2;
+const PRISM_TRAIL_KEEP = 0.25, PRISM_TRAIL_STRENGTH = 0.95;
+const PRISM_TRAIL_FADE = 15; // frames it takes to fade out (the others' DROP_TRAIL_FADE)
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 
 // The staff roll's credits, made up: [role, ...names], or a heading alone. They scroll up behind
@@ -640,6 +653,12 @@ const CUTIN_BAND_H = 150, CUTIN_EMBLEM = 92, CUTIN_EMBLEM_Y = 20;
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
 const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
 const BANNER_LINE_H = 18; // the game over banner's lines under its sub-title (secret grade, exam)
+
+// A steady pseudo-random value in 0..1 for two numbers (the Chalk trail's strokes look the same at every drop)
+function trailNoise(a, b) {
+    const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+    return v - Math.floor(v);
+}
 
 // letterSpacing adds trailing space; this shift keeps centred and right-aligned text in place
 function spacingShift(align, spacing) {
@@ -1025,7 +1044,10 @@ class Engine {
         // no jolt for each row the field loses before the staff roll
         if (own && cleared.length && this.options.shakeScale && !game.inRollStart()) this.clearShake(cleared, game.chain);
         const dropped = game.takeHardDropCells().map(toColor);
-        if (dropped.length && this.options.effects) view.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 });
+        if (dropped.length && this.options.effects) {
+            const fade = this.trailFade();
+            view.dropFlashes.push({ cells: dropped, life: DROP_TRAIL_GROW + fade + 1, fade });
+        }
         if (dropped.length && this.options.effects && this.options.look("trail") === "water") this.waterBubbles(view, dropped);
         for (const s of game.takeSounds()) {
             if (own) this.sound.play(s);
@@ -2112,38 +2134,89 @@ class Engine {
         return [inset, (this.rev ? -1 : 1) * (inset + round * CELL)];
     }
 
+    // Frames a drop trail in the style in effect takes to fade out (Prism's lingers)
+    trailFade() {
+        return this.options.look("trail") === "prism" ? PRISM_TRAIL_FADE : DROP_TRAIL_FADE;
+    }
+
     // Drop trail streaks, one per column ({ col, y0, y1, index, yEnd, alpha }): each from y0 down
     // to y1 (the blocks' cell edge), fading in towards them, and on to yEnd inside the blocks; drawn
     // only down to yEnd while it grows, at `alpha` while it fades. Neighbouring streaks are joined
     // across the gap between their blocks where both are above the blocks, so a piece's trail is
-    // one area, inset only at its outer sides.
+    // one area, inset only at its outer sides (but Neon's and Chalk's, lines down each column).
+    // In the trail style in effect (TRAIL_STYLES)
     drawTrails(streaks) {
         const r = this.r, [inset] = this.trailFit(), scale = DROP_TRAIL_ALPHA * this.softEffectScale();
-        const water = this.options.look("trail") === "water";
+        const style = this.options.look("trail"), t = this.clock;
+        const fade = (c) => [[c[0], c[1], c[2], 0], c]; // transparent at the far end, the colour at the blocks
         const streak = (s, x, w, ya, yb) => {
             let color = parseColor(this.tileLight(s.index));
-            if (!water) {
-                r.globalAlpha = scale * s.alpha;
-                r.shape(x, ya, w, yb - ya, { fill: [[color[0], color[1], color[2], 0], color], fillY: [s.y0, s.y1] });
-                return;
+            const fillY = [s.y0, s.y1];
+            switch (style) {
+                case "water": {
+                    // in slices swung sideways by their height alone (so neighbouring columns and their joins swing
+                    // together) and shimmering with ripples running up
+                    color = color.map((c, i) => i < 3 ? c + (WATER_TINT[i] - c) * WATER_TINT_SHARE : c);
+                    const fill = fade(color);
+                    for (let y = ya; y < yb; y += WATER_SLICE) {
+                        r.globalAlpha = scale * s.alpha * (0.75 + 0.3 * Math.sin(y * 0.21 + t * 0.35));
+                        r.shape(x + WATER_SWING * Math.sin(y * 0.09 + t * 0.25), y, w, Math.min(WATER_SLICE, yb - y), { fill, fillY });
+                    }
+                    return;
+                }
+                case "neon": {
+                    // a lit tube down the column's middle: a wide soft glow and a near-white core, added, humming
+                    const cx = x + w / 2, hum = NEON_TRAIL_HUM[0] + NEON_TRAIL_HUM[1] * Math.sin(t * 0.9 + s.col * 1.7);
+                    const core = color.map((c, i) => i < 3 ? c + (1 - c) * NEON_TRAIL_WHITE : c);
+                    r.save();
+                    r.blendMode = "add";
+                    for (const [width, alpha, c] of [[NEON_TRAIL_GLOW, NEON_TRAIL_GLOW_ALPHA, color], [NEON_TRAIL_CORE, 1, core]]) {
+                        r.globalAlpha = scale * s.alpha * alpha * hum * NEON_TRAIL_STRENGTH;
+                        r.shape(cx - width / 2, ya, width, yb - ya, { radius: width / 2, fill: fade(c), fillY });
+                    }
+                    r.restore();
+                    return;
+                }
+                case "chalk": {
+                    // two hand-drawn strokes down the column, broken and wavering the same way at every drop (from the
+                    // column and the height), in the colour lightened like chalk on a board
+                    const fill = fade(color.map((c, i) => i < 3 ? c + (1 - c) * CHALK_TRAIL_WHITE : c));
+                    for (const at of CHALK_TRAIL_STROKES) {
+                        for (let k = Math.floor(ya / CHALK_TRAIL_STEP); k * CHALK_TRAIL_STEP < yb; k++) {
+                            const n = trailNoise(s.col * 7 + at * 13, k);
+                            if (n < CHALK_TRAIL_GAPS) continue; // the chalk skipped
+                            const y = Math.max(ya, k * CHALK_TRAIL_STEP), h = Math.min(yb, (k + 1) * CHALK_TRAIL_STEP) - y;
+                            const lw = 1 + 1.2 * trailNoise(s.col, k * 3 + at);
+                            r.globalAlpha = scale * s.alpha * CHALK_TRAIL_STRENGTH * (0.55 + 0.45 * n);
+                            r.shape(x + w * at + (trailNoise(k, s.col + at) - 0.5) * 1.6 - lw / 2, y, lw, h + 0.5, { fill, fillY });
+                        }
+                    }
+                    return;
+                }
+                case "prism": {
+                    // a spectrum running down the trail and turning with the Holo sheen's hue, in fine scanlines, a share of
+                    // the block's own colour kept
+                    const base = (this.sheen ? this.sheen.hue : 0) + t * PRISM_TRAIL_TURN;
+                    for (let y = ya, k = Math.floor(ya / PRISM_TRAIL_LINE); y < yb; y += PRISM_TRAIL_LINE, k++) {
+                        const hue = hslToRgb(base + y * PRISM_TRAIL_SPAN, 90, 70);
+                        const c = hue.map((h, i) => h + (color[i] - h) * PRISM_TRAIL_KEEP);
+                        r.globalAlpha = scale * s.alpha * PRISM_TRAIL_STRENGTH * (k % 2 ? PRISM_TRAIL_GAP : 1);
+                        r.shape(x, y, w, Math.min(PRISM_TRAIL_LINE, yb - y), { fill: fade([c[0], c[1], c[2], 1]), fillY });
+                    }
+                    return;
+                }
             }
-            // Water: in slices swung sideways by their height alone (so neighbouring columns and their joins swing
-            // together) and shimmering with ripples running up
-            color = color.map((c, i) => i < 3 ? c + (WATER_TINT[i] - c) * WATER_TINT_SHARE : c);
-            const fill = [[color[0], color[1], color[2], 0], color], fillY = [s.y0, s.y1], t = this.clock;
-            for (let y = ya; y < yb; y += WATER_SLICE) {
-                const h = Math.min(WATER_SLICE, yb - y);
-                r.globalAlpha = scale * s.alpha * (0.75 + 0.3 * Math.sin(y * 0.21 + t * 0.35));
-                r.shape(x + WATER_SWING * Math.sin(y * 0.09 + t * 0.25), y, w, h, { fill, fillY });
-            }
+            r.globalAlpha = scale * s.alpha;
+            r.shape(x, ya, w, yb - ya, { fill: fade(color), fillY });
         };
+        const joins = style !== "neon" && style !== "chalk";
         // whichever way up (Rev): the span drawn, and the part of it above the blocks
         const span = (s, yEnd) => [Math.min(s.y0, yEnd), Math.max(s.y0, yEnd)];
         const above = s => span(s, (s.yEnd - s.y1) * (s.y1 - s.y0) > 0 ? s.y1 : s.yEnd);
         for (const s of streaks) {
             const [ya, yb] = span(s, s.yEnd);
             streak(s, this.cellX(s.col) + inset, CELL - 2 * inset, ya, yb);
-            const n = inset && streaks.find(t => t.col === s.col + 1);
+            const n = inset && joins && streaks.find(t => t.col === s.col + 1);
             if (!n) continue;
             const [a0, a1] = above(s), [b0, b1] = above(n);
             const ya2 = Math.max(a0, b0), yb2 = Math.min(a1, b1);
@@ -2159,7 +2232,7 @@ class Engine {
     drawDropFlashes() {
         const r = this.r;
         for (const f of this.board.dropFlashes) {
-            const t = Math.max(0, f.life / DROP_FLASH_LIFE);
+            const t = Math.max(0, (f.life - (f.fade - DROP_TRAIL_FADE)) / DROP_FLASH_LIFE); // as long a flash with a longer trail
             for (const cell of f.cells) {
                 if (cell.row < this.wellTop || cell.cleared) continue; // hidden rows; cleared: nothing left to light up
                 this.drawBlockFlash(cell.type, this.cellX(cell.col), this.cellY(cell.row), CELL, t);
@@ -2221,9 +2294,9 @@ class Engine {
     // the piece and fading upwards, reaching down to the column's lowest block of the piece;
     // it grows down to the piece, then fades out
     drawDropTrail(f) {
-        const n = DROP_TRAIL_GROW + DROP_TRAIL_FADE + 1 - f.life; // frames shown, from 1
+        const n = DROP_TRAIL_GROW + f.fade + 1 - f.life; // frames shown, from 1
         const grown = Math.min(1, n / DROP_TRAIL_GROW); // share of the trail drawn so far
-        const alpha = 1 - Math.max(0, n - DROP_TRAIL_GROW) / (DROP_TRAIL_FADE + 1);
+        const alpha = 1 - Math.max(0, n - DROP_TRAIL_GROW) / (f.fade + 1);
         const cols = new Map(); // col -> [topmost landed cell, lowest landed row]
         for (const cell of f.cells) {
             const c = cols.get(cell.col);
@@ -2284,13 +2357,13 @@ class Engine {
     // blocks falling together; drawn under the field, so only the gap above them shows.
     drawLineDropTrails(firstRow) {
         const game = this.board.game;
-        const top = Math.max(firstRow, this.wellTop), depth = this.trailFit()[1];
+        const top = Math.max(firstRow, this.wellTop), depth = this.trailFit()[1], fade = this.trailFade();
         for (let i = firstRow; i < HEIGHT; i++) {
             const dist = game.getDropDistance(i);
             if (!dist) continue;
             const landed = game.getDropLandedFor(i, this.tickPhase);
-            if (landed >= DROP_TRAIL_FADE) continue;
-            const alpha = landed < 0 ? 1 : 1 - (landed + 1) / (DROP_TRAIL_FADE + 1);
+            if (landed >= fade) continue;
+            const alpha = landed < 0 ? 1 : 1 - (landed + 1) / (fade + 1);
             const [y0, y1] = this.trailYs(Math.max(i, top), i + game.getDropOffset(i, this.tickPhase));
             if (this.rev ? y0 <= y1 : y0 >= y1) continue;
             const yEnd = y1 + depth, streaks = [];

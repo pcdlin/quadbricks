@@ -1031,9 +1031,9 @@ const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; //
 // trail that go with it, which those settings take while they are on Follow theme (Options.look())
 const THEMES = {
     space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare", trail: "streak" },
-    gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "sparks", rings: "rings", trail: "streak" },
-    lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare", trail: "streak" },
-    hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "stars", rings: "ripple", trail: "streak" },
+    gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "sparks", rings: "rings", trail: "neon" },
+    lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "flare", trail: "chalk" },
+    hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "stars", rings: "ripple", trail: "prism" },
     undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple", trail: "water" },
 };
 const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea"]; // menu order; the first is the default
