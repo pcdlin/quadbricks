@@ -117,7 +117,7 @@ const DEFAULT_SHAKE = 2;
 
 // Line clear shockwaves: off, glowing rings, a ripple refracting the whole screen (splitting the
 // colours at its front), a lens flare along the cleared rows, a packet of fine contour lines
-// (Field Lines') or a wave of holographic facets flashing (Hologram's)
+// (Field Lines'), a wave of holographic facets flashing (Hologram's) or shafts of light breaking through (Eclipse's)
 const RING_MODES = [
     { id: "off", name: "Off" },
     { id: "rings", name: "Rings" },
@@ -125,6 +125,7 @@ const RING_MODES = [
     { id: "flare", name: "Flare" },
     { id: "contours", name: "Contours" },
     { id: "glitter", name: "Glitter" },
+    { id: "shafts", name: "Shafts" },
 ];
 const RING_MODE_IDS = RING_MODES.map(m => m.id);
 
@@ -139,6 +140,7 @@ const CONFETTI_STYLES = [
     { id: "pixels", name: "Pixels" },
     { id: "neon", name: "Neon" },
     { id: "foil", name: "Foil" },
+    { id: "dust", name: "Dust" },
 ];
 const CONFETTI_STYLE_IDS = CONFETTI_STYLES.map(s => s.id);
 

@@ -487,7 +487,7 @@ const FIREWORK_COLORS = CONFETTI_COLORS.filter(c => !PIECE_COLORS.slice(8).some(
 // By confetti style (options.look("confetti"), none when off; fireworks are always glow): bits per cell, size (least,
 // random extra), burst speed factor and upward lift, gravity and air drag per frame, life in
 // frames, alpha, additive blending; spin (radians per frame, at most), sideways flutter, fastest
-// fall, grid (positions and sizes snapped to it)
+// fall, grid (positions and sizes snapped to it), plain (only the piece's colour, no party colours)
 const CONFETTI_SPECS = {
     glow: { count: 2, size: [3, 5], speed: 1, lift: 3, gravity: 0.06, drag: 0.97, life: 50, alpha: 0.45, add: true },
     paper: { count: 2, size: [5, 4], speed: 0.8, lift: 3.4, gravity: 0.03, drag: 0.95, life: 100, alpha: 0.9, spin: 0.15, sway: 0.6, maxFall: 1.2 },
@@ -497,16 +497,20 @@ const CONFETTI_SPECS = {
     pixels: { count: 2, size: [3, 3], speed: 1, lift: 3, gravity: 0.08, drag: 0.97, life: 50, alpha: 0.9, grid: 3 },
     neon: { count: 2, size: [3, 3], speed: 1.1, lift: 3.6, gravity: 0.07, drag: 0.96, life: 56, alpha: 0.95, add: true, spin: 0.12 },
     foil: { count: 3, size: [3, 2.5], speed: 0.8, lift: 3.4, gravity: 0.04, drag: 0.95, life: 45, alpha: 0.8, add: true, spin: 0.1, sway: 0.5, maxFall: 1.1 },
+    dust: { count: 2, size: [1.2, 1.4], speed: 0.35, lift: 0.8, gravity: 0.004, drag: 0.95, life: 120, alpha: 0.4, add: true, sway: 0.15, maxFall: 0.3, plain: true },
 };
 // Rows of the confetti atlas (pixels are plain rects). Foil's columns are hues, not the colours: FOIL_HUES of them
 // round the wheel
-const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4, neon: 5, foil: 6 };
+const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4, neon: 5, foil: 6, dust: 7 };
 // Neon: a tube's hum (alpha swing) and how often and how deep it drops out for a frame or two
 const NEON_CONFETTI_HUM = 0.15, NEON_CONFETTI_DROPOUT = 0.96, NEON_CONFETTI_DIM = 0.25;
 // Foil: a flake's hue turns FOIL_HUE_SWING degrees as it turns over (and with the Holo sheen's), and it glints
 // white while nearly face-on, past FOIL_GLINT
 const FOIL_HUE_SWING = 80, FOIL_GLINT = 0.96;
 const FOIL_HUES = CONFETTI_COLORS.length; // the atlas's columns
+// Dust: a mote glints as it drifts through a ray: how often (radians of its twinkle per glint cycle), how sharply, and
+// how faint it is between glints
+const DUST_GLINT_RATE = 0.22, DUST_GLINT_SHARP = 6, DUST_DIM = 0.3;
 // TGM3 Easy's fireworks: bursts of confetti around the well, at most FIREWORK_MAX_BURSTS a frame
 // (a stream fires one every 10 frames; the end can fire dozens at once)
 const FIREWORK_SPARKS = 26, FIREWORK_SPEED = 3.2, FIREWORK_LIFE = 70, FIREWORK_MAX_BURSTS = 6;
@@ -527,6 +531,9 @@ const CONTOUR_LIFE = 56; // frames a clear's contour lines spread (Clear burst: 
 const CONTOUR_REACH = 520; // logical units the contours' middle travels (before their 1.6x horizontal stretch)
 const CONTOUR_SPACING = LINES_SPACING; // logical units between them, as between the field lines
 const CONTOUR_ALPHA = 0.9; // their brightness at the Normal effects level
+const SHAFTS_LIFE = 60; // frames a clear's shafts of light last (Clear burst: Shafts)
+const SHAFTS_REACH = 760; // logical units their front travels
+const SHAFTS_ALPHA = 1.5; // their light at the Normal effects level
 const GLITTER_LIFE = 64; // frames a clear's glitter wave runs (Clear burst: Glitter)
 const GLITTER_REACH = 640; // logical units its front travels (before its 1.3x horizontal stretch)
 const GLITTER_FACET = HOLOGRAM_FACETS[2]; // a facet's width, the Hologram foil's (backdrop logical units)
@@ -1274,6 +1281,7 @@ class Engine {
             foil: this.background.foil ? this.background.foil(this) : null,
             water: this.background.water ? this.background.water(this) : null,
             beams: this.background.beams ? this.background.beams(this) : null,
+            shafts: mode === "shafts" ? this.shaftShapes() : [],
             contours: mode === "contours" ? this.contourShapes() : [],
             glitter: mode === "glitter" ? this.glitterShapes() : [],
             facet: GLITTER_FACET,
@@ -2056,7 +2064,7 @@ class Engine {
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
             const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
             const mode = this.options.look("rings");
-            const span = { ripple: RIPPLE_LIFE, flare: FLARE_LIFE, contours: CONTOUR_LIFE, glitter: GLITTER_LIFE }[mode] || RING_LIFE;
+            const span = { ripple: RIPPLE_LIFE, flare: FLARE_LIFE, contours: CONTOUR_LIFE, glitter: GLITTER_LIFE, shafts: SHAFTS_LIFE }[mode] || RING_LIFE;
             this.rings.push({
                 gx: this.board.gx, // the board's group: the burst spreads from its well
                 y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
@@ -2079,7 +2087,7 @@ class Engine {
             const speed = (1 + Math.random() * 4.5) * spec.speed;
             const size = spec.grid ? spec.grid * (1 + Math.floor(Math.random() * 2))
                 : spec.size[0] + Math.random() * spec.size[1];
-            const color = Math.random() < 0.85 ? PIECE_COLORS[cell.type].light
+            const color = spec.plain || Math.random() < 0.85 ? PIECE_COLORS[cell.type].light
                 : CONFETTI_EXTRA[Math.floor(Math.random() * CONFETTI_EXTRA.length)];
             this.board.particles.push(this.confettiBit(style,
                 cx + (Math.random() - 0.5) * CELL * 0.8, cy + (Math.random() - 0.5) * CELL * 0.8,
@@ -2587,6 +2595,13 @@ class Engine {
                         this.confettiQuad(atlas.tex, sx, sy, p.x, p.y, hw * turn, hw, p.rot);
                         break;
                     }
+                    case "dust": { // a mote drifting in the fog, glinting now and then as it crosses a ray
+                        const glint = Math.pow(Math.max(0, Math.sin(p.twinkle * DUST_GLINT_RATE + p.phase)), DUST_GLINT_SHARP);
+                        r.globalAlpha *= DUST_DIM + (1 - DUST_DIM) * glint;
+                        const size = p.size * (1 + 0.5 * glint);
+                        r.image(atlas.tex, p.x - size * 2, p.y - size * 2, size * 4, size * 4, sx, sy, GLOW_SPRITE, GLOW_SPRITE);
+                        break;
+                    }
                     case "foil": { // a flake turning over: its hue swings with the turn, between two hue sprites
                         const flip = Math.cos(p.phase * 1.7), hw = p.size * 1.1, hh = hw * Math.max(0.12, Math.abs(flip));
                         const hue = p.hue + flip * FOIL_HUE_SWING + (this.sheen ? this.sheen.hue : 0);
@@ -2727,6 +2742,15 @@ class Engine {
             g.closePath();
             g.fill();
             g.stroke();
+            // Dust: a soft round mote in the colour, a little lighter in the middle, no white-hot core
+            cy = row("dust") + half;
+            grad = g.createRadialGradient(cx, cy, 0, cx, cy, half);
+            grad.addColorStop(0, color);
+            grad.addColorStop(0.2, color + "aa");
+            grad.addColorStop(0.5, color + "22");
+            grad.addColorStop(1, color + "00");
+            g.fillStyle = grad;
+            g.fillRect(x0, row("dust"), n, n);
             index.set(color, i);
         });
         this.confettiAtlas = { tex: this.r.texture(c), index };
@@ -2814,6 +2838,22 @@ class Engine {
                 width: (10 + 4 * ring.power) * (1 + 1.2 * k), // more lines as it spreads
                 spacing: CONTOUR_SPACING,
                 a: Math.pow(1 - k, 1.6) * (0.5 + 0.15 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * CONTOUR_ALPHA,
+            };
+        });
+    }
+
+    // Clear shafts: light breaking through where the rows cleared, a fan of rays from their centre spreading out
+    // sideways, the wider the more rows, its front travelling out fast and slowing. Centre and the front's radius in
+    // logical units, the fan's spread (of the rays' direction's y), the light (pale, in the backdrop's hue)
+    shaftShapes() {
+        return this.rings.map(ring => {
+            const k = 1 - ring.life / ring.span; // 0 -> 1
+            return {
+                x: ring.gx + BOARD_X + BOARD_W / 2, y: (ring.top + ring.bottom) / 2,
+                r: 40 + (1 - Math.pow(1 - k, 2.5)) * SHAFTS_REACH,
+                spread: 0.12 + 0.05 * ring.power,
+                rgb: hslToRgb(ring.hue + 20, 35, 82),
+                a: Math.pow(1 - k, 1.5) * (0.5 + 0.15 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * SHAFTS_ALPHA,
             };
         });
     }

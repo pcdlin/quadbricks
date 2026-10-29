@@ -1149,7 +1149,7 @@ const THEMES = {
     lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "contours", trail: "chalk" },
     hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "foil", rings: "glitter", trail: "prism" },
     undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple", trail: "water" },
-    eclipse: { name: "Eclipse", background: "eclipse", tileset: "backlit", confetti: "glow", rings: "flare", trail: "rays" },
+    eclipse: { name: "Eclipse", background: "eclipse", tileset: "backlit", confetti: "dust", rings: "shafts", trail: "rays" },
 };
 const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse"]; // menu order; the first is the default
 

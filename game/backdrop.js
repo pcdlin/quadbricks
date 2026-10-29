@@ -1,5 +1,5 @@
 // Backdrop pass of the WebGL renderer (renderer.js), drawn first each frame: the backdrop
-// picture, its colour wash, field lines, holographic foil or water, the line-clear contours or glitter and drifting
+// picture, its colour wash, field lines, holographic foil or water, the line-clear shafts, contours or glitter and drifting
 // lights, the board glow and the line-clear shockwaves. These are large, soft effects computed per pixel in shaders. The engine
 // builds a scene description each frame (see Engine.backdropScene).
 // Coordinates are device pixels, y down, unless noted.
@@ -235,6 +235,48 @@ void main() {
         float fall = 1.0 / (1.0 + dist * 0.012) / (1.0 + dist * 0.004);
         float halo = exp(-max(dist, 0.0) / 40.0);
         c += uBeamRgb * uBeam[i].z * edge * (fall * (0.15 + 1.6 * rays) * fog + 0.5 * halo);
+    }
+    gl_FragColor = vec4(c, 0.0);
+}`;
+
+// Clear shafts (Clear burst: Shafts, Eclipse's), added: light breaking through where rows cleared, a fan of rays from
+// behind the cleared rows (their centre) spreading out sideways, the fan the wider the taller the rows, its front
+// travelling out and the rays fading behind it, broken up by drifting fog like the Eclipse background's rays.
+const SHAFTS_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uView;                                // scale, offset x, offset y of the logical view
+uniform vec4 uShaft[${BACKDROP_MAX_RINGS}];         // centre x, y, the front's radius, the fan's spread (of the direction's y)
+uniform vec4 uShaftColor[${BACKDROP_MAX_RINGS}];    // rgb, alpha (0: unused)
+uniform float uTime;
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uView.yz) / uView.x;
+    float t = uTime;
+    vec2 fq = q * 0.005 + vec2(t * 0.02, -t * 0.012);
+    float fog = 0.35 + 0.65 * smoothstep(0.2, 0.8, 0.6 * noise(fq) + 0.4 * noise(fq * 2.7 + 5.0));
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < ${BACKDROP_MAX_RINGS}; i++) {
+        if (uShaftColor[i].w <= 0.0) continue;
+        vec2 d = q - uShaft[i].xy;
+        float len = max(length(d), 1.0);
+        vec2 dir = d / len;
+        float seed = float(i) * 17.0;
+        float rays = pow(noise(dir * 9.0 + seed), 3.0) + 0.6 * pow(noise(dir * 21.0 + seed + 4.0), 4.0);
+        float fan = exp(-dir.y * dir.y / (uShaft[i].w * uShaft[i].w));
+        float front = smoothstep(uShaft[i].z, uShaft[i].z * 0.55, len); // lit behind the front
+        float fall = 1.0 / (1.0 + len * 0.004);
+        c += uShaftColor[i].rgb * uShaftColor[i].w * fan * front * fall * (0.2 + 1.8 * rays) * fog;
     }
     gl_FragColor = vec4(c, 0.0);
 }`;
@@ -521,6 +563,7 @@ class GLBackdrop {
         this.water = this.r.program(FULLSCREEN_VS, WATER_FS, [["aPos", 2]]);
         this.beamProgram = this.r.program(FULLSCREEN_VS, BEAMS_FS, [["aPos", 2]]);
         this.contour = this.r.program(FULLSCREEN_VS, CONTOUR_FS, [["aPos", 2]]);
+        this.shaftProgram = this.r.program(FULLSCREEN_VS, SHAFTS_FS, [["aPos", 2]]);
         this.glitter = this.r.program(FULLSCREEN_VS, GLITTER_FS, [["aPos", 2]]);
         this.orbProgram = this.r.program(ORB_VS, ORB_FS, [["aPos", 2], ["aOrb", 3], ["aColor", 4]]);
         this.board = this.r.program(FULLSCREEN_VS, BOARD_FS, [["aPos", 2]]);
@@ -558,6 +601,7 @@ class GLBackdrop {
     //   foil: null or {hue, band, strength, time, facets: [x, y, width, fade]} (same),
     //   water: null or {rgb, strength, time},
     //   beams: null or {lights: up to two of {x, y, strength, radius, occluder: [cx, cy, hw, hh]} (view logical), rgb, time},
+    //   shafts: [{x, y, r, spread, rgb, a}] (view logical; Engine.shaftShapes),
     //   contours: [{x, y, r, width, hue, a, seed, spacing}] (view logical; Engine.contourShapes),
     //   glitter: [{x, y, r, width, hue, a}] (same; Engine.glitterShapes), facet: the glitter's facet width (backdrop logical),
     //   rings: [{x, y, r, width, a, rgb, glowRgb}] (view logical), ringSigma,
@@ -666,7 +710,25 @@ class GLBackdrop {
             this.drawFullscreen(p);
         }
 
-        // Clear contours and glitter
+        // Clear shafts, contours and glitter
+        if (scene.shafts.length) {
+            p = this.shaftProgram;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uView"), scene.view);
+            gl.uniform1f(p.u("uTime"), scene.time || 0);
+            const shape = this.ring, color = this.burstColor;
+            color.fill(0); // alpha 0: slot unused
+            scene.shafts.slice(-BACKDROP_MAX_RINGS).forEach((f, i) => {
+                shape[i * 4] = f.x; shape[i * 4 + 1] = f.y; shape[i * 4 + 2] = f.r; shape[i * 4 + 3] = f.spread;
+                color.set(f.rgb, i * 4);
+                color[i * 4 + 3] = f.a;
+            });
+            gl.uniform4fv(p.u("uShaft"), shape);
+            gl.uniform4fv(p.u("uShaftColor"), color);
+            this.drawFullscreen(p);
+        }
         if (scene.contours.length) {
             p = this.contour;
             gl.useProgram(p.prog);
