@@ -3868,5 +3868,20 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
     g.scoreClear(4, []);
     check("Medals: none in the staff roll", [g.medals.SK, g.tetrises], [0, 9]);
 }
+{
+    const pace = tier => {
+        const g = inPlay(tgmTap, "standard", { sectionBest: [50 * 60] });
+        g.frames = 3000;
+        g.debugSetup("splitpace", tier);
+        const level = g.level;
+        clearField(g); g.level = 98; tapClear(g, 2);
+        return [level, g.medals.ST, g.tested];
+    };
+    check("Debug: a section's pace for each ST tier, 10 levels before its end", [3, 2, 1, 0].map(pace),
+        [[90, 3, true], [90, 2, true], [90, 1, true], [90, 0, true]]);
+    const g = inPlay(arika, "standard");
+    g.debugSetup("medals", 2);
+    check("Debug: every medal raised to a tier", [g.medals, g.takeMedals().length], [{ AC: 2, ST: 2, SK: 2, CO: 2 }, 4]);
+}
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);

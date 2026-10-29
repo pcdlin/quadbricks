@@ -47,6 +47,8 @@ const DEBUG_ENTRIES = {
     cool: { name: "COOL", desc: "This section earns a COOL" },
     regret: { name: "REGRET", desc: "This section ends in a REGRET" },
     levelstop: { name: "Level stop", desc: "10 levels before the stop, too late for it" },
+    medals: { name: "Medals", desc: "Every medal raised to the tier chosen" },
+    splitpace: { name: "Section pace", desc: "10 levels before this section's end, on pace for the ST tier chosen" },
     exam: { name: "Promotional exam", desc: "This game becomes the exam for the grade chosen" },
     demotion: { name: "Demotional exam", desc: "An exam at the qualified grade chosen" },
     death500: { name: "Level 500", desc: "Level 490, in time for M or too late (the credits)" },
@@ -699,12 +701,12 @@ const CUTIN_BAND_H = 150, CUTIN_EMBLEM = 92, CUTIN_EMBLEM_Y = 20;
 // Section times (the TGM modes, Options → Visuals → Section times): a section's time is drawn in the
 // colour of the ST medal tier it earns against its record (none, bronze, silver, gold), its gap to the
 // record ahead or behind; COOL and REGRET sections marked
-const MEDAL_COLORS = [INK_DIM, "#d9965c", "#dce3ea", MESSAGE_GOLD]; // by tier
+const MEDAL_COLORS = [INK_DIM, "#d9965c", "#c6d4e2", MESSAGE_GOLD]; // by tier
 const SPLIT_AHEAD = "#86e3a8", SPLIT_BEHIND = "#ff8f7f";
 const SPLIT_MARKS = { cool: "#7fd8ff", regret: "#ff5f4a" };
 // Medals (TAP Master and Death, TGM3 Master and Shirase): a chip each at the foot of the stats, faint
 // until earned, then in its tier's colour; one earned or raised pops for MEDAL_POP_LIFE frames
-const MEDAL_POP_LIFE = 40, MEDAL_POP_SCALE = 0.45;
+const MEDAL_POP_LIFE = 40, MEDAL_POP_SCALE = 0.25;
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
 const NUMERIC_TEXT = /^[\d:.,/ ]+$/;
@@ -2107,7 +2109,7 @@ class Engine {
             if (pop > 0) { // a soft glow behind it
                 this.r.save();
                 this.r.blendMode = "add";
-                this.r.shape(-chipW * 0.75, -chipH * 0.9, chipW * 1.5, chipH * 1.8, { radius: chipH, fill: [r, g, b, 0.35 * pop * this.options.effectScale] });
+                this.r.shape(-chipW * 0.6, -chipH * 0.75, chipW * 1.2, chipH * 1.5, { radius: chipH * 0.75, fill: [r, g, b, 0.3 * pop * this.options.effectScale] });
                 this.r.restore();
             }
             this.r.shape(-chipW / 2, -chipH / 2, chipW, chipH, { radius: 4, fill: tier ? [r, g, b, 0.16] : [0, 0, 0, 0.25], stroke: color, lineWidth: 1 });
@@ -2152,8 +2154,8 @@ class Engine {
         const size = compact ? 13 : 20, y = top + (compact ? 18 : 24);
         if (running) {
             const time = game.frames - game.splitStart;
-            const color = MEDAL_COLORS[this.splitTier(time, game.sectionRecord(section))];
-            this.textRun(game.formatTime(time), x, y, { size, weight: 800, color: color === INK_DIM ? INK : color, spacing: 1 });
+            const color = MEDAL_COLORS[this.splitTier(time, game.sectionRecord(section))]; // dim once too slow for any
+            this.textRun(game.formatTime(time), x, y, { size, weight: 800, color, spacing: 1 });
         } else {
             const total = game.splits.reduce((a, t) => a + (t || 0), 0);
             this.textRun(game.formatTime(total), x, y, { size, weight: 800, color: INK, spacing: 1 });

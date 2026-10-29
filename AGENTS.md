@@ -112,7 +112,8 @@ port's `Game` class has been removed; `git log` has the full story (one feature 
   point; the bot paused, `match.botPaused`, or at another level) and the presentation's (`viewDebug()`: clear messages,
   `DEBUG_MESSAGES`; a Quad's burst; firework bursts; Deep Space's bright and shooting stars, the background's `showSun()` /
   `showMeteor()`; Undersea's jellyfish, `showJelly()`, not available when the window leaves it no lane; the fly-in again, `flyReplay`; a WebGL context loss). The modes' own: TGM's test setups (above) and
-  internal grade; TGM3 Master's COOL, REGRET, level stop and promotional or demotional exam; Shirase's REGRET and level
+  internal grade, every medal raised to a tier and the section 10 levels before its end on pace for an ST tier
+  (`debugSplitPace()`); TGM3 Master's COOL, REGRET, level stop and promotional or demotional exam; Shirase's REGRET and level
   stops; TAP Death's level 500 in time or late, Normal's item pieces, TGM+'s next rising row; TGM1's GM checkpoints met or
   missed; Sakura's stage (EX ones too), stage cleared, stage and limit time; ACE's near the end and level clock; the
   Guideline's near the end (`debugNearEnd()`); NES's and GB's B-Type near the end and score near the cap, NES versus's

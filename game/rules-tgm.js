@@ -896,6 +896,10 @@ class TgmGame extends RuleGame {
             setups.push({ id: "grade", values: TGM_GRADES.map((_, i) => i), current: this.internalGrade,
                 labels: TGM_GRADES.map(([boosts], i) => `${i}  ·  ${TGM_GRADE_LABELS[boosts]}`) });
         }
+        if (this.medals && !this.roll) setups.push({ id: "medals", values: [1, 2, 3], labels: ["Bronze", "Silver", "Gold"] });
+        if (this.hasSplits && !this.roll && this.splitSection < this.sectionCount()) {
+            setups.push({ id: "splitpace", values: [3, 2, 1, 0], labels: ["Gold", "Silver", "Bronze", "Slower"] });
+        }
         return setups;
     }
 
@@ -953,7 +957,26 @@ class TgmGame extends RuleGame {
             this.gradePoints = this.gradeDecay = 0;
             return true;
         }
+        if (id === "medals") { // every medal raised to the tier
+            for (const medal of Object.keys(this.medals)) this.awardMedal(medal, value);
+            return true;
+        }
+        if (id === "splitpace") return this.debugSplitPace(value);
         return super.applyDebug(id, value);
+    }
+
+    // Debug menu: this section 10 levels before its end (or as it is, if past that), its time at a pace that
+    // earns the ST tier chosen against its record if it ends now (0: none); its COOL and REGRET left alone
+    debugSplitPace(tier) {
+        const section = this.splitSection, end = Math.min(this.maxLevel, (section + 1) * 100);
+        if (this.level < end - 10) {
+            this.level = end - 10;
+            this.updateTimings();
+            this.setShadow();
+        }
+        const pace = [MEDAL_ST_SLACK[0] + 5 * 60, MEDAL_ST_SLACK[0] - 2 * 60, MEDAL_ST_SLACK[1] - 2 * 60, -2 * 60][tier];
+        this.splitStart = this.frames - Math.max(60, this.sectionRecord(section) + pace);
+        return true;
     }
 
     // Survived the roll
