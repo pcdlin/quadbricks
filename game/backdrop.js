@@ -12,6 +12,48 @@ const FULLSCREEN_VS = `
 attribute vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
+// GLSL shared by the fragment shaders below, put into them as template substitutions:
+// value noise in 0..1 (hash() at the lattice points, smoothly blended)
+const NOISE_GLSL = `
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}`;
+// a hash of a cell's id, for the facets (FOIL_FS, GLITTER_FS), and a line distPx device pixels from a point,
+// width pixels wide, anti-aliased (thinner than a pixel: fainter instead)
+const FACET_GLSL = `
+float hash(vec2 v) {
+    return fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453);
+}
+float hairline(float distPx, float width) {
+    return clamp(0.5 * max(width, 1.0) + 0.5 - distPx, 0.0, 1.0) * min(width, 1.0);
+}
+// the hexagonal facet a point (in facets' widths) is on: the point from its centre (the nearer centre of two
+// offset rectangular lattices); hexDist() of that is 0.5 on the facet's edge
+vec2 hexLocal(vec2 hp) {
+    vec2 hs = vec2(1.0, 1.7320508);
+    vec2 ha = mod(hp, hs) - 0.5 * hs, hb = mod(hp - 0.5 * hs, hs) - 0.5 * hs;
+    return dot(ha, ha) < dot(hb, hb) ? ha : hb;
+}
+float hexDist(vec2 hl) {
+    return max(abs(hl.x), dot(abs(hl), vec2(0.5, 0.8660254)));
+}`;
+// spectrum(hue in degrees): the colour of that hue at a fixed HSL saturation and lightness (0..1)
+function spectrumGlsl(sat, light) {
+    const chroma = (1 - Math.abs(2 * light - 1)) * sat;
+    return `
+vec3 spectrum(float h) {     // HSL at ${Math.round(sat * 100)} % saturation, ${Math.round(light * 100)} % lightness
+    vec3 rgb = clamp(abs(mod(h / 60.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return ${light.toFixed(2)} + ${chroma.toFixed(3)} * (rgb - 0.5);
+}`;
+}
+
 // Static backdrop picture plus the three colour blobs (radial gradients, added). As nebulae
 // (uNebula > 0), the blobs fade out smoothly and their light is shaped by a slowly flowing,
 // domain-warped fractal noise: bright wisps and filaments with dark lanes between them.
@@ -25,17 +67,7 @@ uniform vec4 uBlobColor[3];    // rgb, alpha at the centre
 uniform float uNebula;         // 0: plain blobs; else how much the noise shapes them
 uniform float uTime;           // seconds, for the nebulae's flow
 uniform vec3 uShade[2];        // circles in front of the blobs, hiding their light: x, y, radius (logical; 0: none)
-
-float hash(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-}
-float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
+${NOISE_GLSL}
 float fbm(vec2 p) {
     float s = 0.0, a = 0.5;
     for (int k = 0; k < 5; k++) {
@@ -122,16 +154,8 @@ const float GROOVES = 4.0;   // logical units between grooves
 const float FLASH = 0.09;    // a facet's light at its brightest
 const float EDGE = 0.012;    // the facets' edges, and their extra in the light bands
 const float EDGE_LIT = 0.03;
-vec3 spectrum(float h) {     // HSL at 85 % saturation, 56 % lightness
-    vec3 rgb = clamp(abs(mod(h / 60.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
-    return 0.56 + 0.748 * (rgb - 0.5);
-}
-float hairline(float distPx, float width) {
-    return clamp(0.5 * max(width, 1.0) + 0.5 - distPx, 0.0, 1.0) * min(width, 1.0);
-}
-float hash(vec2 v) {
-    return fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453);
-}
+${spectrumGlsl(0.85, 0.56)}
+${FACET_GLSL}
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
     vec2 q = (p - uBgView.yz) / uBgView.x;
@@ -145,13 +169,11 @@ void main() {
     float groove = hairline(abs(fract(along / GROOVES + 0.5) - 0.5) * GROOVES * s, s * 0.8);
     groove *= smoothstep(3.0, 5.0, GROOVES * s);
     c += mix(vec3(1.0), sheen, 0.5) * groove * (0.02 + 0.08 * lit);
-    // the facet this pixel is on (the nearer centre of two offset rectangular lattices) and where in it
+    // the facet this pixel is on and where in it
     float size = uFacets.z;
-    vec2 hs = vec2(1.0, 1.7320508), hp = q / size;
-    vec2 ha = mod(hp, hs) - 0.5 * hs, hb = mod(hp - 0.5 * hs, hs) - 0.5 * hs;
-    vec2 hl = dot(ha, ha) < dot(hb, hb) ? ha : hb, id = hp - hl;
+    vec2 hp = q / size, hl = hexLocal(hp), id = hp - hl;
     float turn = hash(id), shine = hash(id + 17.0);
-    float hex = max(abs(hl.x), dot(abs(hl), vec2(0.5, 0.8660254)));
+    float hex = hexDist(hl);
     float edge = hairline((0.5 - hex) * size * s, s * 0.6);
     float facing = pow(0.5 + 0.5 * cos(turn * 6.2832 + uFoil.y * 0.025 + dot(id * size, vec2(0.8, 0.6)) * 0.004), 8.0);
     float flash = facing * (0.25 + lit) * (0.6 + 0.4 * shine);
@@ -204,16 +226,7 @@ uniform vec4 uBeam[2];           // the light: x, y (logical); strength (0: unus
 uniform vec4 uOccluder[2];       // the occluder: centre x, y, half width, half height (logical)
 uniform vec3 uBeamRgb;
 uniform float uTime;             // seconds
-float hash(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-}
-float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
+${NOISE_GLSL}
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
     vec2 q = (p - uView.yz) / uView.x;
@@ -241,17 +254,7 @@ void main() {
 }`;
 
 // The noise the Glacier background uses
-const GLACIER_GLSL = `
-float hash(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-}
-float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
+const GLACIER_GLSL = `${NOISE_GLSL}
 float fbm3(vec2 p) {
     return (0.5 * noise(p) + 0.25 * noise(p * 2.07 + 11.3) + 0.125 * noise(p * 4.28 + 34.7)) / 0.875;
 }`;
@@ -341,16 +344,7 @@ uniform vec3 uView;                                // scale, offset x, offset y 
 uniform vec4 uShaft[${BACKDROP_MAX_RINGS}];         // centre x, y, the front's radius, the fan's spread (of the direction's y)
 uniform vec4 uShaftColor[${BACKDROP_MAX_RINGS}];    // rgb, alpha (0: unused)
 uniform float uTime;
-float hash(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-}
-float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
+${NOISE_GLSL}
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
     vec2 q = (p - uView.yz) / uView.x;
@@ -385,20 +379,8 @@ uniform vec4 uContour[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, pack
 uniform vec4 uContourColor[${BACKDROP_MAX_RINGS}];  // hue (degrees), alpha (0: unused), noise seed, line spacing (logical)
 const float WANDER = 46.0;   // how far the noise moves a line (logical units)
 const float HUE_STEP = 38.0; // degrees from one line to the next
-vec3 spectrum(float h) {     // HSL at 80 % saturation, 72 % lightness
-    vec3 rgb = clamp(abs(mod(h / 60.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
-    return 0.72 + 0.448 * (rgb - 0.5);
-}
-float hash(vec2 p) {
-    p = fract(p * vec2(123.34, 456.21));
-    p += dot(p, p + 45.32);
-    return fract(p.x * p.y);
-}
-float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
+${spectrumGlsl(0.8, 0.72)}
+${NOISE_GLSL}
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
     vec2 q = (p - uView.yz) / uView.x;
@@ -439,29 +421,19 @@ uniform vec3 uBgView;                              // the same of the backdrop's
 uniform float uFacet;                              // a facet's width (backdrop logical)
 uniform vec4 uGlitter[${BACKDROP_MAX_RINGS}];       // centre x, y, radius, front width (logical)
 uniform vec2 uGlitterColor[${BACKDROP_MAX_RINGS}];  // hue (degrees), alpha (0: unused)
-vec3 spectrum(float h) {     // HSL at 85 % saturation, 62 % lightness
-    vec3 rgb = clamp(abs(mod(h / 60.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
-    return 0.62 + 0.646 * (rgb - 0.5);
-}
-float hairline(float distPx, float width) {
-    return clamp(0.5 * max(width, 1.0) + 0.5 - distPx, 0.0, 1.0) * min(width, 1.0);
-}
-float hash(vec2 v) {
-    return fract(sin(dot(v, vec2(127.1, 311.7))) * 43758.5453);
-}
+${spectrumGlsl(0.85, 0.62)}
+${FACET_GLSL}
 void main() {
     vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
     vec2 qb = (p - uBgView.yz) / uBgView.x;
     float sb = uBgView.x;
     // the facet this pixel is on, as FOIL_FS finds it, and its centre in the logical view
     float size = uFacet;
-    vec2 hs = vec2(1.0, 1.7320508), hp = qb / size;
-    vec2 ha = mod(hp, hs) - 0.5 * hs, hb = mod(hp - 0.5 * hs, hs) - 0.5 * hs;
-    vec2 hl = dot(ha, ha) < dot(hb, hb) ? ha : hb;
+    vec2 hs = vec2(1.0, 1.7320508), hp = qb / size, hl = hexLocal(hp);
     vec2 id = floor((hp - hl) / (0.5 * hs) + 0.5) * 0.5 * hs; // snapped, so the hashes hold across the facet
     vec2 qc = (uBgView.yz + id * size * sb - uView.yz) / uView.x;
     float turn = hash(id), shine = hash(id + 17.0), late = hash(id + 31.0);
-    float hex = max(abs(hl.x), dot(abs(hl), vec2(0.5, 0.8660254)));
+    float hex = hexDist(hl);
     float face = clamp((0.44 - hex) * size * sb + 0.5, 0.0, 1.0); // a hairline gap between facets
     float edge = hairline(abs(0.44 - hex) * size * sb, sb * 0.7);
     float bright = shine * shine * shine; // most facets faint, a few bright
