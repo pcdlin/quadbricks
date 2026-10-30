@@ -1,6 +1,6 @@
 # Handoff: a bot that plays Quadbricks, at several levels of proficiency
 
-Status: **implemented** as `game/bot.js` (see `AGENTS.md`), the opponent of Multiplayer → Versus Bot; the plan below is the original design, since changed: levels 0–10 instead of five names, T-spins, back-to-backs and combos in the Guideline, IRS, a bench tool (`tools/bot-bench.js`), and the Ctrl+Shift+B hotkey removed (left out still: IHS, DAS pre-charged in ARE). Read `AGENTS.md` first; this document assumes it.
+Status: **implemented** as `game/bot.js` (see `AGENTS.md`), the opponent of Multiplayer → Versus Bot; the plan below is the original design, since changed: levels 0–10 instead of five names, T-spins, back-to-backs and combos in the Guideline, IRS, IHS and DAS charged in ARE, a bench tool (`tools/bot-bench.js`), and the Ctrl+Shift+B hotkey removed. Read `AGENTS.md` first; this document assumes it.
 Everything below was checked against the code at `1377544` (Version 0.7).
 
 ## Goal
