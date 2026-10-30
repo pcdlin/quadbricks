@@ -16,10 +16,15 @@ function check(name, actual, expected) {
 }
 
 // Start a game and run to the first active piece
-function started(mode) {
-    const g = createGame(mode);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+// Plays the countdown (at most `limit` frames) until the first piece is in play
+function toActive(g, limit = 200) {
+    for (let f = 0; f < limit && g.phase !== "active"; f++) g.advanceFrame(0);
     return g;
+}
+
+// A game with its first piece in play
+function started(mode, variant = "standard", startLevel = 0, height = 0, options = {}) {
+    return toActive(createGame(mode, variant, startLevel, height, {}, options));
 }
 // Put a given piece at a given place (engine rows)
 function place(g, type, rot, row, col) {
@@ -62,7 +67,7 @@ const piecesOf = g => g.queue.slice();
 {
     const g = createGame(guideline);
     g.queue[0] = tetT;
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     check("Guideline spawn: T at col 3, appears in rows 21-22 then drops one row (engine row 1)", [g.curPiece_type, g.curPiece_col, g.curPiece_row], [tetT, 3, 1]);
 }
 {
@@ -153,7 +158,7 @@ const piecesOf = g => g.queue.slice();
 {
     const g = started(arika);
     g.level = 98;
-    for (let k = 0; k < 3; k++) { g.hardDrop(); for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0); for (let r = 2; r < HEIGHT; r++) g.field[r + 18].fill(0); }
+    for (let k = 0; k < 3; k++) { g.hardDrop(); toActive(g); for (let r = 2; r < HEIGHT; r++) g.field[r + 18].fill(0); }
     check("Master section stop: pieces alone can't pass level 99", g.level, 99);
     for (let r = 2; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, r >= 18 && c !== 9 ? 1 : 0);
     place(g, tetI, 1, 18, 7);
@@ -320,7 +325,7 @@ function framesToNextPiece(g) { let f = 0; while (g.phase !== "active" && f < 20
 for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 12, 14, 16, 18, 20]], [arika, "Arika (DAS 16 counted inclusively, ARR 1)", [0, 15, 16, 17, 18, 19]],
     [tgmTap, "TAP (DAS 16 counted inclusively, ARR 1)", [0, 15, 16, 17, 18, 19]], [tgmOriginal, "TGM1 (DAS 16 counted inclusively, ARR 1)", [0, 15, 16, 17, 18, 19]]]) {
     const g = createGame(rs, "test"); // no gravity: only shifting moves the piece
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     clearField(g);
     place(g, tetO, 0, 10, 7); // O in columns 8-9: room for 8 shifts to the left
     const shifts = [];
@@ -338,7 +343,7 @@ for (const [rs, name, expected] of [[guideline, "SRS (DAS 10, ARR 2)", [0, 10, 1
 for (const [rs, name, level, das, expected] of [[arika, "TGM3", 499, [16, 10], [0, 9, 10, 11]], [tgmTap, "TAP", 499, [16, 10], [0, 9, 10, 11]],
     [arika, "TGM3", 899, [10, 8], [0, 7, 8, 9]], [tgmTap, "TAP", 899, [10, 8], [0, 7, 8, 9]], [tgmOriginal, "TGM1 (no DAS speed-up)", 499, [16, 16], [0]]]) {
     const g = createGame(rs, "test");
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     clearField(g);
     place(g, tetO, 0, 10, 7);
     g.level = level; g.updateTimings();
@@ -441,7 +446,7 @@ for (const [rs, name, level, das, expected] of [[arika, "TGM3", 499, [16, 10], [
 // ---------------------------------------------------------------- Guideline handling options
 function handlingGame(handling, variant = "test") {
     const g = createGame(guideline, variant, 0, 0, handling);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     clearField(g);
     return g;
 }
@@ -499,7 +504,7 @@ check("Handling options don't change TGM3, TAP or GB timing",
 
 {
     const g = createGame(guideline, "test");
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     clearField(g);
     place(g, tetO, 0, 10, -1); // O against the left wall
     g.advanceFrame(LEFT_PUSH);
@@ -513,7 +518,7 @@ check("Handling options don't change TGM3, TAP or GB timing",
 {
     // soft drop landings, for the engine's knock: the rows the soft drop brought the piece down
     const landing = (g, row) => {
-        for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+        toActive(g);
         clearField(g);
         place(g, tetO, 0, row, 4);
         g.takeSoftLandings();
@@ -526,7 +531,7 @@ check("Handling options don't change TGM3, TAP or GB timing",
     };
     const g = createGame(guideline, "marathon");
     const gravity = createGame(guideline, "marathon");
-    for (let f = 0; f < 200 && gravity.phase !== "active"; f++) gravity.advanceFrame(0);
+    toActive(gravity);
     clearField(gravity);
     place(gravity, tetO, 0, 18, 4);
     for (let f = 0; f < 200 && gravity.phase === "active"; f++) gravity.advanceFrame(0);
@@ -536,13 +541,13 @@ check("Handling options don't change TGM3, TAP or GB timing",
 }
 {
     const g = createGame(guideline, "test");
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     g.takeHolds();
     g.advanceFrame(HOLD_PUSH);
     check("A hold is reported once", [g.takeHolds(), g.takeHolds()], [1, 0]);
     const h = createGame(guideline, "test");
     h.advanceFrame(HOLD_PUSH); // held through READY: IHS
-    for (let f = 0; f < 200 && h.phase !== "active"; f++) h.advanceFrame(0);
+    toActive(h);
     check("IHS is reported as a hold", [h.getHeldPiece() !== 0, h.takeHolds()], [true, 1]);
 }
 
@@ -633,7 +638,7 @@ check("Only 2 corners occupied: no T-spin, plain single (100 x level)", tspinLoc
 {
     const g = createGame(tgmClassic);
     g.queue[0] = tetT;
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     const rows = [...new Set(cellsAt(g).map(c => c.row))];
     check("Classic spawn: T appears in rows 19-20 (engine rows 2-3), colours are Sega/Arika (I red, T cyan, S purple, Z green)",
         [rows, g.palette[tetI], g.palette[tetT], g.palette[tetS], g.palette[tetZ]], [[2, 3], 6, 1, 2, 5]);
@@ -807,7 +812,7 @@ for (const [rs, name, label] of [[guideline, "Guideline", ["GUIDELINE", "ENDLESS
     const variantLabel = variant => [label[0], rs === guideline ? variant : `${label[1]} ${variant}`];
     // Test: no gravity, soft drop still moves the piece
     const t = createGame(rs, "test");
-    for (let f = 0; f < 200 && t.phase !== "active"; f++) t.advanceFrame(0);
+    toActive(t);
     const row0 = t.curPiece_row;
     for (let f = 0; f < 600; f++) t.advanceFrame(0);
     const still = t.curPiece_row === row0 && t.phase === "active";
@@ -817,7 +822,7 @@ for (const [rs, name, label] of [[guideline, "Guideline", ["GUIDELINE", "ENDLESS
 
     // Death: 20G from the start, no ghost
     const d = createGame(rs, "death");
-    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    toActive(d);
     check(`${name} death: 20G (piece on the floor in its first frame), no ghost`, [d.gravity, d.canFall(), d.shadowRow], [20, false, -100]);
 
     // Holding at 20G: the swapped-in piece must already be on the floor after the hold frame
@@ -833,7 +838,7 @@ for (const [rs, name, label] of [[guideline, "Guideline", ["GUIDELINE", "ENDLESS
 for (const [variant, goal] of [["marathon", 150], ["sprint", 40], ["standard", 0]]) {
     // One line short of the goal: an O clears the bottom row
     const g = createGame(guideline, variant);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     g.lines = (goal || 150) - 1;
     for (let r = 2; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, r === 21 && c < 8 ? 1 : 0);
     place(g, tetO, 0, 5, 7); g.hardDrop();
@@ -848,7 +853,7 @@ for (const [variant, goal] of [["marathon", 150], ["sprint", 40], ["standard", 0
 }
 {
     const u = createGame(guideline, "ultra");
-    for (let f = 0; f < 200 && u.phase !== "active"; f++) u.advanceFrame(0);
+    toActive(u);
     u.frames = 0; // the setup loop ran the clock for a frame or two
     u.lines = 99; // would be level 10 in the other modes
     check("Ultra: starts at 2:00.00, stats are the mode, TIME, LINES, SCORE", [u.getStats()[0], u.getStats()[1]], [["GUIDELINE", "ULTRA"], ["TIME", "2:00.00"]]);
@@ -860,14 +865,9 @@ for (const [variant, goal] of [["marathon", 150], ["sprint", 40], ["standard", 0
 }
 
 // ---------------------------------------------------------------- Guideline variable goal, master, dig
-function startedGuideline(variant, startLevel = 0, height = 0) {
-    const g = createGame(guideline, variant, startLevel, height);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
-}
 {
     const award = (n, tspin = null, b2b = false) => {
-        const g = startedGuideline("variable");
+        const g = started(guideline, "variable");
         g.level = 10; g.b2b = b2b;
         g.scoreGuideline(n, tspin, []);
         return g.goalPoints;
@@ -877,7 +877,7 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
     check("  ...T-spins: 4 with no lines, 8 / 12 / 16 with lines, 18 for a back-to-back double; minis 1 and 2",
         [award(0, "full"), award(1, "full"), award(2, "full"), award(3, "full"), award(2, "full", true), award(0, "mini"), award(1, "mini")],
         [4, 8, 12, 16, 18, 1, 2]);
-    const g = startedGuideline("variable");
+    const g = started(guideline, "variable");
     check("  ...stats: mode, level, goal, lines, score",
         g.getStats().slice(0, 3), [["GUIDELINE", "VARIABLE"], ["LEVEL", "1"], ["GOAL", "0 / 5"]]);
     g.lines = 30;
@@ -889,11 +889,11 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
     check("  ...meeting level 15's goal completes the marathon", [g.isGameOver(), g.endTitle, g.level], [true, "COMPLETE", 15]);
 }
 {
-    const timing = start => { const g = startedGuideline("master", start); return [g.level, g.gravity, g.lockDelayMax, g.lineClearDelay]; };
+    const timing = start => { const g = started(guideline, "master", start); return [g.level, g.gravity, g.lockDelayMax, g.lineClearDelay]; };
     check("Master: 20G, lock and line clear delays by level (M1, M10, M11, M15, M30, rounded)",
         [timing(0), timing(9), timing(10), timing(14), timing(29), timing(40)],
         [[1, 20, 30, 30], [10, 20, 30, 3], [11, 20, 28, 1], [15, 20, 18, 1], [30, 20, 6, 1], [30, 20, 6, 1]]);
-    const g = startedGuideline("master");
+    const g = started(guideline, "master");
     check("  ...no ghost, stats show the M-level, lines to 300 and the time",
         [g.getShadowRow(), g.getStats().map(s => s[0]), g.getStats()[1], g.getStats()[2]],
         [-100, ["GUIDELINE", "LEVEL", "LINES", "TIME", "SCORE"], ["LEVEL", "M1"], ["LINES", "0 / 300"]]);
@@ -901,7 +901,7 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
     g.lines = 9;
     for (let c = 0; c < 8; c++) g.setCell(21, c, 1);
     place(g, tetO, 0, 5, 7); g.hardDrop();
-    check("  ...a level every 10 lines, from the chosen start", [g.level, g.lockDelayMax, startedGuideline("master", 5).level], [2, 30, 6]);
+    check("  ...a level every 10 lines, from the chosen start", [g.level, g.lockDelayMax, started(guideline, "master", 5).level], [2, 30, 6]);
     check("  ...a line clear waits the level's line clear delay, then ARE", framesToNextPiece(g), 27 + 6);
     clearField(g);
     g.lines = 299;
@@ -922,10 +922,10 @@ function startedGuideline(variant, startLevel = 0, height = 0) {
         }
         return { rows, oneHole: holes.every(h => h.length === 1), apart: holes.every((h, i) => i === 0 || h[0] !== holes[i - 1][0]) };
     };
-    const sizes = [0, 1, 2].map(h => garbage(startedGuideline("dig", 0, h)));
+    const sizes = [0, 1, 2].map(h => garbage(started(guideline, "dig", 0, h)));
     check("Dig: 5, 10 or 18 rows of garbage, one hole each, never in the same column as the row below",
         sizes, [5, 10, 18].map(rows => ({ rows, oneHole: true, apart: true })));
-    const g = startedGuideline("dig");
+    const g = started(guideline, "dig");
     check("  ...stats: mode, time, garbage cleared, lines, score; level 1 throughout",
         [g.getStats()[0], g.getStats().map(s => s[0]), g.getStats()[2], g.level, createGame(guideline, "dig", 0, 7).digRows],
         [["GUIDELINE", "DIG"], ["GUIDELINE", "TIME", "GARBAGE", "LINES", "SCORE"], ["GARBAGE", "0 / 5"], 1, 18]);
@@ -1237,11 +1237,6 @@ for (const mode of [arika, tgmClassic]) {
 }
 
 // ---------------------------------------------------------------- TAP (TGM2 The Absolute Plus)
-function startedTap(variant = "standard") {
-    const g = createGame(tgmTap, variant);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
-}
 {
     // raincomplex/randomizers randos/tgm.py, tgm_tap testPRNG: seed unrand(0xeb48c724)
     const seed = Math.imul((0xeb48c724 - 12345) | 0, 0xeeb9eb65 | 0) >>> 0;
@@ -1257,7 +1252,7 @@ function startedTap(variant = "standard") {
 {
     const g = createGame(tgmTap);
     g.queue[0] = tetT;
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     const rows = [...new Set(cellsAt(g).map(c => c.row))];
     check("TAP: one next piece, no hold, ARS shapes and Sega colours, spawn in rows 19-20",
         [g.nextCount, g.hasHold, g.shapes === ARS_SHAPES, g.palette[tetI], rows], [1, false, true, 6, [2, 3]]);
@@ -1267,15 +1262,15 @@ function startedTap(variant = "standard") {
     const h = createGame(tgmTap);
     const first = h.rnd_get_queue(0);
     h.advanceFrame(HOLD_PUSH); // held through READY: no IHS
-    for (let f = 0; f < 200 && h.phase !== "active"; f++) h.advanceFrame(0);
+    toActive(h);
     check("TAP: no IHS either", [h.curPiece_type, h.getHeldPiece()], [first, 0]);
-    const death = startedTap("death").getStats();
+    const death = started(tgmTap, "death").getStats();
     check("TAP stats: rule set and mode, then grade, level, time, score; Death has no grade yet",
         [g.getStats()[0], g.getStats().slice(1).map(s => s[0]), death[0], death[1]],
         [["TGM2 TAP", "MASTER"], ["GRADE", "LEVEL", "TIME", "SCORE"], ["TGM2 TAP", "DEATH"], ["GRADE", "—"]]);
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
     check("TAP Master timing: gravity (1/256 G) and ARE / line ARE / DAS / lock / line clear by level",
         [at(0), at(30), at(251), at(499), at(500), at(600), at(700), at(800), at(900)],
@@ -1290,7 +1285,7 @@ function startedTap(variant = "standard") {
     check("TAP Master: ghost piece below level 100 only", [ghost99, g.getShadowRow()], [true, -100]);
 }
 {
-    const g = startedTap("death");
+    const g = started(tgmTap, "death");
     const at = level => { g.level = level; g.updateTimings(); return [g.gravity, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
     check("TAP Death timing: 20G, ARE / line ARE / DAS / lock / line clear by level",
         [at(0), at(100), at(200), at(300), at(400), at(500), at(999)],
@@ -1298,7 +1293,7 @@ function startedTap(variant = "standard") {
     check("TAP Death: no ghost piece", g.getShadowRow(), -100);
 }
 function tapAt(type, rot, row, col, blocks) {
-    const g = startedTap();
+    const g = started(tgmTap);
     clearField(g);
     for (const [r, c] of blocks) g.setCell(r, c, 1);
     place(g, type, rot, row, col);
@@ -1328,7 +1323,7 @@ function tapClear(g, rows, setup = () => {}) {
     g.takeClearedCells();
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     clearField(g);
     g.level = 10;
     tapClear(g, 3);
@@ -1339,14 +1334,14 @@ function tapClear(g, rows, setup = () => {}) {
 }
 {
     // double at level 10 after a miss (combo 1 -> 3): soft 5 frames, sonic 3, active 20 frames of a 30-frame lock
-    const g = startedTap();
+    const g = started(tgmTap);
     clearField(g);
     g.setCell(10, 0, 1); // keeps the field from being empty
     g.level = 10; g.score = 0; g.combo = 1;
     tapClear(g, 2, g => { g.softFrames = 5; g.sonicMax = 3; g.activeTime = 20; g.manualLock = false; });
     const double = g.score;
     // a perfect clear: bravo x4; locked by Down on the ground: soft 1, that frame
-    const h = startedTap();
+    const h = started(tgmTap);
     clearField(h);
     h.level = 10; h.score = 0; h.combo = 1;
     tapClear(h, 4, g => { g.activeTime = 40; g.softFrames = 1; g.manualLock = true; });
@@ -1355,7 +1350,7 @@ function tapClear(g, rows, setup = () => {}) {
         [(3 + 5 + 6) * 2 * 3 + 6 + 10 * 7, (4 + 1) * 4 * 7 * 4 + 7, ["QUAD", "BRAVO"]]);
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     g.internalGrade = 0;
     const awards = [g.gradeAward(1, 1, 0), g.gradeAward(1, 3, 0), g.gradeAward(2, 2, 0), g.gradeAward(3, 5, 0), g.gradeAward(4, 10, 0), g.gradeAward(4, 1, 250)];
     check("TAP grade points: ceil(base x combo) x level multiplier; singles take the combo, Tetrises don't",
@@ -1366,7 +1361,7 @@ function tapClear(g, rows, setup = () => {}) {
     check("TAP grades: internal grade 14 is 1, 31 is S9 (no Master grades from points)", [g.gradeLabel(), s9], ["1", "S9"]);
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     const judge = (section, seconds, tetrises, times = []) => {
         g.mrollQualified = true; g.splits = times.slice(); g.section = section;
         g.frames = 100000; g.sectionStart = g.frames - seconds * 60; g.sectionTetrises = tetrises;
@@ -1382,7 +1377,7 @@ function tapClear(g, rows, setup = () => {}) {
 }
 // Reach 999 in TAP Master with a Tetris, every section so far meeting the M-roll conditions
 function tapTo999(setup = () => {}) {
-    const g = startedTap();
+    const g = started(tgmTap);
     g.level = 996; g.section = 9; g.frames = 8 * 3600; g.sectionStart = g.frames - 30 * 60;
     g.splits = new Array(9).fill(55 * 60); g.splitSection = 9; g.splitStart = g.sectionStart;
     g.internalGrade = 31;
@@ -1434,7 +1429,7 @@ function tapTo999(setup = () => {}) {
 }
 // TAP Death: a Tetris from level 496 at the given time
 function deathTo500(frames) {
-    const g = startedTap("death");
+    const g = started(tgmTap, "death");
     g.level = 496; g.frames = frames;
     clearField(g);
     tapClear(g, 4);
@@ -1456,7 +1451,7 @@ function deathTo500(frames) {
     check("  ...and end with EXCELLENT", [h.endTitle, h.gradeLabel()], ["EXCELLENT", "—"]);
 }
 {
-    const g = startedTap("death");
+    const g = started(tgmTap, "death");
     g.level = 996; g.frames = 20 * 3600; g.finalGrade = "M";
     clearField(g);
     tapClear(g, 4);
@@ -1469,8 +1464,8 @@ function deathTo500(frames) {
     check("  ...topping out in the roll keeps it", [g.isGameOver(), g.gradeLabel()], [true, "GM"]);
 }
 {
-    const g = startedTap();
-    const d = startedTap("death");
+    const g = started(tgmTap);
+    const d = started(tgmTap, "death");
     check("TAP test setups: no 15-minute speed-up to skip to, no M-roll in Death", [g.testSetup("kill"), d.testSetup("invisible"), d.testSetup("gm")], [false, false, false]);
     check("  ...Death's roll setup goes to the 999 roll with GM", [d.testSetup("roll"), d.level, d.gradeLabel()], [true, 999, "GM"]);
     g.frames = 10 * 3600;
@@ -1480,11 +1475,6 @@ function deathTo500(frames) {
 }
 
 // ---------------------------------------------------------------- GB (1989)
-function startedGb(variant = "standard", level = 0, height = 0) {
-    const g = createGame(gbTetris, variant, level, height);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
-}
 function placeGb(g, type, rot, row, col) { place(g, type, rot, row, col); g.gravityAcc = 0; }
 const cellsOf = g => {
     const out = [];
@@ -1505,7 +1495,7 @@ const cellsOf = g => {
     u.history = [2, 6]; // I in the preview, T entering play
     u.rand = (() => { const rolls = [4, 1]; return () => rolls.shift(); })();
     check("  ...compares with the piece entering play: a Z after T, I is refused ((4 | 2 | 6) = 6), a J taken", u.nextIndex(), 1);
-    const g = startedGb(), h = g.randomizer.history.map(i => g.randomizer.pieces[i]);
+    const g = started(gbTetris), h = g.randomizer.history.map(i => g.randomizer.pieces[i]);
     check("  ...a hidden piece behind the preview: the next roll's history is that piece and the preview, which enters play then",
         h, [g.queue[1], g.queue[0]]);
     const s = new GbRandomizer(1);
@@ -1518,9 +1508,9 @@ const cellsOf = g => {
     check("  ...takes the third roll as it comes", t.nextIndex(), 1);
 }
 {
-    const g = startedGb();
+    const g = started(gbTetris);
     check("GB: no hold, one next piece, no ghost, starts at level 0", [g.hasHold, g.nextCount, g.getShadowRow(), g.level], [false, 1, -100, 0]);
-    check("  ...stats name the rule set and mode", [g.getStats()[0], startedGb("btype").getStats()[0]], [["GB", "A-TYPE"], ["GB", "B-TYPE"]]);
+    check("  ...stats name the rule set and mode", [g.getStats()[0], started(gbTetris, "btype").getStats()[0]], [["GB", "A-TYPE"], ["GB", "B-TYPE"]]);
     clearField(g);
     g.curPiece_type = 0;
     g.spawn(tetT, false);
@@ -1535,7 +1525,7 @@ const cellsOf = g => {
     check("  ...other rule sets keep 20 rows and draw the two above", [createGame(guideline).wellTop, createGame(guideline).firstDrawnRow], [2, 0]);
 }
 {
-    const g = startedGb();
+    const g = started(gbTetris);
     clearField(g);
     placeGb(g, tetT, 0, 10, 3);
     g.rotate(1); g.rotate(1);
@@ -1553,7 +1543,7 @@ const cellsOf = g => {
     check("  ...no IRS", g.curPiece_rotation, 0);
 }
 {
-    const g = startedGb();
+    const g = started(gbTetris);
     clearField(g);
     placeGb(g, tetO, 0, 10, 3);
     g.advanceFrame(HARD_PUSH);
@@ -1568,7 +1558,7 @@ const cellsOf = g => {
     check("  ...level 9: 11 frames, level 20: 3 frames", lvl, [11, 3]);
 }
 {
-    const g = startedGb();
+    const g = started(gbTetris);
     clearField(g);
     placeGb(g, tetO, 0, 19, 3); // resting on the floor
     g.gravityAcc = 40;
@@ -1577,7 +1567,7 @@ const cellsOf = g => {
     check("GB: no lock delay: locks on the next gravity row, moving doesn't reset it", f, 13);
 }
 {
-    const g = startedGb();
+    const g = started(gbTetris);
     clearField(g);
     placeGb(g, tetO, 0, 5, 3);
     const rows = [];
@@ -1594,7 +1584,7 @@ const cellsOf = g => {
     check("  ...pressing it again does", g.curPiece_row > r, true);
 }
 {
-    const g = startedGb();
+    const g = started(gbTetris);
     clearField(g);
     placeGb(g, tetO, 0, 10, 7);
     const shifts = [];
@@ -1607,7 +1597,7 @@ const cellsOf = g => {
     check("GB auto-shift frames after holding left (DAS 23, ARR 9)", shifts, [0, 23, 32, 41]);
 }
 {
-    const g = startedGb();
+    const g = started(gbTetris);
     clearField(g);
     for (let c = 0; c < 8; c++) { g.setCell(20, c, 1); g.setCell(21, c, 1); }
     placeGb(g, tetO, 0, 19, 7);
@@ -1637,15 +1627,15 @@ const garbageRows = g => {
     return rows;
 };
 {
-    const g = startedGb("btype", 0, 3);
+    const g = started(gbTetris, "btype", 0, 3);
     const rows = garbageRows(g);
     check("GB B-Type height 3: six rows of garbage, each with a hole", rows.lastIndexOf(false), HEIGHT - 2 - 6 - 1);
     check("  ...rows above are empty", rows.slice(0, HEIGHT - 2 - 6).every(x => !x), true);
     check("  ...the stats show the height", g.getStats().map(s => s[0]), ["GB", "LEVEL", "HEIGHT", "LINES", "SCORE"]);
     check("GB B-Type height 0: no garbage; height 5: ten rows",
-        [garbageRows(startedGb("btype")).some(x => x), garbageRows(startedGb("btype", 0, 5)).filter(x => x).length], [false, 10]);
+        [garbageRows(started(gbTetris, "btype")).some(x => x), garbageRows(started(gbTetris, "btype", 0, 5)).filter(x => x).length], [false, 10]);
     check("  ...height stays within 0-5, and A-Type ignores it",
-        [createGame(gbTetris, "btype", 0, 9).height, createGame(gbTetris, "btype", 0, -1).height, garbageRows(startedGb("standard", 0, 5)).some(x => x)], [5, 0, false]);
+        [createGame(gbTetris, "btype", 0, 9).height, createGame(gbTetris, "btype", 0, -1).height, garbageRows(started(gbTetris, "standard", 0, 5)).some(x => x)], [5, 0, false]);
     clearField(g);
     g.lines = 24;
     tapClear(g, 1, h => { h.curPiece_col = 8; });
@@ -1675,11 +1665,6 @@ const garbageRows = g => {
 }
 
 // ---------------------------------------------------------------- TGM1 (Tetris The Grand Master)
-function startedTgm1(variant = "standard") {
-    const g = createGame(tgmOriginal, variant);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
-}
 {
     // raincomplex/randomizers randos/tgm.py, class tgm (4 rolls), seed 0x1234abcd
     const r = new Tgm1Randomizer(0x1234abcd);
@@ -1692,11 +1677,11 @@ function startedTgm1(variant = "standard") {
     check("  ...the first piece is never S, Z or O", [firsts.has(tetS), firsts.has(tetZ), firsts.has(tetO)], [false, false, false]);
 }
 {
-    const g = startedTgm1();
+    const g = started(tgmOriginal);
     check("TGM1: one next piece, no hold, ARS shapes and Sega colours",
         [g.nextCount, g.hasHold, g.shapes === ARS_SHAPES, g.palette[tetI]], [1, false, true, 6]);
     check("  ...stats: rule set and mode, then grade, level, time, score",
-        [g.getStats()[0], g.getStats().slice(1).map(s => s[0]), startedTgm1("20g").getStats()[0]],
+        [g.getStats()[0], g.getStats().slice(1).map(s => s[0]), started(tgmOriginal, "20g").getStats()[0]],
         [["TGM1", "MASTER"], ["GRADE", "LEVEL", "TIME", "SCORE"], ["TGM1", "20G"]]);
     const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
     check("  ...gravity (1/256 G) as TAP's, delays the same at every level (ARE 30, DAS 16, lock 30, line clear 41)",
@@ -1705,11 +1690,11 @@ function startedTgm1(variant = "standard") {
     g.level = 100; g.updateTimings(); g.frames = 15 * 3600 - 1;
     g.advanceFrame(0); g.advanceFrame(0);
     check("  ...no speed-up at 15:00", [g.gravity * 256, g.lockDelayMax], [80, 30]);
-    const twenty = startedTgm1("20g");
+    const twenty = started(tgmOriginal, "20g");
     check("TGM1 20G: 20G from level 0, no ghost", [twenty.gravity, twenty.getShadowRow()], [20, -100]);
 }
 function tgm1At(type, rot, row, col, blocks = []) {
-    const g = startedTgm1();
+    const g = started(tgmOriginal);
     clearField(g);
     for (const [r, c] of blocks) g.setCell(r, c, 1);
     place(g, type, rot, row, col);
@@ -1733,7 +1718,7 @@ function tgm1At(type, rot, row, col, blocks = []) {
     check("TGM1: the hold button does nothing", [h.curPiece_type, h.getHeldPiece()], [type, 0]);
 }
 {
-    const g = startedTgm1();
+    const g = started(tgmOriginal);
     clearField(g);
     g.setCell(10, 0, 1); // keeps the field from being empty
     g.level = 10; g.score = 0; g.combo = 1;
@@ -1750,13 +1735,13 @@ function tgm1At(type, rot, row, col, blocks = []) {
         ["9", "9", "8", "2", "1", "S1", "S8", "S9", "S9"]);
 }
 {
-    const g = startedTgm1();
+    const g = started(tgmOriginal);
     clearField(g);
     g.level = 99; g.curPiece_type = 0;
     g.spawn(tetT, false);
     check("TGM1 levels: a new piece doesn't pass a section stop (x99)", g.level, 99);
     const checkpoint = (level, score, frames) => {
-        const h = startedTgm1();
+        const h = started(tgmOriginal);
         clearField(h);
         h.level = level; h.score = score; h.frames = frames;
         tapClear(h, 1);
@@ -1768,7 +1753,7 @@ function tgm1At(type, rot, row, col, blocks = []) {
         [true, false, false, true, false, true]);
 }
 function tgm1To999(score, frames = 600 * 60) {
-    const g = startedTgm1();
+    const g = started(tgmOriginal);
     clearField(g);
     g.level = 998; g.score = score; g.frames = frames;
     tapClear(g, 1);
@@ -1781,7 +1766,7 @@ function tgm1To999(score, frames = 600 * 60) {
     check("  ...126,000 points but after 13:30: no GM", [late.endTitle, late.gradeLabel()], ["COMPLETE", "S9"]);
     const gm = tgm1To999(130000);
     check("TGM1 GM: 126,000 by 13:30 at 999 with both checkpoints met", [gm.isGameOver(), gm.gradeLabel(), gm.timerStopped], [false, "GM", true]);
-    for (let f = 0; f < 300 && gm.phase !== "active"; f++) gm.advanceFrame(0);
+    toActive(gm, 300);
     check("  ...then the staff roll with blocks staying visible", [gm.roll, gm.rollLength, gm.rollHide.visible], ["visible", 2968, Infinity]);
     place(gm, tetO, 0, 19, 3);
     gm.lock();
@@ -1792,23 +1777,18 @@ function tgm1To999(score, frames = 600 * 60) {
     gm.spawn(tetT, false);
     check("  ...topping out in it still ends in GM", [gm.isGameOver(), gm.endTitle, gm.gradeLabel()], [true, "GRAND MASTER", "GM"]);
     const surv = tgm1To999(130000);
-    for (let f = 0; f < 300 && surv.phase !== "active"; f++) surv.advanceFrame(0);
+    toActive(surv, 300);
     surv.rollFrames = surv.rollLength - 1;
     surv.advanceFrame(0);
     check("  ...surviving it too", [surv.isGameOver(), surv.endTitle], [true, "GRAND MASTER"]);
 }
 {
-    const g = startedTgm1();
+    const g = started(tgmOriginal);
     check("TGM1 test setups: only the GM roll and its end", [g.testSetup("invisible"), g.testSetup("kill"), g.testSetup("roll"), g.nextRoll, g.gradeLabel()],
         [false, false, true, "visible", "GM"]);
 }
 
 // ---------------------------------------------------------------- NES (Tetris for the NES)
-function startedNes(variant = "standard", level = 0, height = 0) {
-    const g = createGame(nesTetris, variant, level, height);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
-}
 {
     const r = new NesRandomizer(12345);
     const counts = [0, 0, 0, 0, 0, 0, 0], N = 700000;
@@ -1825,10 +1805,10 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     check("  ...rerolls the previous piece and 7 once, taking the reroll as it comes", [s.nextIndex(), t.nextIndex()], [3, 2]);
 }
 {
-    const g = startedNes();
+    const g = started(nesTetris);
     check("NES: no hold, one next piece, no ghost, a 20-row well, starts at level 0",
         [g.hasHold, g.nextCount, g.getShadowRow(), g.wellTop, g.level], [false, 1, -100, 2, 0]);
-    check("  ...stats name the rule set and mode", [g.getStats()[0], startedNes("btype").getStats()[0]], [["NES", "A-TYPE"], ["NES", "B-TYPE"]]);
+    check("  ...stats name the rule set and mode", [g.getStats()[0], started(nesTetris, "btype").getStats()[0]], [["NES", "A-TYPE"], ["NES", "B-TYPE"]]);
     clearField(g);
     const spawned = type => { g.curPiece_type = 0; g.spawn(type, false); return cellsOf(g); };
     check("  ...T spawns flat side up in the top two visible rows, its centre in column 5",
@@ -1837,7 +1817,7 @@ function startedNes(variant = "standard", level = 0, height = 0) {
         [[[2, 3], [2, 4], [2, 5], [2, 6]], [[2, 4], [2, 5], [3, 4], [3, 5]]]);
 }
 {
-    const g = startedNes();
+    const g = started(nesTetris);
     clearField(g);
     placeGb(g, tetT, 0, 10, 3);
     g.rotate(1);
@@ -1862,7 +1842,7 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     check("  ...no IRS", g.curPiece_rotation, 0);
 }
 {
-    const g = startedNes();
+    const g = started(nesTetris);
     clearField(g);
     placeGb(g, tetO, 0, 10, 3);
     g.advanceFrame(HARD_PUSH);
@@ -1877,7 +1857,7 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     check("  ...level 0: a row every 48 frames", rows, [48, 96]);
 }
 {
-    const g = startedNes();
+    const g = started(nesTetris);
     clearField(g);
     placeGb(g, tetO, 0, 5, 3);
     const rows = [];
@@ -1901,7 +1881,7 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     check("  ...and while down is held the piece can't shift", g.curPiece_col, col);
 }
 {
-    const g = startedNes();
+    const g = started(nesTetris);
     clearField(g);
     placeGb(g, tetO, 0, 10, 7);
     const shifts = [];
@@ -1949,7 +1929,7 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     check("  ...DAS doesn't charge during the entry delay", [before16 - spawnCol, g.curPiece_col - spawnCol], [0, 1]);
 }
 {
-    const g = startedNes();
+    const g = started(nesTetris);
     const areAfter = row => { clearField(g); g.frames = 0; placeGb(g, tetO, 0, row, 7); g.lock(); return framesToNextPiece(g); };
     // the O's centre is its top row (box row 2): 18 + 2 = 20, one row above the bottom
     check("NES entry delay by the height of the centre: 10 in the bottom two rows, +2 per 4 rows, at most 18",
@@ -1970,7 +1950,7 @@ function startedNes(variant = "standard", level = 0, height = 0) {
         [[0, 9], [0, 10], [5, 59], [5, 60], [5, 70], [12, 99], [12, 100], [12, 110], [16, 109], [16, 110], [19, 139], [19, 140], [0, 290]].map(([s, l]) => nesLevel(s, l)),
         [0, 1, 5, 6, 7, 12, 13, 14, 16, 17, 19, 20, 29]);
     check("NES start levels 0-19", [createGame(nesTetris, "standard", 25).level, createGame(nesTetris, "standard", -1).level, createGame(nesTetris, "standard", 19).gbFrames], [19, 0, 2]);
-    const g = startedNes();
+    const g = started(nesTetris);
     clearField(g);
     g.lines = 8;
     for (let c = 0; c < 8; c++) { g.setCell(20, c, 1); g.setCell(21, c, 1); }
@@ -1983,9 +1963,9 @@ function startedNes(variant = "standard", level = 0, height = 0) {
     check("  ...no level cap, score capped at 999,999", [g.level, g.score], [20, 999999]);
 }
 {
-    const g = startedNes("btype", 0, 5);
-    check("NES B-Type: height 5 is 12 rows of garbage, height 1 is 3", [garbageRows(g).filter(x => x).length, garbageRows(startedNes("btype", 0, 1)).filter(x => x).length], [12, 3]);
-    const b = startedNes("btype", 7);
+    const g = started(nesTetris, "btype", 0, 5);
+    check("NES B-Type: height 5 is 12 rows of garbage, height 1 is 3", [garbageRows(g).filter(x => x).length, garbageRows(started(nesTetris, "btype", 0, 1)).filter(x => x).length], [12, 3]);
+    const b = started(nesTetris, "btype", 7);
     clearField(b);
     b.lines = 24;
     tapClear(b, 1, h => { h.curPiece_col = 7; });
@@ -1993,19 +1973,14 @@ function startedNes(variant = "standard", level = 0, height = 0) {
 }
 
 // ---------------------------------------------------------------- TGM3 Shirase
-function startedMode(mode, variant) {
-    const g = createGame(mode, variant);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
-}
 {
-    const g = startedMode(arika, "shirase");
+    const g = started(arika, "shirase");
     const at = level => { g.level = level; g.updateTimings(); return [g.gravity, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
     check("Shirase: 20G, ARE / line ARE / DAS / lock / line clear by level",
         [at(0), at(100), at(200), at(300), at(500), at(600), at(1100), at(1200), at(1300)],
         [[20, 12, 8, 10, 18, 6], [20, 12, 7, 8, 18, 5], [20, 12, 6, 8, 17, 4], [20, 6, 6, 8, 15, 4], [20, 6, 5, 6, 13, 3],
          [20, 6, 5, 6, 12, 3], [20, 6, 5, 6, 10, 3], [20, 6, 5, 6, 8, 3], [20, 6, 6, 6, 15, 6]]);
-    const s = startedMode(arika, "shirase");
+    const s = started(arika, "shirase");
     check("  ...stats: rule and mode, grade, level, time, score; no ghost",
         [s.getStats()[0], s.getStats().map(r => r[0]), s.getStats()[1], s.getShadowRow()],
         [["TGM3 TI", "WORLD SHIRASE"], ["TGM3 TI", "GRADE", "LEVEL", "TIME", "SCORE"], ["GRADE", "1"], -100]);
@@ -2014,7 +1989,7 @@ function startedMode(mode, variant) {
     check("  ...levels go to 1300, with a stop at 1299", [s.level, s.getStats()[2]], [1299, ["LEVEL", "1299 / 1300"]]);
 }
 {
-    const g = startedMode(arika, "shirase");
+    const g = started(arika, "shirase");
     clearField(g);
     g.section = 0; g.sectionStart = 0; g.frames = 61 * 60; g.level = 99;
     tapClear(g, 1);
@@ -2029,7 +2004,7 @@ function startedMode(mode, variant) {
 }
 {
     const stop = (mode, level, frames) => {
-        const g = startedMode(mode, "shirase");
+        const g = started(mode, "shirase");
         clearField(g);
         g.level = level; g.section = Math.floor(level / 100); g.sectionsDone = g.section; g.frames = frames; g.sectionStart = frames;
         tapClear(g, 1);
@@ -2042,7 +2017,7 @@ function startedMode(mode, variant) {
          [true, "LEVEL STOP", 500, "S5"], [false, null, 500, "S5"]]);
 }
 {
-    const g = startedMode(arika, "shirase");
+    const g = started(arika, "shirase");
     clearField(g);
     g.level = 500;
     fill(g, ["#########."]);
@@ -2055,7 +2030,7 @@ function startedMode(mode, variant) {
     clearField(g);
     tapClear(g, 2);
     check("  ...cleared lines count it down", g.garbageCount, 3);
-    const h = startedMode(arika, "shirase");
+    const h = started(arika, "shirase");
     h.level = 400; h.garbageCount = 30; h.curPiece_type = 0; clearField(h);
     h.spawn(tetT, false);
     check("  ...none before 500", [h.garbageCount, h.getCell(21, 0)], [30, 0]);
@@ -2065,16 +2040,16 @@ function startedMode(mode, variant) {
     check("  ...monochrome blocks from level 1000", [colours.every(c => c === 8), h.palette.slice(1, 8).every(c => c === 8)], [false, true]);
 }
 {
-    const g = startedMode(arika, "easy"), m = startedMode(arika, "master");
+    const g = started(arika, "easy"), m = started(arika, "master");
     check("Test setup fireworks: Easy only, five fireworks", [m.testSetup("fireworks"), g.testSetup("fireworks"), g.fireworks, g.takeFireworks()], [false, true, 5, 5]);
-    const s = startedMode(arika, "shirase");
+    const s = started(arika, "shirase");
     check("Test setup secret: the full pattern ends the game with the top secret grade",
         [g.testSetup("secret"), m.testSetup("secret"), m.isGameOver(), m.secretGrade, s.testSetup("secret"), s.secretGrade], [false, true, true, "GM", true, "GM"]);
 }
 {
-    const g = startedMode(arika, "shirase");
+    const g = started(arika, "shirase");
     check("Shirase test setup: only the roll", [g.testSetup("invisible"), g.testSetup("kill"), g.testSetup("roll")], [false, false, true]);
-    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 400);
     check("  ...the staff roll after 1300: S13, big pieces, blocks stay visible",
         [g.roll, g.rollLength, g.big, g.gradeLabel(), g.curCells[tetO][0].length, g.curPiece_col], ["visible", 3238, true, "S13", 16, 2]);
     clearField(g);
@@ -2088,7 +2063,7 @@ function startedMode(mode, variant) {
 
 // ---------------------------------------------------------------- TGM3 Sakura
 {
-    const sakura = (mode = arika) => { const g = createGame(mode, "sakura"); for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0); return g; };
+    const sakura = (mode = arika) => started(mode, "sakura");
     const g = createGame(arika, "sakura"), h = createGame(tgmClassic, "sakura");
     const letters = gm => [...gm.queue, ...Array.from({ length: 16 - gm.queue.length }, () => gm.randomizer.next())].map(t => "ITLJSZO"[t - 1]).join("");
     check("TGM3 Sakura: stage 1's field with its 7 jewels, the fixed sequence (LIJOTSZILJOTISJZ, the same with either rule)",
@@ -2103,7 +2078,7 @@ function startedMode(mode, variant) {
 {
     // clearing the last jewel clears the stage: +1 s per jewel, +10 s under 10 s; the next stage after the result, its
     // level back to 0 and the hold box empty
-    const g = (() => { const x = createGame(arika, "sakura"); for (let f = 0; f < 200 && x.phase !== "active"; f++) x.advanceFrame(0); return x; })();
+    const g = started(arika, "sakura");
     clearField(g);
     g.itemCells.forEach(row => row.fill(null));
     fill(g, ["#########."]);
@@ -2115,21 +2090,21 @@ function startedMode(mode, variant) {
     g.advanceFrame(HARD_PUSH);
     for (let f = 0; f < 60 && g.phase === "lineclear"; f++) g.advanceFrame(0);
     const ended = [g.phase, g.tried, g.cleared, g.limit - limit > 600]; // the line clear's frames run off the limit too
-    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 400);
     check("TGM3 Sakura: the last jewel's clear ends the stage (+1 s a jewel, +10 s under 10 s), then stage 2 at level 0 with an empty hold box",
         [ended, g.stageName(), g.jewels, g.level, g.heldpiece], [["stageend", 1, 1, true], "2", 7, 0, 0]);
 }
 {
     // the stage time runs out: the stage fails once the piece in play locks; skipping (the 180° key held a second) costs 30 s
     const g = createGame(arika, "sakura");
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     g.stageFrames = 60 * 60 - 1;
     g.advanceFrame(0);
     const up = [g.stageTimeUp, g.phase];
     g.advanceFrame(HARD_PUSH);
     const failed = [g.phase, g.tried, g.cleared];
     const s = createGame(arika, "sakura");
-    for (let f = 0; f < 200 && s.phase !== "active"; f++) s.advanceFrame(0);
+    toActive(s);
     const limit = s.limit;
     s.advanceFrame(ROT180_PUSH);
     for (let f = 0; f < 70 && s.phase === "active"; f++) s.advanceFrame(0);
@@ -2148,19 +2123,19 @@ function startedMode(mode, variant) {
         [after20(15, 9000), after20(17, 9000), after20(19, 20000), after20(19, 17000)], [[0, "COMPLETE"], [3, "stageend"], [5, "stageend"], [7, "stageend"]]);
     const ex3 = createGame(arika, "sakura");
     ex3.loadStage(22);
-    for (let f = 0; f < 200 && ex3.phase !== "active"; f++) ex3.advanceFrame(0);
+    toActive(ex3);
     ex3.gravity = 0;
     const col = ex3.curPiece_col;
     ex3.advanceFrame(RIGHT_PUSH);
     ex3.advanceFrame(0);
     check("  ...EX3's pieces are big but move one cell at a time; the limit time running out ends the game",
-        [ex3.big, ex3.curPiece_col - col, (() => { const t = createGame(arika, "sakura"); for (let f = 0; f < 200 && t.phase !== "active"; f++) t.advanceFrame(0); t.limit = 1; t.advanceFrame(0); return t.endTitle; })()],
+        [ex3.big, ex3.curPiece_col - col, (() => { const t = createGame(arika, "sakura"); toActive(t); t.limit = 1; t.advanceFrame(0); return t.endTitle; })()],
         [true, 1, "TIME OVER"]);
 }
 
 // ---------------------------------------------------------------- TGM3 Easy
 {
-    const g = startedMode(arika, "easy");
+    const g = started(arika, "easy");
     const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
     check("Easy: gravity (1/256 G) by level, delays the same throughout (ARE 48, line ARE 25, DAS 14, lock 30, line clear 40)",
         [at(0), at(8), at(90), at(101), at(177), at(200)],
@@ -2169,13 +2144,13 @@ function startedMode(mode, variant) {
     // harddrop.com: rising from 121 on (tetris.wiki lists 132: 128, 144: 112, 156: 144, 167: 176, 177: 192)
     check("  ...from level 121: 80, 112, 144, 175, 192, 208",
         [120, 121, 132, 143, 144, 156, 167, 177, 199].map(l => at(l)[0]), [48, 80, 112, 112, 144, 175, 192, 208, 208]);
-    const e = startedMode(tgmClassic, "easy");
+    const e = started(tgmClassic, "easy");
     check("  ...stats: rule and mode, fireworks, level, time; levels to 200",
         [e.getStats(), e.maxLevel], [[["TGM3 TI", "CLASSIC EASY"], ["HANABI", "0"], ["LEVEL", "0 / 100"], ["TIME", e.formatTime()]], 200]);
 }
 {
     const fireworks = (n, setup = () => {}, rows = null) => {
-        const g = startedMode(arika, "easy");
+        const g = started(arika, "easy");
         g.level = 10; g.lockedType = tetI; g.lastRotation = false; g.activeTime = 30; g.sinceClear = 30;
         setup(g);
         g.easyHanabi(n, rows || [...Array(n)].map((_, i) => 21 - n + 1 + i), g.level, g.level + [0, 1, 2, 4, 6][n]);
@@ -2195,7 +2170,7 @@ function startedMode(mode, variant) {
         [4, 4, 3, 4]);
     check("  ...speed: x (level after - frames since the last clear) / 100 over 100, x (level after - active frames) / 120 over 120",
         fireworks(2, g => { g.level = 140; g.sinceClear = 10; g.activeTime = 10; }), Math.floor(2.9 * 1.32 * 1.1));
-    const g = startedMode(arika, "easy");
+    const g = started(arika, "easy");
     clearField(g);
     g.level = 10;
     tapClear(g, 4);
@@ -2204,7 +2179,7 @@ function startedMode(mode, variant) {
     check("  ...the streams fire one each every 10 frames", [g.hanabi, g.hanabiPending, g.bravoPending], [10, 0, 0]);
 }
 {
-    const g = startedMode(arika, "easy");
+    const g = started(arika, "easy");
     g.frames = 1799; g.level = 40; g.levelMark30 = 5;
     g.advanceFrame(0);
     check("Easy 30 s bonus: 30 levels in a 30 s period earn it", [g.bonus30, g.levelMark30], [true, 40]);
@@ -2213,10 +2188,10 @@ function startedMode(mode, variant) {
     check("  ...a stop at 199", g.level, 199);
 }
 {
-    const g = startedMode(arika, "easy");
+    const g = started(arika, "easy");
     g.hanabi = 100;
     g.testSetup("roll");
-    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 400);
     check("Easy staff roll: 20G, blocks visible, a free firework every 3265 / fireworks frames",
         [g.roll, g.gravity, g.rollLength, g.rollInterval], ["visible", 20, 3265, 32]);
     const roll = (combo, n) => {
@@ -2235,17 +2210,17 @@ function startedMode(mode, variant) {
 
 // ---------------------------------------------------------------- TAP TGM+
 {
-    const g = startedMode(tgmTap, "plus");
+    const g = started(tgmTap, "plus");
     const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
     check("TGM+: Master's gravity, Normal's delays at every level",
         [at(0), at(500), at(900)], [[4, 27, 27, 16, 30, 40], [5120, 27, 27, 16, 30, 40], [5120, 27, 27, 16, 30, 40]]);
-    const s = startedMode(tgmTap, "plus");
+    const s = started(tgmTap, "plus");
     check("  ...stats: rule set and mode, level, time, score (no grade)",
         [s.getStats()[0], s.getStats().map(r => r[0])], [["TGM2 TAP", "TGM+"], ["TGM2 TAP", "LEVEL", "TIME", "SCORE"]]);
 }
 {
     const row = (g, r) => [...Array(WIDTH)].map((_, c) => g.getCell(r, c) ? "#" : ".").join("");
-    const g = startedMode(tgmTap, "plus");
+    const g = started(tgmTap, "plus");
     clearField(g);
     const miss = () => { g.curPiece_type = tetO; place(g, tetO, 0, 5, 3); g.lock(); g.setCell(6, 4, 0); g.setCell(6, 5, 0); g.setCell(7, 4, 0); g.setCell(7, 5, 0); };
     for (let k = 0; k < 12; k++) miss();
@@ -2263,11 +2238,11 @@ function startedMode(mode, variant) {
     check("  ...the pattern has 24 rows", g.garbagePos, 3);
 }
 {
-    const g = startedMode(tgmTap, "plus");
+    const g = started(tgmTap, "plus");
     clearField(g);
     g.level = 998;
     tapClear(g, 1);
-    for (let f = 0; f < 400 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 400);
     check("TGM+ staff roll at 999: blocks visible, 2024 frames", [g.roll, g.rollLength], ["visible", 2024]);
     g.curPiece_type = 0;
     for (let c = 0; c < WIDTH; c++) for (let r = 1; r < 5; r++) g.setCell(r, c, 1);
@@ -2277,7 +2252,7 @@ function startedMode(mode, variant) {
 
 // ---------------------------------------------------------------- ACE
 {
-    const g = startedMode(tgmAce, "normal");
+    const g = started(tgmAce, "normal");
     check("ACE: hold, three next pieces, spawn in the top visible rows, 128 lock resets",
         [g.hasHold, g.nextCount, g.curPiece_row, g.moveLimit, g.tgm], [true, 3, 2, 128, false]);
     check("  ...stats: mode, level, lines, the level's time limit, time",
@@ -2292,7 +2267,7 @@ function startedMode(mode, variant) {
         [[25, 25, 15, 30, 41], [18, 18, 10, 28, 14], [6, 6, 7, 13, 5], [6, 6, 7, 13, 4]]);
 }
 {
-    const g = startedMode(tgmAce, "normal");
+    const g = started(tgmAce, "normal");
     clearField(g);
     g.lines = 9;
     tapClear(g, 1);
@@ -2301,7 +2276,7 @@ function startedMode(mode, variant) {
     tapClear(g, 1);
     check("ACE levels: every 10 lines; the clock starts over (2:00, 2:00, then 1:30) and waits for the next piece",
         [up, [g.level, g.aceTimer]], [[2, 7200, true], [3, 5400]]);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g);
     g.advanceFrame(0);
     check("  ...it runs again once the piece is in play", [g.acePaused, g.aceTimer < 5400], [false, true]);
     g.aceTimer = 1;
@@ -2309,7 +2284,7 @@ function startedMode(mode, variant) {
     check("  ...running out ends the game", [g.isGameOver(), g.endTitle], [true, "TIME OVER"]);
     const another = createGame(tgmAce, "another");
     check("  ...Another: a minute per level", another.aceTimer, 3600);
-    const h = startedMode(tgmAce, "hispeed2");
+    const h = started(tgmAce, "hispeed2");
     clearField(h);
     h.lines = 149;
     tapClear(h, 1);
@@ -2318,9 +2293,7 @@ function startedMode(mode, variant) {
 
 // ---------------------------------------------------------------- Big modes
 function startedBig(mode, variant = "standard") {
-    const g = createGame(mode, variant, 0, 0, {}, { big: true });
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
+    return started(mode, variant, 0, 0, { big: true });
 }
 {
     const g = startedBig(tgmOriginal);
@@ -2344,9 +2317,9 @@ function startedBig(mode, variant = "standard") {
     check("Big for every TGM game but TGM+, and ACE's Big mode at Normal's speeds",
         [startedBig(tgmTap, "death").getStats()[0], startedBig(arika, "easy").getStats()[0], startedBig(tgmClassic, "shirase").getStats()[0]],
         [["TGM2 TAP", "DEATH BIG"], ["TGM3 TI", "WORLD EASY BIG"], ["TGM3 TI", "CLASSIC SHIRASE BIG"]]);
-    const ace = startedMode(tgmAce, "big");
+    const ace = started(tgmAce, "big");
     check("  ...ACE Big", [ace.getStats()[0], ace.big, ace.gravity * 256, ace.lockDelayMax, ace.aceLimit()], [["ACE", "BIG"], true, 4, 30, 7200]);
-    const plain = startedMode(arika, "standard");
+    const plain = started(arika, "standard");
     check("  ...and not without it", [plain.big, plain.bigMode, plain.getStats()[0]], [false, false, ["TGM3 TI", "WORLD"]]);
 }
 {
@@ -2377,13 +2350,13 @@ function startedBig(mode, variant = "standard") {
 
 // ---------------------------------------------------------------- TAP Normal
 {
-    const g = startedMode(tgmTap, "normal");
+    const g = started(tgmTap, "normal");
     const at = level => { g.level = level; g.updateTimings(); return [g.gravity * 256, g.are, g.lineAre, g.das, g.lockDelayMax, g.lineClearDelay]; };
     check("TAP Normal: its own gravity (1/256 G), the same delays throughout",
         [at(0), at(99), at(100), at(139), at(200), at(299), at(300)],
         [[4, 27, 27, 16, 30, 40], [64, 27, 27, 16, 30, 40], [4, 27, 27, 16, 30, 40], [32, 27, 27, 16, 30, 40],
          [16, 27, 27, 16, 30, 40], [240, 27, 27, 16, 30, 40], [5120, 27, 27, 16, 30, 40]]);
-    const s = startedMode(tgmTap, "normal");
+    const s = started(tgmTap, "normal");
     check("  ...stats: mode, level to 300, time, score (no grade)",
         [s.getStats()[0], s.getStats().map(r => r[0]), s.maxLevel], [["TGM2 TAP", "NORMAL"], ["TGM2 TAP", "LEVEL", "TIME", "SCORE"], 300]);
     clearField(s);
@@ -2394,7 +2367,7 @@ function startedBig(mode, variant = "standard") {
     check("  ...no section stops, but the last before 300", [past99, s.level], [100, 299]);
 }
 {
-    const g = startedMode(tgmTap, "normal");
+    const g = started(tgmTap, "normal");
     clearField(g);
     g.level = 99; g.curPiece_type = 0;
     g.spawn(tetT, false);
@@ -2425,7 +2398,7 @@ function startedBig(mode, variant = "standard") {
         [0, 1, null, true]);
 }
 {
-    const g = startedMode(tgmTap, "normal");
+    const g = started(tgmTap, "normal");
     clearField(g);
     g.level = 98; g.combo = 1;
     tapClear(g, 2); // 98 + 2 lines: 100, by a clear
@@ -2435,7 +2408,7 @@ function startedBig(mode, variant = "standard") {
         [waiting, g.pieceItem, g.nextItem], [["FREE FALL", false], "FREE FALL", null]);
 }
 {
-    const g = startedMode(tgmTap, "normal");
+    const g = started(tgmTap, "normal");
     clearField(g);
     for (let r = 16; r < HEIGHT; r++) g.setCell(r, 0, 1);
     g.useItem("DEL EVEN");
@@ -2445,7 +2418,7 @@ function startedBig(mode, variant = "standard") {
 }
 {
     const clear = (variant, frames = 0, level = 10) => {
-        const g = startedMode(tgmTap, variant);
+        const g = started(tgmTap, variant);
         clearField(g);
         g.setCell(10, 0, 1);
         g.level = level; g.score = 0; g.combo = 1; g.frames = frames;
@@ -2456,7 +2429,7 @@ function startedBig(mode, variant = "standard") {
     const fast = clear("normal", 200 * 60, 299), slow = clear("normal", 301 * 60, 299);
     check("  ...level 300: 1253 x the seconds under 5:00, then the credit roll",
         [fast.score - slow.score, fast.timerStopped, fast.level], [1253 * 100, true, 300]);
-    for (let f = 0; f < 400 && fast.phase !== "active"; f++) fast.advanceFrame(0);
+    toActive(fast, 400);
     check("  ...a 20G roll with blocks visible", [fast.roll, fast.gravity], ["visible", 20]);
     fast.curPiece_type = 0;
     for (let c = 0; c < WIDTH; c++) for (let r = 1; r < 5; r++) fast.setCell(r, c, 1);
@@ -2466,14 +2439,14 @@ function startedBig(mode, variant = "standard") {
 
 // ---------------------------------------------------------------- ACE ARS and ARS2
 function aceAt(mode, type, rot, row, col, blocks = []) {
-    const g = startedMode(mode, "normal");
+    const g = started(mode, "normal");
     clearField(g);
     for (const [r, c] of blocks) g.setCell(r, c, 1);
     place(g, type, rot, row, col);
     return g;
 }
 {
-    const g = startedMode(aceArs, "normal");
+    const g = started(aceArs, "normal");
     const rows = [...new Set(g.curPieceCells().map(c => c.row))];
     check("ACE ARS: ARS shapes in the standard colours, spawn in rows 19-20, soft drop 0.5G, 128 lock resets",
         [g.ars, g.shapes === ARS_SHAPES, g.palette[tetI], Math.min(...rows), g.softGravity, g.moveLimit, g.getStats()[0]],
@@ -2488,9 +2461,9 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
     const lock = aceAt(aceArs2, tetO, 0, 19, 3);
     lock.advanceFrame(SOFT_PUSH);
     check("ACE ARS2: the drops swap: up is a sonic drop (no lock), soft drop locks on the ground",
-        [sonic.phase, sonic.curPiece_row, lock.phase, startedMode(aceArs2, "another").getStats()[0]], ["active", 19, "are", ["ACE", "ARS2 ANOTHER"]]);
+        [sonic.phase, sonic.curPiece_row, lock.phase, started(aceArs2, "another").getStats()[0]], ["active", 19, "are", ["ACE", "ARS2 ANOTHER"]]);
     const notch = (mode) => {
-        const t = mode === tgmClassic ? startedMode(tgmClassic, "standard") : startedMode(mode, "normal");
+        const t = mode === tgmClassic ? started(tgmClassic, "standard") : started(mode, "normal");
         clearField(t);
         for (const [r, c] of [[21, 4], [21, 6]]) t.setCell(r, c, 1);
         place(t, tetT, 1, 19, 4);
@@ -2501,7 +2474,7 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
     const zero = aceAt(aceArs, tetT, 1, 19, 4, [[21, 4], [21, 6]]);
     zero.rotate(1); zero.rotate(-1);
     check("  ...and turning again after a floor kick doesn't zero the lock delay", zero.lockDelayZeroed, false);
-    const srs = startedMode(tgmAce, "normal");
+    const srs = started(tgmAce, "normal");
     check("ACE SRS is unchanged", [srs.ars, srs.softGravity, srs.getStats()[0]], [false, 1, ["ACE", "NORMAL"]]);
 }
 
@@ -2556,7 +2529,7 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
     check("Sprint lines: 20, 40 or 100",
         [stats("sprint20")[0], stats("sprint20")[2], stats("sprint")[2], stats("sprint100")[2]],
         [["GUIDELINE", "SPRINT"], ["LINES", "0 / 20"], ["LINES", "0 / 40"], ["LINES", "0 / 100"]]);
-    const g = startedGuideline("sprint20");
+    const g = started(guideline, "sprint20");
     g.lines = 19;
     for (let r = 2; r < HEIGHT; r++) for (let c = 0; c < WIDTH; c++) g.setCell(r, c, r === 21 && c < 8 ? 1 : 0);
     place(g, tetO, 0, 5, 7); g.hardDrop();
@@ -2564,11 +2537,11 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
     check("Ultra time: 1, 2, 3 or 5 minutes",
         [stats("ultra1")[1], stats("ultra")[1], stats("ultra3")[1], stats("ultra5")[1], stats("ultra5")[0]],
         [["TIME", "1:00.00"], ["TIME", "2:00.00"], ["TIME", "3:00.00"], ["TIME", "5:00.00"], ["GUIDELINE", "ULTRA"]]);
-    const u = startedGuideline("ultra1");
+    const u = started(guideline, "ultra1");
     u.frames = 3599;
     u.advanceFrame(0);
     check("  ...Ultra 1:00 ends after a minute", [u.isGameOver(), u.endTitle], [true, "TIME UP"]);
-    const m = startedGuideline("marathon", 5);
+    const m = started(guideline, "marathon", 5);
     const gravity6 = m.gravity;
     clearField(m);
     m.lines = 9;
@@ -2584,9 +2557,7 @@ function aceAt(mode, type, rot, row, col, blocks = []) {
 
 // ---------------------------------------------------------------- TGM1's hidden modes
 function startedTgm1With(options, variant = "standard") {
-    const g = createGame(tgmOriginal, variant, 0, 0, {}, options);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
+    return started(tgmOriginal, variant, 0, 0, options);
 }
 {
     const mono = startedTgm1With({ mono: true });
@@ -2605,7 +2576,7 @@ function startedTgm1With(options, variant = "standard") {
 
 // ---------------------------------------------------------------- TAP Normal: Free Fall's full rows
 {
-    const g = startedMode(tgmTap, "normal");
+    const g = started(tgmTap, "normal");
     clearField(g);
     fill(g, ["#########.", "#########.", "#########."]);
     for (let r = 10; r < 13; r++) g.setCell(r, 9, 2); // three blocks hanging over the gaps
@@ -2621,24 +2592,24 @@ function startedTgm1With(options, variant = "standard") {
 
 // ---------------------------------------------------------------- Personal records
 {
-    const sprint = startedGuideline("sprint");
+    const sprint = started(guideline, "sprint");
     check("Records: Sprint counts only when finished, by time",
         [sprint.record(), (() => { sprint.frames = 3000; sprint.endTitle = "COMPLETE"; return sprint.record(); })()],
         [null, { key: [-3000], text: "0:50.00" }]);
-    const marathon = startedGuideline("marathon"); marathon.score = 1234;
-    const master = startedGuideline("master"); master.lines = 42; master.frames = 600;
+    const marathon = started(guideline, "marathon"); marathon.score = 1234;
+    const master = started(guideline, "master"); master.lines = 42; master.frames = 600;
     check("  ...Marathon by score, Master by lines then time",
         [marathon.record(), master.record()], [{ key: [1234], text: "1,234" }, { key: [42, -600], text: "42 LINES · 0:10.00" }]);
-    const tgm3 = startedMode(arika, "standard"); tgm3.level = 300; tgm3.frames = 6000; tgm3.cools = 2;
-    const tap = startedMode(tgmTap, "death"); tap.finalGrade = "M"; tap.level = 500; tap.frames = 9000;
-    const tap2 = startedMode(tgmTap, "death"); tap2.level = 600; tap2.frames = 1;
+    const tgm3 = started(arika, "standard"); tgm3.level = 300; tgm3.frames = 6000; tgm3.cools = 2;
+    const tap = started(tgmTap, "death"); tap.finalGrade = "M"; tap.level = 500; tap.frames = 9000;
+    const tap2 = started(tgmTap, "death"); tap2.level = 600; tap2.frames = 1;
     check("  ...TGM by grade, then level, then time; M and GM above every grade, Death's — below",
         [tgm3.record().text, tgm3.record().key, tap.record().key[0] > TGM_GRADE_LABELS.length - 1, tap2.record().key[0]],
         ["7 · LV 300 · 1:40.00", [2, 300, -6000], true, -1]);
-    const shirase = startedMode(arika, "shirase"); shirase.sectionsDone = 5; shirase.regrets = 1;
-    const easy = startedMode(arika, "easy"); easy.hanabi = 77;
-    const ace = startedMode(tgmAce, "normal"); ace.lines = 35; ace.frames = 120;
-    const nes = startedNes(); nes.score = 5000;
+    const shirase = started(arika, "shirase"); shirase.sectionsDone = 5; shirase.regrets = 1;
+    const easy = started(arika, "easy"); easy.hanabi = 77;
+    const ace = started(tgmAce, "normal"); ace.lines = 35; ace.frames = 120;
+    const nes = started(nesTetris); nes.score = 5000;
     check("  ...Shirase's grade, Easy's fireworks, ACE's lines then time, NES by score",
         [shirase.record().key[0], easy.record(), ace.record(), nes.record()],
         [4, { key: [77], text: "77 HANABI" }, { key: [35, -120], text: "35 LINES · 0:02.00" }, { key: [5000], text: "5,000" }]);
@@ -2646,7 +2617,7 @@ function startedTgm1With(options, variant = "standard") {
 
 // ---------------------------------------------------------------- Easy's fireworks
 {
-    const g = startedMode(arika, "easy");
+    const g = started(arika, "easy");
     g.hanabiPending = 3;
     for (let f = 0; f < 40; f++) g.advanceFrame(0);
     const fired = g.takeFireworks();
@@ -2658,9 +2629,7 @@ function startedTgm1With(options, variant = "standard") {
 
 // ---------------------------------------------------------------- Secret grade
 function startedWith(mode, variant, options) {
-    const g = createGame(mode, variant, 0, 0, {}, options);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
+    return started(mode, variant, 0, 0, options);
 }
 // The ">" pattern, rows high from the bottom: row k's hole in column 9 - |10 - k|; cover: a block
 // above the top row's hole
@@ -2677,23 +2646,23 @@ function secretAt(g, rows, cover = true) {
 }
 {
     check("Secret grade: rows of the > pattern from the bottom, 9 ... S9, GM for all 19 (TGM1)",
-        [secretAt(startedMode(tgmOriginal, "standard"), 5), secretAt(startedMode(tgmOriginal, "standard"), 18),
-            secretAt(startedMode(tgmOriginal, "standard"), 19)], ["5", "S9", "GM"]);
+        [secretAt(started(tgmOriginal, "standard"), 5), secretAt(started(tgmOriginal, "standard"), 18),
+            secretAt(started(tgmOriginal, "standard"), 19)], ["5", "S9", "GM"]);
     check("  ...the top hole must be covered (19 rows, uncovered: S9), fewer than 5 rows aren't shown",
-        [secretAt(startedMode(tgmTap, "standard"), 19, false), secretAt(startedMode(tgmTap, "standard"), 4)], ["S9", null]);
-    const broken = startedMode(arika, "standard");
+        [secretAt(started(tgmTap, "standard"), 19, false), secretAt(started(tgmTap, "standard"), 4)], ["S9", null]);
+    const broken = started(arika, "standard");
     buildSecret(broken, 12);
     broken.setCell(HEIGHT - 3, 0, 0); // a second hole in the third row
     broken.endGame("GAME OVER", "");
     check("  ...a row with another hole ends the count (TGM3: two rows, not shown)", broken.secretGrade, null);
-    const tgm3 = startedMode(arika, "standard");
+    const tgm3 = started(arika, "standard");
     secretAt(tgm3, 19);
-    check("  ...TGM3 Master and TAP Death have it, in the game over banner's notes", [tgm3.endNotes(), secretAt(startedMode(tgmTap, "death"), 9)],
+    check("  ...TGM3 Master and TAP Death have it, in the game over banner's notes", [tgm3.endNotes(), secretAt(started(tgmTap, "death"), 9)],
         [["SECRET GRADE GM"], "1"]);
-    check("  ...Shirase's run S1 ... S9, m1 ... m9, GM", [secretAt(startedMode(arika, "shirase"), 9), secretAt(startedMode(arika, "shirase"), 10),
-        secretAt(startedMode(arika, "shirase"), 19)], ["S9", "m1", "GM"]);
-    check("  ...none in TGM+, TAP Normal and Easy (no grades)", [secretAt(startedMode(tgmTap, "plus"), 19),
-        secretAt(startedMode(tgmTap, "normal"), 19), secretAt(startedMode(arika, "easy"), 19)], [null, null, null]);
+    check("  ...Shirase's run S1 ... S9, m1 ... m9, GM", [secretAt(started(arika, "shirase"), 9), secretAt(started(arika, "shirase"), 10),
+        secretAt(started(arika, "shirase"), 19)], ["S9", "m1", "GM"]);
+    check("  ...none in TGM+, TAP Normal and Easy (no grades)", [secretAt(started(tgmTap, "plus"), 19),
+        secretAt(started(tgmTap, "normal"), 19), secretAt(started(arika, "easy"), 19)], [null, null, null]);
 }
 
 // ---------------------------------------------------------------- TGM3 qualified grade and exams
@@ -2824,7 +2793,7 @@ function secretAt(g, rows, cover = true) {
         [5, 1, 6, 14, 0]);
 }
 {
-    const g = startedGuideline("versus");
+    const g = started(guideline, "versus");
     check("  ...stats: level, sent, attack per minute, pieces per second, lines", g.getStats().map(s => s[0]), ["GUIDELINE", "LEVEL", "SENT", "APM", "PPS", "LINES"]);
     g.receiveGarbage({ lines: 3, hole: 4 });
     g.attack({ n: 4, tspin: null, b2b: false, combo: 0, pc: false });
@@ -2837,7 +2806,7 @@ function secretAt(g, rows, cover = true) {
     g.advanceFrame(HARD_PUSH);
     check("  ...garbage waits while pieces clear lines", [g.lines, g.pendingGarbage(), g.takeRisenGarbage()], [1, 2, []]);
 
-    for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 30);
     place(g, tetO, 0, 19, 0); // clears nothing
     g.takeHardDropCells();
     g.advanceFrame(HARD_PUSH);
@@ -2848,7 +2817,7 @@ function secretAt(g, rows, cover = true) {
         [0, [2], garbageRow, garbageRow, [tetO, tetO]]);
     check("  ...the hard drop's flash and trail follow the piece up", g.takeHardDropCells().every(c => g.getCell(c.row, c.col) === tetO), true);
 
-    for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 30);
     g.setCell(FIELD_TOP + 1, 0, 1); // a block one row below the top of the buffer (vanish) zone
     g.receiveGarbage({ lines: 1, hole: 0 });
     place(g, tetO, 0, 15, 4);
@@ -2856,19 +2825,19 @@ function secretAt(g, rows, cover = true) {
     check("  ...garbage pushing a block up to the buffer zone's top row is no top out (tetris.wiki: above it)",
         [g.isGameOver(), g.getCell(FIELD_TOP, 0)], [false, 1]);
 
-    for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 30);
     g.receiveGarbage({ lines: 1, hole: 0 });
     place(g, tetO, 0, 15, 4);
     g.advanceFrame(HARD_PUSH);
     check("  ...garbage pushing blocks out of the top tops the player out", [g.isGameOver(), g.endTitle, g.endSub], [true, "GAME OVER", "TOP OUT — ESC FOR MENU"]);
-    check("  ...versus games keep no record", startedGuideline("versus").record(), null);
+    check("  ...versus games keep no record", started(guideline, "versus").record(), null);
 }
 {
     // the speed comes from the match's time, not the lines: level 1 for a minute, then one every 30 s, to 15 at 7:30
-    const levelAt = seconds => { const g = startedGuideline("versus"); g.frames = seconds * 60 - 1; g.advanceFrame(0); return g.level; };
+    const levelAt = seconds => { const g = started(guideline, "versus"); g.frames = seconds * 60 - 1; g.advanceFrame(0); return g.level; };
     check("Versus speed: level 1 to 0:59, 2 at 1:00, 3 at 1:30, 14 at 7:00, 15 at 7:30 and after",
         [levelAt(59), levelAt(60), levelAt(90), levelAt(420), levelAt(450), levelAt(900)], [1, 2, 3, 14, 15, 15]);
-    const g = startedGuideline("versus");
+    const g = started(guideline, "versus");
     g.frames = 90 * 60 - 1;
     g.advanceFrame(0);
     const gravity = g.gravity;
@@ -2879,28 +2848,24 @@ function secretAt(g, rows, cover = true) {
 }
 {
     // the setup cards: the speed, and the garbage's cap, delay and holes
-    const started = options => {
-        const g = createGame(guideline, "versus", 0, 0, {}, options);
-        for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-        return g;
-    };
-    const fixed = started({ speed: 7 });
+    const versus = options => started(guideline, "versus", 0, 0, options);
+    const fixed = versus({ speed: 7 });
     fixed.frames = 600 * 60;
     fixed.advanceFrame(0);
-    const g20 = started({ speed: "20g" });
+    const g20 = versus({ speed: "20g" });
     check("Versus Speed card: one level all match, or 20G (LEVEL shows 20G)",
         [fixed.level, fixed.gravity === guidelineGravity(7), g20.gravity, g20.softGravity, g20.getStats()[1]],
         [7, true, 20, 20, ["LEVEL", "20G"]]);
 
     // a lock that clears nothing: an O on the floor's left
     const lockO = g => {
-        for (let f = 0; f < 30 && g.phase !== "active"; f++) g.advanceFrame(0);
+        toActive(g, 30);
         clearField(g);
         place(g, tetO, 0, 19, 0);
         g.advanceFrame(HARD_PUSH);
         return g.takeRisenGarbage();
     };
-    const capped = started({ garbageCap: 4 });
+    const capped = versus({ garbageCap: 4 });
     capped.receiveGarbage({ lines: 3, hole: 2 });
     capped.receiveGarbage({ lines: 3, hole: 5 });
     const first = lockO(capped);
@@ -2908,25 +2873,25 @@ function secretAt(g, rows, cover = true) {
     check("Versus Garbage cap: at most 4 rows rise on a lock, the rest of an attack the cap cuts waits for the next",
         [first, left, lockO(capped), capped.pendingGarbage()], [[4], [2, [[2, 5]]], [2], 0]);
 
-    const delayed = started({ garbageDelay: 30 });
+    const delayed = versus({ garbageDelay: 30 });
     delayed.receiveGarbage({ lines: 2, hole: 0 });
     const early = [delayed.readyGarbage(), lockO(delayed), delayed.pendingGarbage()];
     delayed.frames += 30;
     check("Versus Garbage delay: an attack may rise only once it has waited 30 frames, and is cancelled meanwhile as before",
         [early, delayed.readyGarbage(), lockO(delayed)], [[0, [], 2], 2, [2]]);
-    const cancel = started({ garbageDelay: 30 });
+    const cancel = versus({ garbageDelay: 30 });
     cancel.receiveGarbage({ lines: 3, hole: 0 });
     cancel.attack({ n: 2, tspin: null, b2b: false, combo: 0, pc: false });
     check("  ...an attack still waiting is cancelled by a clear", cancel.pendingGarbage(), 2);
 
-    const messy = started({ messiness: 1 });
+    const messy = versus({ messiness: 1 });
     messy.receiveGarbage({ lines: 6, hole: 3 });
     lockO(messy);
     const holes = [16, 17, 18, 19, 20, 21].map(r => Array.from({ length: WIDTH }, (_, c) => messy.getCell(r, c)).indexOf(0));
     check("Versus Holes, every row its own: each garbage row has one hole, never in the column of the row next to it",
         [holes.every(h => h >= 0), holes.every((h, k) => k === 0 || h !== holes[k - 1]), holes[0]],
         [true, true, 3]);
-    const clean = started({});
+    const clean = versus({});
     clean.receiveGarbage({ lines: 3, hole: 6 });
     lockO(clean);
     check("  ...by default one column per attack",
@@ -2938,7 +2903,7 @@ function secretAt(g, rows, cover = true) {
 function versusPair(mode, seed = 5, startLevel = 0, options = {}, height = 0) {
     const games = [0, 1].map(() => createGame(mode, "versus", startLevel, height, {}, { seed, ...options }));
     [games[0].rival, games[1].rival] = [games[1], games[0]];
-    for (const g of games) for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
+    for (const g of games) toActive(g);
     return games;
 }
 const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c));
@@ -2989,7 +2954,7 @@ const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c))
     place(b, tetO, 0, 19, 7); // fills columns 8-9: a single, which sends nothing
     b.advanceFrame(HARD_PUSH);
     const waiting = [b.takeAttacks(), b.pendingGarbage(), b.phase];
-    for (let f = 0; f < 100 && b.phase !== "active"; f++) b.advanceFrame(0);
+    toActive(b, 100);
     check("  ...a single sends nothing; garbage waits for the receiver's clear to finish (Heboris: after every lock)",
         [waiting, b.pendingGarbage(), b.takeRisenGarbage()], [[[], 2, "lineclear"], 0, [2]]);
     check("  ...then rises under the stack as sent: the attacker's bottom row on top, the piece's row pushed up",
@@ -3019,7 +2984,7 @@ const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c))
     check("Versus Handicap: the side it names starts at its level, with that level's speed (TAP Master, Death)",
         [p1.level, p2.level, p2.gravity > p1.gravity, d1.level, d2.level], [0, 100, true, 50, 0]);
     const [g1] = handicapped(tgmTap, { handicap: { side: 0, levels: 100 }, goal: 100 });
-    for (let f = 0; f < 200 && g1.phase !== "active"; f++) g1.advanceFrame(0);
+    toActive(g1);
     g1.lock();
     check("  ...at most half the way to the goal (Goal 100: a start at 100 starts at 50, no round won on the first lock)",
         [g1.level >= 50 && g1.level < 100, g1.isGameOver()], [true, false]);
@@ -3065,7 +3030,7 @@ const rowOf = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c))
     m.receiveGarbage({ item: "MIRROR BLOCK" });
     const seen = () => Array.from({ length: WIDTH }, (_, c) => m.getCellAlpha(21, c)).join("");
     const first = [seen(), m.flipWait];
-    for (let f = 0; f < 200 && m.phase !== "active"; f++) m.advanceFrame(0);
+    toActive(m);
     place(m, tetO, 0, 18, 3);
     m.advanceFrame(SOFT_PUSH);
     const turned = [m.phase, m.phaseLength, seen()];
@@ -3126,12 +3091,12 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     clearField(d);
     fill(d, ["####.#####", "####.#####", "####.#####", "....#....."]);
     d.receiveGarbage({ item: "HARD BLOCK" });
-    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    toActive(d);
     const colour = d.getPieceColor();
     place(d, tetI, 1, 17, 2); // vertical I in column 5, rows 17-20: rows 18-20 full
     d.advanceFrame(SOFT_PUSH);
     const rows = [18, 19, 20, 21].map(r => rowText(d, r)), shell = d.getCellColor(17, 4); // the block above keeps its shell
-    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    toActive(d);
     check("Hard Block: the other side's next piece locks in shells; its full rows lose the other blocks but stay, the shells broken, and send nothing",
         [colour, shell, rows, d.takeAttacks(), d.getCell(19, 4), d.getCellColor(19, 4) === d.palette[tetI]],
         [10, 10, ["....#.....", "....#.....", "....#.....", "....#....."], [], tetI, true]);
@@ -3193,7 +3158,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     fill(dv, ["#########."]);
     place(dv, tetI, 1, 18, 7);
     dv.advanceFrame(SOFT_PUSH);
-    for (let f = 0; f < 100 && dv.phase !== "active"; f++) dv.advanceFrame(0);
+    toActive(dv, 100);
     check("  ...TAP Death's level 500 check is single play's: a versus round goes on past it", [dv.level > 500, dv.timerStopped, dv.phase], [true, false, "active"]);
     const [plus] = versusPair(tgmTap, 5, 0, { speed: "plus" });
     clearField(plus);
@@ -3239,7 +3204,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     const [, d] = versusPair(tgmTap, 5, 0, { items: true });
     clearField(d);
     d.receiveGarbage({ item: "TRANSFORM" });
-    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    toActive(d);
     d.gravity = 0;
     place(d, tetT, 0, 5, 3);
     const types = new Set();
@@ -3308,7 +3273,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     placeGb(e, tetI, 1, HEIGHT - 4, 8);
     e.lock();
     const waits = e.pendingGarbage();
-    for (let f = 0; f < 200 && e.phase !== "active"; f++) e.advanceFrame(0);
+    toActive(e);
     check("  ...it rises when the next piece comes, after a clearing lock too", [waits, e.pendingGarbage(), e.takeRisenGarbage()], [1, 0, [1]]);
 }
 {
@@ -3317,7 +3282,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     clearField(d);
     d.receiveGarbage({ item: "DEATH BLOCK" });
     const sniped = d.curPiece_type;
-    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    toActive(d);
     const big = [d.big, d.curCells[d.curPiece_type][0].length, a.attacking()];
     d.advanceFrame(SOFT_PUSH); // TAP's soft drop locks on the ground: falls first
     for (let f = 0; f < 200 && d.phase === "active"; f++) d.advanceFrame(SOFT_PUSH);
@@ -3343,7 +3308,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     d.itemEffects["X-RAY"] = 2;
     d.lock();
     const waited = d.pendingGarbage();
-    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    toActive(d);
     const stack = [];
     for (let r = d.stackTop(); r < HEIGHT; r++) stack.push(rowOf(d, r).some(v => v));
     check("Big piece filling one row: the row collapses before the garbage rises (no gap left in the stack)",
@@ -3391,7 +3356,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     place(s, tetI, 1, 18, 7);
     s.pieceItem = "MIRROR BLOCK";
     s.advanceFrame(SOFT_PUSH);
-    for (let f = 0; f < 100 && s.phase !== "active"; f++) s.advanceFrame(0);
+    toActive(s, 100);
     check("  ...a clear that sets an item off sends it instead of garbage, and the field's other item blocks become normal",
         [s.takeAttacks(), s.itemCells.flat().filter(Boolean)], [[{ lines: 0, item: "MIRROR BLOCK" }], []]);
 
@@ -3400,7 +3365,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     fill(r, ["###......."]);
     r.receiveGarbage({ item: "MIRROR BLOCK", hole: 0 });
     const sniped = [rowText(r, 21), r.curPiece_type, r.phase, r.cutIn];
-    for (let f = 0; f < 100 && r.phase !== "active"; f++) r.advanceFrame(0);
+    toActive(r, 100);
     place(r, tetO, 0, 19, 0); // columns 1-2 in ARS
     r.advanceFrame(SOFT_PUSH);
     const second = rowText(r, 21);
@@ -3441,7 +3406,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
     const [a, d] = versusPair(tgmTap, 5, 0, { items: true });
     clearField(d);
     d.receiveGarbage({ item: "ROLL ROLL" });
-    for (let f = 0; f < 200 && d.phase !== "active"; f++) d.advanceFrame(0);
+    toActive(d);
     d.gravity = 0; // keep it in the air
     place(d, tetT, 0, 5, 3); // as it enters (activeTime 0): its first frame comes next
     d.activeTime = 1;
@@ -3548,7 +3513,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         place(a, tetI, 1, 18, 7);
         a.advanceFrame(HARD_PUSH);
         const sent = a.takeAttacks().map(at => at.lines);
-        for (let f = 0; f < 100 && a.phase !== "active"; f++) a.advanceFrame(0);
+        toActive(a, 100);
         return [sent, rowText(a, 21), a.itemInterval, a.getStats()[0][1]];
     };
     check("TGM3 versus styles: Attack sends 2 more rows for a Tetris, items every 40; Defence one row less and deletes 3 from its bottom, items every 20; Item every 10",
@@ -3583,7 +3548,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
         a.receiveItem(item);
         while (a.phase === "lineclear") a.advanceFrame(0);
         const after = [a.mirrorPieces, rowText(a, 21)];
-        for (let f = 0; f < 400 && a.phase !== "active"; f++) a.advanceFrame(0);
+        toActive(a, 400);
         return [inClear, ...after, a.big, a.hitting(item)];
     };
     check("Death Block received during a line clear makes the next piece big",
@@ -3639,9 +3604,7 @@ const rowText = (g, r) => Array.from({ length: WIDTH }, (_, c) => g.getCell(r, c
 // A game (a versus side with its rival) run to its first piece
 function inPlay(mode, variant, options = {}) {
     if (variant === "versus") return versusPair(mode, 5, 0, options)[0];
-    const g = createGame(mode, variant, 0, 0, {}, options);
-    for (let f = 0; f < 200 && g.phase !== "active"; f++) g.advanceFrame(0);
-    return g;
+    return started(mode, variant, 0, 0, options);
 }
 {
     // Every setup of every mode, with each of its values, applies to a game in play, which plays on
@@ -3679,7 +3642,7 @@ function inPlay(mode, variant, options = {}) {
     // Tetris ready: the I comes next, and dropped into the well clears four lines
     const g = inPlay(guideline, "marathon");
     g.debugSetup("field", "tetris");
-    for (let f = 0; f < 20 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 20);
     const next = g.curPiece_type;
     place(g, tetI, 1, 10, 7);
     g.advanceFrame(HARD_PUSH);
@@ -3689,7 +3652,7 @@ function inPlay(mode, variant, options = {}) {
     // T-spin double: a T turned clockwise from the left drops into the slot by SRS's third kick
     const g = inPlay(guideline, "marathon");
     g.debugSetup("field", "tsd");
-    for (let f = 0; f < 20 && g.phase !== "active"; f++) g.advanceFrame(0);
+    toActive(g, 20);
     const next = g.curPiece_type;
     place(g, tetT, 1, HEIGHT - 4, 2);
     g.advanceFrame(ROTR_PUSH);
@@ -3761,11 +3724,11 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
     check("  ...none in versus or Sakura", off, [false, false, false]);
 }
 {
-    const g = startedMode(arika, "standard");
+    const g = started(arika, "standard");
     g.level = 168; g.frames = 3600; g.splitStart = g.sectionStart = 0; g.section = g.splitSection = 1; g.cools = 0;
     g.coolPending = true; g.coolChecked = true;
     g.level = 200; g.updateSection(); g.noteLevel();
-    const regret = startedMode(arika, "standard");
+    const regret = started(arika, "standard");
     regret.level = 200; regret.frames = 91 * 60; regret.updateSection(); regret.noteLevel();
     check("Splits: TGM3 Master marks a COOL section and a REGRET one", [g.splitMarks[1], regret.splitMarks[0], regret.splits[0]], ["cool", "regret", 91 * 60]);
     const d = inPlay(arika, "standard");
@@ -3794,7 +3757,7 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
 }
 {
     const tetrisAfter = (mode, variant, before, big = false) => {
-        const g = startedMode(mode, variant);
+        const g = started(mode, variant);
         g.bigMode = big; g.tetrises = before; g.setCell(5, 0, 1); // no perfect clear
         g.scoreClear(4, []);
         return g.medals.SK;
@@ -3804,11 +3767,11 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
          [14, 24, 39, 13].map(n => tetrisAfter(arika, "standard", n)), [4, 9, 15].map(n => tetrisAfter(arika, "shirase", n)),
          [0, 1, 3].map(n => tetrisAfter(tgmTap, "standard", n, true))],
         [[1, 2, 3, 2], [1, 2, 3], [1, 2, 3, 0], [1, 2, 3], [1, 2, 3]]);
-    const reach = n => { const g = startedTap(); g.setCell(5, 0, 1); for (let i = 0; i < n; i++) g.scoreClear(4, []); return g.medals.SK; };
+    const reach = n => { const g = started(tgmTap); g.setCell(5, 0, 1); for (let i = 0; i < n; i++) g.scoreClear(4, []); return g.medals.SK; };
     check("  ...10 Tetrises bronze, 20 silver, 35 gold", [reach(9), reach(10), reach(20), reach(35)], [0, 1, 2, 3]);
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     g.setCell(5, 0, 1); // no perfect clear
     const co = [];
     for (const n of [2, 2, 2, 2, 1, 2, 2, 2]) { g.scoreClear(n, []); co.push(g.medals.CO); }
@@ -3821,7 +3784,7 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
     check("  ...Big: 2, 3, 4", big.medals.CO, 1);
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     clearField(g);
     const ac = [];
     for (let i = 0; i < 4; i++) { g.scoreClear(1, []); ac.push(g.medals.AC); }
@@ -3830,7 +3793,7 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
     check("Medals AC: perfect clears 1, 2, 3", [ac, g.bravos], [[1, 2, 3, 3], 4]);
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     const blocks = n => { clearField(g); for (let k = 0; k < n; k++) g.setCell(HEIGHT - 1 - Math.floor(k / WIDTH), k % WIDTH, 1); };
     g.setCell(5, 0, 1);
     const re = [];
@@ -3843,7 +3806,7 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
 }
 {
     const ro = (pieces, turns, last) => {
-        const g = startedTap();
+        const g = started(tgmTap);
         g.setCell(5, 0, 1);
         g.level = 299; g.rangePieces = pieces; g.rangeTurns = turns; g.pieceTurns = last;
         g.scoreClear(1, []);
@@ -3851,18 +3814,18 @@ function splitAfterDouble(mode, variant, level, seconds, options = {}) {
     };
     check("Medals RO: 1.2 rotations a piece or more by level 300, at most 4 a piece counted",
         [ro(9, 8, 4), ro(9, 7, 6), ro(9, 7, 4)], [[1, 1, 0], [0, 1, 0], [0, 1, 0]]);
-    const g = startedTap();
+    const g = started(tgmTap);
     g.medals.RO = 1; g.roRange = 1; g.level = 699; g.rangePieces = 10; g.rangeTurns = 14; g.pieceTurns = 0;
     g.scoreClear(1, []);
     check("  ...each range passed a tier more", [g.medals.RO, g.roRange], [2, 2]);
-    const t = startedTap();
+    const t = started(tgmTap);
     clearField(t);
     place(t, tetT, 0, 5, 3);
     t.advanceFrame(ROTR_PUSH); t.advanceFrame(ROTR_RELEASE); t.advanceFrame(ROTR_PUSH);
     check("  ...rotations in play are counted", t.pieceTurns, 2);
 }
 {
-    const g = startedTap();
+    const g = started(tgmTap);
     g.setCell(5, 0, 1);
     g.roll = "fading"; g.tetrises = 9;
     g.scoreClear(4, []);
