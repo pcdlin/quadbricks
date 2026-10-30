@@ -45,8 +45,9 @@ const FIELD_TOP = -18;  // the highest row kept: 20 visible rows + 20-row buffer
 // Start countdown 3, 2, 1, a second each; the frame after it is the first to take input
 const COUNTDOWN_STEPS = 3, COUNTDOWN_STEP_FRAMES = 60;
 
-// Rows per frame the stack falls into cleared rows during a line clear delay (presentation)
-const LINE_DROP_SPEED = 0.5;
+// Rows per frame the stack falls into cleared rows during a line clear delay, on average: it speeds up as it goes
+// (presentation)
+const LINE_DROP_SPEED = 1.25;
 // Frames the stack waits before it falls, so the clear's confetti and flash show first; shortened
 // when the delay is too short to fit the whole fall after it (the delay itself never changes)
 const LINE_DROP_PAUSE = 12;
@@ -492,15 +493,16 @@ class RuleGame {
     }
 
     // How far the stack at `row` has fallen so far (presentation only: the field
-    // collapses when the delay ends); sub: share of the next frame already shown (0..1),
-    // for displays faster than the game
+    // collapses when the delay ends), speeding up like a fall so it lands with a snap; sub: share
+    // of the next frame already shown (0..1), for displays faster than the game
     getDropOffset(row, sub = 0) {
         const dist = this.getDropDistance(row);
         if (!dist) return 0;
         const start = this.dropStartFrame(), land = this.dropLandFrame(row);
         const now = this.phaseCounter + sub;
         if (now >= land) return dist;
-        return Math.max(0, dist * (now - start) / (land - start));
+        const k = Math.max(0, (now - start) / (land - start));
+        return dist * k * k;
     }
 
     // Frames since the stack at `row` landed in this line clear delay (sub as above), −1

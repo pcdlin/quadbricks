@@ -248,7 +248,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   `endTitle/endSub`, `getStats()` (side panel rows; first row is `[RULESET, VARIANT]`),
   `getDropDistance(row)`/`getDropOffset(row)`/`getDropLandedFor(row)` (during a line clear delay the
   stack waits `LINE_DROP_PAUSE` frames so the confetti shows first (less if the delay can't fit the
-  longest fall after it), (or the engine's `dropPause`, for the Streaks dissolve) then falls into the cleared rows at `LINE_DROP_SPEED` rows per frame, faster if the delay is shorter,
+  longest fall after it), (or the engine's `dropPause`, for the Streaks dissolve) then falls into the cleared rows speeding up like a fall, `LINE_DROP_SPEED` (1.25) rows per frame on average (snappier than the half row it was, the user's request), faster if the delay is shorter,
   with a trail, `drawLineDropTrails()`; the field itself collapses when the delay ends).
 - `shapes`, `pieceCells` (`shapeCells(shapes)`: `[type][rotation]` → `[row, col]` offsets, what the
   rules and the engine iterate) and `palette` (piece type → colour index) per rule set; `nextCount` (TGM1, TAP, NES and GB: 1, so the

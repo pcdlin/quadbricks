@@ -165,14 +165,14 @@ const piecesOf = g => g.queue.slice();
     g.phaseCounter = g.phaseLength;
     check("  ...ends at the full distance", g.getDropOffset(10), 4);
     const at = (c, row) => { g.phaseCounter = c; return [g.getDropOffset(row), g.getDropLandedFor(row)]; };
-    check("  ...waits 12 frames (confetti), then falls at a fixed speed (half a row per frame) and lands early, a 1-row drop sooner",
-        [at(4, 10), at(12, 10), at(16, 10), at(20, 10), at(24, 10), at(12, 20), at(13, 20), at(14, 20)],
-        [[0, -1], [0, -1], [2, -1], [4, 0], [4, 4], [0, -1], [0.5, -1], [1, 0]]);
+    check("  ...waits 12 frames (confetti), then falls speeding up (1.25 rows per frame on average) and lands early, a 1-row drop sooner",
+        [at(4, 10), at(12, 10), at(14, 10), at(16, 10), at(20, 10), at(12, 20), at(13, 20), at(14, 20)],
+        [[0, -1], [0, -1], [1, -1], [4, 0], [4, 4], [0, -1], [1, 0], [1, 1]]);
     g.phaseLength = 15;
-    check("  ...a shorter delay shortens the wait so the longest fall still ends with it", [at(7, 10), at(11, 10), at(15, 10), at(8, 20), at(9, 20)],
-        [[0, -1], [2, -1], [4, 0], [0.5, -1], [1, 0]]);
-    g.phaseLength = 6;
-    check("  ...a delay too short for that speed still lands the rows by its end", [at(3, 10), at(6, 10)], [[2, -1], [4, 0]]);
+    check("  ...a shorter delay shortens the wait so the longest fall still ends with it", [at(7, 10), at(13, 10), at(15, 10), at(11, 20), at(12, 20)],
+        [[0, -1], [1, -1], [4, 0], [0, -1], [1, 0]]);
+    g.phaseLength = 3;
+    check("  ...a delay too short for that speed still lands the rows by its end", [at(0, 10), at(3, 10)], [[0, -1], [4, 0]]);
     g.phaseLength = 40;
     g.phaseCounter = 0;
     while (g.phase === "lineclear") { g.advanceFrame(0); f++; }
