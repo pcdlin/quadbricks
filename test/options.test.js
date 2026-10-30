@@ -77,7 +77,10 @@ const looks = o => THEMED_IDS.map(id => o.look(id));
     check("At first every themed setting follows the first theme",
         [o.theme, THEMED_IDS.map(id => o[id]), looks(o)], ["space", THEMED_IDS.map(() => FOLLOW_THEME), ["space", "flat", "sparks", "flare", "streak"]]);
     o.theme = "gallery";
-    check("Another theme brings its background, block style, confetti, clear burst and drop trail", looks(o), ["gallery", "neon", "neon", "rings", "neon"]);
+    check("Another theme brings its background, block style, confetti, clear burst and drop trail", looks(o), ["gallery", "wire", "neon", "rings", "neon"]);
+    o.theme = "pulse";
+    check("Pulse brings Wire blocks, Streaks, the Beam and the Pour trail", looks(o), ["pulse", "wire", "streaks", "beam", "pour"]);
+    o.theme = "gallery";
     o.tileset = "gem";
     check("A setting of its own wins over the theme's", looks(o), ["gallery", "gem", "neon", "rings", "neon"]);
 }
@@ -94,6 +97,7 @@ for (const [id, theme] of Object.entries(THEMES)) {
     check("Saved with themes: every setting as saved", [p.theme, looks(p)], ["lines", ["space", "flat", "paper", "flare", "chalk"]]);
     check("A drop trail saved on or off: following the theme, or off",
         [loaded({ theme: "undersea", trail: true }).look("trail"), loaded({ theme: "undersea", trail: false }).look("trail")], ["water", "off"]);
+    check("The Neon block style saved: Wire, which replaced it", loaded({ theme: "space", background: FOLLOW_THEME, tileset: "neon" }).tileset, "wire");
 }
 {
     const r = new SectionRecords(); // no storage here: kept in memory

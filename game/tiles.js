@@ -73,6 +73,34 @@ function backlitRim(g, size, inset, alpha, rgb, depth) {
     }
 }
 
+// Glow colours for Solid and Wire, by palette index: the light colours pushed brighter and more saturated (the neutral
+// grey a cool white, versus garbage a muted grey); glowColor() falls back to the colour's light one
+const GLOW_COLORS = [null, "#22f4ff", "#e05cff", "#ff9a2e", "#7c7dff", "#2dff7a", "#ff3b5c", "#ffe93a", "#e8ecff", "#8a90a8"];
+function glowColor(index, col = PIECE_COLORS[index]) {
+    return GLOW_COLORS[index] || col.light;
+}
+// "#rrggbb" helpers: k of the way to another such colour, and with an alpha (as "rgba(...)")
+function mixHex(a, b, k) {
+    const x = parseInt(a.slice(1), 16), y = parseInt(b.slice(1), 16);
+    return "#" + [16, 8, 0].map(sh => Math.round((x >> sh & 255) + ((y >> sh & 255) - (x >> sh & 255)) * k).toString(16).padStart(2, "0")).join("");
+}
+function hexAlpha(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`;
+}
+
+// Solid's and Wire's ghost on the path set: a faint fill of the glow colour and a dashed rim of it, the dashes and the
+// line scaled by k (the block's size over a cell's)
+function pulseGhost(g, glow, k) {
+    g.fillStyle = hexAlpha(glow, 0.1);
+    g.fill();
+    g.setLineDash([4 * k, 2.5 * k]);
+    g.strokeStyle = hexAlpha(glow, 0.75);
+    g.lineWidth = Math.max(1, 1.3 * k);
+    g.stroke();
+    g.setLineDash([]);
+}
+
 // A repeatable pseudo-random sequence in [0, 1), so a style's texture is the same every time
 function seededRandom(seed) {
     let s = seed;
@@ -329,33 +357,56 @@ const TILESETS = {
         },
     },
 
-    // Dark glass cells with glowing coloured outlines
-    neon: {
-        name: "Neon",
-        face: [2.5, 0.12],
-        pad: (style) => style === "active" ? 20 : style === "ghost" ? 0 : 12,
-        draw(g, col, size, style) {
-            const [inset, round] = this.face;
-            const w = size - inset * 2;
-            const r = size * round;
-            g.beginPath();
-            g.roundRect(inset, inset, w, w, r);
+    // Flat squares of light a hair apart, lighter at the top, in a faint glow of their own (from Pulse's draft)
+    solid: {
+        name: "Solid",
+        face: [2, 0.07],
+        halo: { blur: 6, alpha: [0.14, 0.45], strength: 1 },
+        pad: () => 0,
+        trail: (index) => glowColor(index),
+        draw(g, col, size, style, index) {
+            const k = size / CELL, inset = this.face[0] * k, w = size - inset * 2, r = size * this.face[1], glow = glowColor(index, col);
+            const path = () => { g.beginPath(); g.roundRect(inset, inset, w, w, r); };
             if (style === "ghost") {
-                g.strokeStyle = col.base + "aa";
-                g.lineWidth = 2.5;
-                g.stroke();
+                path();
+                pulseGhost(g, glow, k);
                 return;
             }
             const active = style === "active";
-            g.fillStyle = col.dark + (active ? "88" : "55");
+            const face = g.createLinearGradient(0, inset, 0, inset + w);
+            face.addColorStop(0, mixHex(glow, "#ffffff", active ? 0.35 : 0.08));
+            face.addColorStop(1, active ? glow : mixHex(col.base, "#000000", 0.15));
+            path();
+            g.fillStyle = face;
+            g.globalAlpha = active ? 1 : 0.88;
             g.fill();
-            g.shadowColor = col.light;
-            g.shadowBlur = active ? 22 : 12;
-            // settled edges use the light colour too, a little thicker, so they read against the well
-            g.strokeStyle = col.light;
-            g.lineWidth = active ? 2.5 : 2;
-            for (let i = 3; i > 0; i--) g.stroke(); // each pass adds to the glow
-            g.shadowBlur = 0;
+            g.globalAlpha = 1;
+        },
+    },
+
+    // Outlines only, lit from the rim: a thin bright line round a nearly empty cell, in a faint glow of its own (Pulse's
+    // and Night Gallery's); the gap
+    // round it and the line scale with the block, so a small one (in the preview) looks the same
+    wire: {
+        name: "Wire",
+        face: [3.5, 0.067],
+        halo: { blur: 6, alpha: [0.14, 0.45], strength: 0.8 },
+        pad: () => 0,
+        trail: (index) => glowColor(index),
+        draw(g, col, size, style, index) {
+            const k = size / CELL, inset = this.face[0] * k, w = size - inset * 2, r = size * this.face[1], glow = glowColor(index, col);
+            g.beginPath();
+            g.roundRect(inset, inset, w, w, r);
+            if (style === "ghost") {
+                pulseGhost(g, glow, k);
+                return;
+            }
+            const active = style === "active";
+            g.fillStyle = hexAlpha(col.base, active ? 0.18 : 0.07);
+            g.fill();
+            g.strokeStyle = active ? mixHex(glow, "#ffffff", 0.3) : glow;
+            g.lineWidth = Math.max(0.75, (active ? 2 : 1.4) * k);
+            g.stroke();
         },
     },
 

@@ -305,6 +305,7 @@ class RuleGame {
         this.phaseCounter = 0;
         this.phaseLength = 0;
         this.pendingRows = [];
+        this.dropPause = null; // presentation: frames the stack waits before falling into a clear (the engine's), else LINE_DROP_PAUSE
 
         // Input state
         this.held = { left: false, right: false, soft: false, rotl: false, rotr: false, rot180: false, hold: false };
@@ -477,10 +478,10 @@ class RuleGame {
     }
 
     // Frame of the line clear delay at which the whole stack starts to fall: after
-    // LINE_DROP_PAUSE, or sooner so the longest fall still fits in the delay
+    // LINE_DROP_PAUSE (or the engine's dropPause), or sooner so the longest fall still fits in the delay
     dropStartFrame() {
         const longest = Math.ceil(this.pendingRows.length / LINE_DROP_SPEED);
-        return clamp(this.phaseLength - longest, 0, LINE_DROP_PAUSE);
+        return clamp(this.phaseLength - longest, 0, this.dropPause ?? LINE_DROP_PAUSE);
     }
 
     // Frame of the line clear delay at which the stack at `row` lands: it falls at

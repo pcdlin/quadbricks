@@ -1,5 +1,6 @@
 // Backdrop pass of the WebGL renderer (renderer.js), drawn first each frame: the backdrop
-// picture, its colour wash, field lines, holographic foil, water, light rays or clouds over a glacier lake, the line-clear shafts, contours or glitter and drifting
+// picture, its colour wash, field lines, holographic foil, water, light rays, clouds over a glacier lake or Pulse's lattice and
+// ribbon, the line-clear shafts, contours or glitter and drifting
 // lights, the board glow and the line-clear shockwaves. These are large, soft effects computed per pixel in shaders. The engine
 // builds a scene description each frame (see Engine.backdropScene).
 // Coordinates are device pixels, y down, unless noted.
@@ -283,6 +284,51 @@ void main() {
         c = vec3(a);
     }
     gl_FragColor = vec4(c, a);
+}`;
+
+// The Pulse background's moving parts, added: a lattice of faint dots (a dot every uLattice.x backdrop logical units) that
+// light up where a ripple from a line clear passes (uRipple, view logical: centre, radius, alpha; uLattice.y their packet's
+// width), and one ribbon of five fine lines drifting slowly across the view, twisting, fading out at the view's ends, its
+// colour running from uPulseRgb[1] to uPulseRgb[2] (the dots take uPulseRgb[0]). uPulse: strength, time (seconds), the
+// ribbon's strength, the dots' light at rest.
+const PULSE_FS = `
+precision highp float;
+uniform vec2 uSize;
+uniform vec3 uBgView;            // scale, offset x, offset y of the backdrop's logical view
+uniform vec3 uView;              // the same for the logical view, the ripples'
+uniform vec4 uPulse;
+uniform vec2 uLattice;
+uniform vec3 uPulseRgb[3];
+uniform vec4 uRipple[${BACKDROP_MAX_RINGS}];
+void main() {
+    vec2 p = vec2(gl_FragCoord.x, uSize.y - gl_FragCoord.y);
+    vec2 q = (p - uBgView.yz) / uBgView.x;
+    float t = uPulse.y, s = uBgView.x;
+    // the nearest lattice point, its distance in device pixels, and the ripples' light there
+    vec2 at = floor(q / uLattice.x + 0.5) * uLattice.x;
+    float rad = max(0.7, 0.8 * s), d = length(q - at) * s;
+    float dotMask = 1.0 - smoothstep(rad - 0.6, rad + 0.6, d);
+    vec2 v = (at * s + uBgView.yz - uView.yz) / uView.x;
+    float light = uPulse.w;
+    for (int i = 0; i < ${BACKDROP_MAX_RINGS}; i++) {
+        if (uRipple[i].w <= 0.0) continue;
+        float off = (length(v - uRipple[i].xy) - uRipple[i].z) / uLattice.y;
+        light += uRipple[i].w * exp(-off * off);
+    }
+    vec3 c = uPulseRgb[0] * dotMask * min(light, 1.6);
+    // the ribbon
+    float base = 446.0 + 40.0 * sin(t * 0.05);
+    float twist = sin(q.x * 0.0045 + t * 0.16);
+    float mid = base + 70.0 * sin(q.x * 0.0032 + t * 0.105) + 26.0 * sin(q.x * 0.011 - t * 0.37);
+    float ribbon = 0.0;
+    for (int j = 0; j < 5; j++) {
+        float k = float(j) - 2.0;
+        float y = mid + k * (2.0 + 7.0 * twist * twist) * (1.0 + 0.3 * sin(q.x * 0.02 + t + float(j)));
+        ribbon += 1.0 - smoothstep(0.0, 1.1, abs(q.y - y) * s);
+    }
+    float ends = smoothstep(-200.0, 150.0, q.x) * (1.0 - smoothstep(650.0, 1000.0, q.x));
+    c += mix(uPulseRgb[1], uPulseRgb[2], smoothstep(0.0, 800.0, q.x)) * ribbon * ends * uPulse.z;
+    gl_FragColor = vec4(c * uPulse.x, 0.0);
 }`;
 
 // Clear shafts (Clear burst: Shafts, Eclipse's), added: light breaking through where rows cleared, a fan of rays from
@@ -597,6 +643,7 @@ class GLBackdrop {
         this.beam = new Float32Array(2 * 4);
         this.occluder = new Float32Array(2 * 4);
         this.bumpColor = new Float32Array(BACKDROP_MAX_BUMPS * 3);
+        this.pulseRgb = new Float32Array(9);
         renderer.restoreHandlers.push(() => this.setup());
         this.setup();
     }
@@ -609,6 +656,7 @@ class GLBackdrop {
         this.water = this.r.program(FULLSCREEN_VS, WATER_FS, [["aPos", 2]]);
         this.beamProgram = this.r.program(FULLSCREEN_VS, BEAMS_FS, [["aPos", 2]]);
         this.glacierProgram = this.r.program(FULLSCREEN_VS, GLACIER_FS, [["aPos", 2]]);
+        this.pulseProgram = this.r.program(FULLSCREEN_VS, PULSE_FS, [["aPos", 2]]);
         this.contour = this.r.program(FULLSCREEN_VS, CONTOUR_FS, [["aPos", 2]]);
         this.shaftProgram = this.r.program(FULLSCREEN_VS, SHAFTS_FS, [["aPos", 2]]);
         this.glitter = this.r.program(FULLSCREEN_VS, GLITTER_FS, [["aPos", 2]]);
@@ -649,6 +697,8 @@ class GLBackdrop {
     //   water: null or {rgb, strength, time},
     //   beams: null or {lights: up to two of {x, y, strength, radius, occluder: [cx, cy, hw, hh]} (view logical), rgb, time},
     //   glacier: null or {strength, time, shore (backdrop logical y), pulse},
+    //   pulse: null or {strength, time, ribbon, rest, spacing, band (the ripples' width), rgb: [dots, ribbon's left, its right],
+    //     ripples: [{x, y, r, a}] (view logical)},
     //   shafts: [{x, y, r, spread, rgb, a}] (view logical; Engine.shaftShapes),
     //   contours: [{x, y, r, width, hue, a, seed, spacing}] (view logical; Engine.contourShapes),
     //   glitter: [{x, y, r, width, hue, a}] (same; Engine.glitterShapes), facet: the glitter's facet width (backdrop logical),
@@ -767,6 +817,29 @@ class GLBackdrop {
             gl.uniform2f(p.u("uSize"), width, height);
             gl.uniform3fv(p.u("uBgView"), scene.bgView);
             gl.uniform4f(p.u("uGlacier"), strength, time, shore, pulse);
+            this.drawFullscreen(p);
+        }
+
+        // Pulse's lattice and ribbon
+        if (scene.pulse) {
+            const { strength, time, ribbon, rest, spacing, band, rgb, ripples } = scene.pulse;
+            p = this.pulseProgram;
+            gl.useProgram(p.prog);
+            gl.blendFunc(gl.ONE, gl.ONE);
+            gl.uniform2f(p.u("uSize"), width, height);
+            gl.uniform3fv(p.u("uBgView"), scene.bgView);
+            gl.uniform3fv(p.u("uView"), scene.view);
+            gl.uniform4f(p.u("uPulse"), strength, time, ribbon, rest);
+            gl.uniform2f(p.u("uLattice"), spacing, band);
+            const colors = this.pulseRgb;
+            rgb.forEach((c, i) => colors.set(c, i * 3));
+            gl.uniform3fv(p.u("uPulseRgb"), colors);
+            const ring = this.ring;
+            ring.fill(0); // alpha 0: slot unused
+            ripples.slice(-BACKDROP_MAX_RINGS).forEach((w, i) => {
+                ring[i * 4] = w.x; ring[i * 4 + 1] = w.y; ring[i * 4 + 2] = w.r; ring[i * 4 + 3] = w.a;
+            });
+            gl.uniform4fv(p.u("uRipple"), ring);
             this.drawFullscreen(p);
         }
 

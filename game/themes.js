@@ -253,6 +253,33 @@ const GLACIER_EDGE = "rgba(255,255,255,0.55)"; // a panel's rim
 const GLACIER_CARD_EDGE = "rgba(60,130,180,0.35)";
 const GLACIER_LIT = "rgba(40,140,210,0.85)"; // a selected card's rim and bar
 
+// Pulse: its accent hue swings PULSE_HUE ± PULSE_HUE_SWING (cyan to violet) as the backdrop's hue turns with clears
+const PULSE_HUE = 222, PULSE_HUE_SWING = 40;
+const PULSE_LATTICE = 22; // logical units between the backdrop's dots
+const PULSE_DOT_REST = 0.12; // their light at rest; a ripple adds up to about PULSE_RIPPLE_ALPHA
+const PULSE_RIPPLE_REACH = 900, PULSE_RIPPLE_BAND = 30, PULSE_RIPPLE_ALPHA = 1.4; // a clear's ripple: how far, how wide
+const PULSE_RIBBON = 0.07, PULSE_RIBBON_SWELL = 0.6; // the ribbon's lines, and their extra on a clear's pulse
+const PULSE_WELL_ALPHA = 0.86; // the well's fill (0.96 with effects off)
+const PULSE_FLOOR_GLOW = [180, 32], PULSE_FLOOR_ALPHA = [0.08, 0.3]; // the floor's pool of light: half its width and height; at rest, a lock's extra
+const PULSE_RAIL_TOP = 18, PULSE_RAIL_SPEED = 0.08, PULSE_RAIL_LEN = 90; // the rails past the well's top; their pulse
+const PULSE_SWEEP_PERIOD = 12; // seconds between the wordmark's light sweeps
+const PULSE_RUNNER_SPEED = 0.12, PULSE_RUNNER_DOTS = 20; // the light round a selected card: turns a second, its length
+const PULSE_POINT = "rgba(190,205,255,0.09)"; // a point at each cell corner
+const PULSE_LABEL = "rgba(150,165,210,0.9)";
+const PULSE_RULE = "rgba(160,180,255,0.14)";
+const PULSE_EDGE = "rgba(160,180,255,0.12)";
+const PULSE_MARK = "rgba(190,200,235,0.85)";
+const pulseFrac = (x) => x - Math.floor(x);
+
+// The point d along a rectangle's edge, clockwise from its top left (d wraps round)
+function perimeterPoint(x, y, w, h, d) {
+    d = ((d % (2 * (w + h))) + 2 * (w + h)) % (2 * (w + h));
+    if (d < w) return [x + d, y];
+    if ((d -= w) < h) return [x + w, y + d];
+    if ((d -= h) < w) return [x + w - d, y + h];
+    return [x, y + h - (d - w)];
+}
+
 function glacierMassif(x) {
     const p = GLACIER_MASSIF, i = p.findIndex(([px]) => px > x);
     const y = i < 0 ? p[p.length - 1][1] : i === 0 ? p[0][1]
@@ -1576,21 +1603,203 @@ const BACKGROUNDS = {
             return (this.flakes.tex[t] = r.texture(c));
         },
     },
+
+    // Pulse: futuristic and minimal. Near black with a lattice of faint dots that light up as a clear's ripple runs through
+    // them and one ribbon of fine lines drifting across (GLBackdrop's PULSE_FS); no boxes: the well a dark pane between two
+    // rails with a pulse of light climbing each and a floor that glows as pieces lock, hairline labels; light, wide type;
+    // the next pieces slide up a place as the queue moves (slideNext)
+    pulse: {
+        name: "Pulse",
+        ink: [234 / 255, 240 / 255, 255 / 255],
+        slideNext: true,
+        bandOut: 0, // no frame: the countdown's and banners' bands stop at the well's sides, inside the rails
+        picture(g, x0, y0, x1, y1) {
+            g.fillStyle = "#020308";
+            g.fillRect(x0, y0, x1 - x0, y1 - y0);
+            const deep = g.createRadialGradient(VIEW_W / 2, VIEW_H * 0.55, 0, VIEW_W / 2, VIEW_H * 0.55, Math.max(x1 - x0, y1 - y0) * 0.7);
+            deep.addColorStop(0, "rgba(30,50,120,0.16)");
+            deep.addColorStop(1, "rgba(0,0,0,0)");
+            g.fillStyle = deep;
+            g.fillRect(x0, y0, x1 - x0, y1 - y0);
+            vignette(g, x0, y0, x1, y1, 0.45);
+        },
+        // light type: thin at display sizes, never heavier than medium below them; capitals and numbers wide, text with
+        // small letters in it (descriptions, help) at its usual width, as in the draft, so it still fits where it did
+        font(size, weight, s) {
+            const wide = !/\p{Ll}/u.test(s);
+            return size >= 22 ? { weight: Math.min(weight, 300), stretch: wide ? "expanded" : "normal" }
+                : { weight: Math.min(weight, 500), stretch: wide ? "semi-expanded" : "normal" };
+        },
+        hue(e) { return this.beamHue(e.hue); },
+        // the accent for a backdrop hue (the clear beams' too)
+        beamHue(hue) { return PULSE_HUE + PULSE_HUE_SWING * Math.sin((hue - HUE_DEFAULT) * Math.PI / 180); },
+        ambient() { return { blobs: [], orbs: [] }; },
+        // the lattice is still with the animated backdrop or effects off, the ribbon too; the ripples come with clears
+        pulse(e) {
+            const moving = e.options.effects && e.options.backdrop, hue = this.hue(e);
+            const ripples = e.GAMESTATE !== STATE_GAME ? [] : e.rings.map(ring => {
+                const k = 1 - ring.life / ring.span; // 0 -> 1
+                return {
+                    x: ring.gx + BOARD_X + BOARD_W / 2, y: ring.y,
+                    r: 20 + (1 - Math.pow(1 - k, 1.6)) * PULSE_RIPPLE_REACH,
+                    a: Math.pow(1 - k, 1.5) * (0.6 + 0.2 * ring.power) * ring.k * PULSE_RIPPLE_ALPHA,
+                };
+            });
+            return {
+                strength: e.softEffectScale(), time: moving ? e.clock / 60 : 0,
+                ribbon: PULSE_RIBBON * (1 + (moving ? PULSE_RIBBON_SWELL * e.pulse : 0)), rest: PULSE_DOT_REST,
+                spacing: PULSE_LATTICE, band: PULSE_RIPPLE_BAND,
+                rgb: [hslToRgb(hue, 70, 72), hslToRgb(hue - 20, 100, 62), hslToRgb(hue + 60, 100, 66)],
+                ripples,
+            };
+        },
+        glowRgb(e) { return hslToRgb(this.hue(e), 90, 45); },
+        // a dark pane, a point at each cell corner, a rail each side (a pulse of light climbing it, lit by locks) and
+        // a floor that glows as pieces lock
+        frame(e, [x, y, w, h], exam) {
+            const r = e.r, hue = this.hue(e), lit = clamp(e.board.lockGlow / LOCK_GLOW_LIFE, 0, 1);
+            const wx = x + 8, wy = y + 8, ww = w - 16, wh = h - 16; // the well
+            r.rect(wx, wy, ww, wh, [2 / 255, 3 / 255, 9 / 255, e.options.effects ? PULSE_WELL_ALPHA : 0.96]);
+            r.shape(wx, wy, ww, wh, { fill: [hsla(hue, 90, 40, 0), hsla(hue, 90, 40, 0.06 + 0.06 * e.pulse)], fillY: [wy, wy + wh] });
+            const rows = e.boardH / CELL;
+            for (let c = 1; c < WIDTH; c++) {
+                for (let row = 1; row < rows; row++) r.rect(BOARD_X + c * CELL - 0.5, e.boardY + row * CELL - 0.5, 1, 1, PULSE_POINT);
+            }
+            const top = wy - PULSE_RAIL_TOP, rail = exam ? goldAlpha(0.6 + 0.35 * e.pulse) : hsla(hue, 100, 66, 0.4 + 0.3 * lit);
+            const moving = e.options.effects && e.options.backdrop;
+            [wx - 1, wx + ww].forEach((rx, side) => {
+                r.shape(rx, top, 1, wh + PULSE_RAIL_TOP, { fill: [[rail[0], rail[1], rail[2], 0], rail], fillY: [top, wy + wh] });
+                if (!moving) return;
+                const p = pulseFrac(e.clock / 60 * PULSE_RAIL_SPEED + side * 0.5), py = wy + wh - p * (wh + PULSE_RAIL_TOP);
+                const head = PULSE_RAIL_LEN * 0.15, bright = hsla(hue + 40, 100, 80, 0.7 * (1 - p)), dark = hsla(hue, 100, 60, 0);
+                r.shape(rx - 0.25, py, 1.5, head, { fill: [hsla(hue + 40, 100, 75, 0), bright], fillY: [py, py + head] });
+                r.shape(rx - 0.25, py + head, 1.5, PULSE_RAIL_LEN - head, { fill: [bright, dark], fillY: [py + head, py + PULSE_RAIL_LEN] });
+            });
+            r.save();
+            r.blendMode = "add";
+            const a = r.globalAlpha, [gw, gh] = PULSE_FLOOR_GLOW; // a soft pool of light on the floor, flaring as pieces lock
+            r.globalAlpha = a * (PULSE_FLOOR_ALPHA[0] + PULSE_FLOOR_ALPHA[1] * lit);
+            r.image(this.floorTexture(r, hue + 30), wx + ww / 2 - gw, wy + wh - gh, gw * 2, gh * 2);
+            r.globalAlpha = a * (0.55 + 0.45 * lit);
+            r.image(this.lineTexture(r), wx - 18, wy + wh - 16, ww + 36, 32);
+            r.restore();
+        },
+        // The floor's pool of light in a hue, rendered once per 15° of it: a round glow, from the hue lightened at its
+        // centre to nothing at its edge (drawn squashed into an ellipse)
+        floorTexture(r, hue) {
+            const step = Math.round(((hue % 360) + 360) % 360 / 15) % 24;
+            this.floor = this.floor || [];
+            if (this.floor[step]) return this.floor[step];
+            const n = 128, c = document.createElement("canvas");
+            c.width = c.height = n;
+            const g = c.getContext("2d"), glow = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+            glow.addColorStop(0, `hsla(${step * 15},100%,70%,1)`);
+            glow.addColorStop(1, `hsla(${step * 15 - 30},100%,50%,0)`);
+            g.fillStyle = glow;
+            g.fillRect(0, 0, n, n);
+            return (this.floor[step] = r.texture(c));
+        },
+        panel() {}, // no boxes: the pieces stand on the dark
+        label(e, s, x, y, w, size, spacing) {
+            e.text(s, x, y, { size, weight: 600, color: PULSE_LABEL, spacing });
+            const tw = e.measureText(s, size, 600, spacing);
+            if (w - tw - 8 > 4) e.r.rect(x + tw + 8, y, w - tw - 8, 1, PULSE_RULE);
+        },
+        // hairline cards; the selected one lit, with a light running round it
+        card(e, x, y, w, h, radius, selected, accent) {
+            const r = e.r, hue = this.hue(e);
+            r.shape(x, y, w, h, {
+                radius: 6, lineWidth: 1,
+                fill: selected ? hsla(hue, 80, 50, 0.09) : "rgba(10,12,24,0.5)",
+                stroke: selected ? hsla(hue, 100, 72, 0.4) : PULSE_EDGE,
+            });
+            if (!selected) return;
+            r.shape(x + 1, y + 8, 2, h - 16, { radius: 1, fill: accent }); // clear of the text on tight cards
+            if (!e.options.effects) return;
+            const head = pulseFrac(e.clock / 60 * PULSE_RUNNER_SPEED) * 2 * (w + h), color = hsla(hue + 30, 100, 80, 1);
+            r.save();
+            r.blendMode = "add";
+            const a = r.globalAlpha;
+            for (let i = 0; i < PULSE_RUNNER_DOTS; i++) {
+                const [px, py] = perimeterPoint(x, y, w, h, head - i * 3);
+                r.globalAlpha = a * (1 - i / PULSE_RUNNER_DOTS) * 0.9;
+                r.rect(px - 1, py - 1, 2, 2, color);
+            }
+            r.restore();
+        },
+        // the seven colours as small lights
+        stripe(e, x, y, w, h) {
+            const d = h + 1, gap = (w - d) / 6;
+            for (let t = 1; t <= 7; t++) e.r.shape(x + (t - 1) * gap, y + h / 2 - d / 2, d, d, { radius: d / 2, fill: PIECE_COLORS[t].light });
+        },
+        // a thin, wide wordmark, a light sweeping across it now and then, over a line of light and the seven lights
+        wordmark(e, cx) {
+            const r = e.r, size = Math.min(64, Math.floor(64 * (e.layout.view[2] - 48) / e.measureText("QUADBRICKS", 64, 200, 14)));
+            const style = { size, weight: 200, color: PULSE_MARK, align: "center", spacing: Math.round(size * 14 / 64) };
+            const w = e.text("QUADBRICKS", cx, 150, style);
+            if (e.options.effects) {
+                const sx = cx - w / 2 + (pulseFrac(e.clock / 60 / PULSE_SWEEP_PERIOD) * 2.4 - 0.3) * w;
+                for (let i = -3; i <= 3; i++) {
+                    r.save();
+                    r.clip(sx + i * 8 - 4, 100, 8, 100);
+                    r.globalAlpha *= Math.exp(-i * i / 4);
+                    e.text("QUADBRICKS", cx, 150, { ...style, color: "#ffffff" });
+                    r.restore();
+                }
+            }
+            r.save();
+            r.blendMode = "add";
+            r.globalAlpha *= 0.7;
+            r.image(this.lineTexture(r), cx - 260, 186 - 16, 520, 32);
+            r.restore();
+            this.stripe(e, cx - 36, 205, 72, 3);
+        },
+        // A line of light fading out towards its ends, with a soft glow round it, rendered once per resolution: 200 × 32
+        // logical units, the line along the middle
+        lineTexture(r) {
+            const res = r.s;
+            if (this.line && this.line.res === res) return this.line.tex;
+            if (this.line) r.releaseTexture(this.line.tex);
+            const w = 200, h = 32, c = document.createElement("canvas");
+            c.width = Math.ceil(w * res);
+            c.height = Math.ceil(h * res);
+            const g = c.getContext("2d");
+            g.scale(res, res);
+            const glow = g.createLinearGradient(0, 0, 0, h);
+            glow.addColorStop(0, "rgba(120,180,255,0)");
+            glow.addColorStop(0.5, "rgba(120,180,255,0.18)");
+            glow.addColorStop(1, "rgba(120,180,255,0)");
+            g.fillStyle = glow;
+            g.fillRect(0, h * 0.3, w, h * 0.4);
+            g.fillStyle = "rgba(225,240,255,0.95)";
+            g.fillRect(0, h / 2 - 0.5, w, 1);
+            g.globalCompositeOperation = "destination-in";
+            const ends = g.createLinearGradient(0, 0, w, 0);
+            ends.addColorStop(0, "rgba(0,0,0,0)");
+            ends.addColorStop(0.5, "rgba(0,0,0,1)");
+            ends.addColorStop(1, "rgba(0,0,0,0)");
+            g.fillStyle = ends;
+            g.fillRect(0, 0, w, h);
+            this.line = { tex: r.texture(c), res };
+            return this.line.tex;
+        },
+    },
 };
-const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse", "glacier"]; // menu order
+const BACKGROUND_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse", "glacier", "pulse"]; // menu order
 
 // Themes (Options → Customization → Theme): a background with the block style, confetti, clear burst and drop
 // trail that go with it, which those settings take while they are on Follow theme (Options.look())
 const THEMES = {
     space: { name: "Deep Space", background: "space", tileset: "flat", confetti: "sparks", rings: "flare", trail: "streak" },
-    gallery: { name: "Night Gallery", background: "gallery", tileset: "neon", confetti: "neon", rings: "rings", trail: "neon" },
+    gallery: { name: "Night Gallery", background: "gallery", tileset: "wire", confetti: "neon", rings: "rings", trail: "neon" },
     lines: { name: "Field Lines", background: "lines", tileset: "chalk", confetti: "paper", rings: "contours", trail: "chalk" },
     hologram: { name: "Hologram", background: "hologram", tileset: "holo", confetti: "foil", rings: "glitter", trail: "prism" },
     undersea: { name: "Undersea", background: "undersea", tileset: "jelly", confetti: "bubbles", rings: "ripple", trail: "water" },
     eclipse: { name: "Eclipse", background: "eclipse", tileset: "backlit", confetti: "dust", rings: "shafts", trail: "rays" },
     glacier: { name: "Glacier", background: "glacier", tileset: "frost", confetti: "snow", rings: "shards", trail: "rime" },
+    pulse: { name: "Pulse", background: "pulse", tileset: "wire", confetti: "streaks", rings: "beam", trail: "pour" },
 };
-const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse", "glacier"]; // menu order; the first is the default
+const THEME_IDS = ["space", "gallery", "lines", "hologram", "undersea", "eclipse", "glacier", "pulse"]; // menu order; the first is the default
 
 // [r, g, b] (0..1) to [h, s, l] (degrees, percent), as hslToRgb() takes them
 function rgbToHsl([r, g, b]) {

@@ -502,7 +502,18 @@ const CONFETTI_SPECS = {
     foil: { count: 3, size: [3, 2.5], speed: 0.8, lift: 3.4, gravity: 0.04, drag: 0.95, life: 45, alpha: 0.8, add: true, spin: 0.1, sway: 0.5, maxFall: 1.1 },
     dust: { count: 2, size: [1.2, 1.4], speed: 0.35, lift: 0.8, gravity: 0.004, drag: 0.95, life: 120, alpha: 0.4, add: true, sway: 0.15, maxFall: 0.3, plain: true },
     snow: { count: 2, size: [3.5, 3.5], speed: 0.9, lift: 3.2, gravity: 0.03, drag: 0.95, life: 62, alpha: 0.78, add: true, spin: 0.04, sway: 0.5, maxFall: 0.7, white: true },
+    streaks: { count: 3, size: [1.6, 0.8], speed: 1, lift: 0, gravity: 0.04, drag: 0.94, life: 45, alpha: 0.95, add: true, plain: true },
 };
+// Streaks (Pulse's): a cleared row goes out from its middle to its ends, STREAK_STAGGER frames a column, each cell lit until
+// its turn (fading over its last STREAK_CELL_FADE frames) and then shooting its streaks out along the row either way
+// (speed: least, random extra; the share of it up or down)
+const STREAK_STAGGER = 2.2, STREAK_CELL_FADE = 4, STREAK_CELL_ALPHA = 0.8;
+const STREAK_SPEED = [3, 7], STREAK_RISE = 0.12;
+// With a line clear delay that has room (the rule set's: STREAK_DISSOLVE_SHARE of it, at most STREAK_DISSOLVE_MAX frames, at
+// least STREAK_DISSOLVE_MIN), the rows go out in the well itself, as in Pulse's draft: each cell lit and flickering
+// (STREAK_FLICKER radians a frame, the light at STREAK_DISSOLVE_LIT) until its turn, the stack waiting till they are gone
+const STREAK_DISSOLVE_SHARE = 0.6, STREAK_DISSOLVE_MAX = 22, STREAK_DISSOLVE_MIN = 8;
+const STREAK_FLICKER = 0.67, STREAK_DISSOLVE_LIT = 0.8;
 // Rows of the confetti atlas (pixels are plain rects). Foil's columns are hues, not the colours: FOIL_HUES of them
 // round the wheel
 const CONFETTI_SPRITE_ROWS = { glow: 0, paper: 1, sparks: 2, stars: 3, bubbles: 4, neon: 5, foil: 6, dust: 7, snow: 8 };
@@ -545,6 +556,10 @@ const SHAFTS_ALPHA = 1.5; // their light at the Normal effects level
 // turning as they go and fading over SHARDS_LIFE frames; their size (least, random extra) and strength at Normal effects
 const SHARDS_LIFE = 70, SHARDS_COUNT = [8, 4], SHARDS_REACH = [70, 230], SHARDS_DROP = 40;
 const SHARDS_SIZE = [9, 15], SHARDS_ALPHA = 0.95;
+// Clear beams (Clear burst: Beam, Pulse's): a line of light along each cleared row, reaching out across the whole view in
+// its first BEAM_REACH_FRAMES, swelling (half its height: least, extra) and fading over BEAM_LIFE frames; its strength at
+// Normal effects, and a Quad's colour (the others take the backdrop's hue)
+const BEAM_LIFE = 40, BEAM_REACH_FRAMES = 10, BEAM_HALF = [6, 14], BEAM_ALPHA = 0.75, BEAM_QUAD_HUE = 48;
 const GLITTER_LIFE = 64; // frames a clear's glitter wave runs (Clear burst: Glitter)
 const GLITTER_REACH = 640; // logical units its front travels (before its 1.3x horizontal stretch)
 const GLITTER_FACET = HOLOGRAM_FACETS[2]; // a facet's width, the Hologram foil's (backdrop logical units)
@@ -589,6 +604,9 @@ const RAYS_TRAIL_FADE = 16; // frames it takes to fade out, lingering like Prism
 const RIME_TRAIL_WHITE = 0.5, RIME_TRAIL_STRENGTH = 1.05, RIME_TRAIL_EDGE = 0.85;
 const RIME_TRAIL_STEP = 13, RIME_TRAIL_CRYSTAL = [2.6, 2.6], RIME_TRAIL_GLINT = 2.2;
 const RIME_TRAIL_FADE = 20; // frames it takes to fade out, the crystals outlasting the streak
+// The Pour trail (Pulse's): light poured down each column, added, at POUR_TRAIL_STRENGTH over the plain streak's, narrowing
+// to POUR_TRAIL_NARROW of the column's width as it fades over POUR_TRAIL_FADE frames
+const POUR_TRAIL_STRENGTH = 1.45, POUR_TRAIL_NARROW = 0.4, POUR_TRAIL_FADE = 12;
 const DROP_FLASH_LIFE = 8; // frames a hard-dropped piece flashes
 
 // The staff roll's credits, made up: [role, ...names], or a heading alone. They scroll up behind
@@ -637,6 +655,8 @@ const CREDIT_LINES = (() => {
     return lines;
 })();
 const HOLD_FLASH_LIFE = 12; // frames the newly held piece flashes in the HOLD box
+const LOCK_GLOW_LIFE = 14; // frames a lock lights the well's floor (Pulse's frame())
+const NEXT_SLIDE_FRAMES = 9; // frames the next pieces take to slide up a place (backgrounds with slideNext)
 const HOLD_GLOW_BLUR = 0.7; // the held piece's flash glow: blur radius in block sizes
 const HOLD_GLOW_ALPHA = 0.7; // and its strength at the flash's start (also round the piece entering from hold)
 const TILT_MAX = [2.8, 4.8]; // playing field tilt in degrees about the x and y axes, at Normal
@@ -724,8 +744,9 @@ function spacingShift(align, spacing) {
 }
 
 // Text on a canvas 2D context (for rendering into textures)
-function fillText2D(g, s, x, y, { size = 16, weight = 700, color = INK, align = "left", spacing = 0, baseline = "middle" } = {}) {
+function fillText2D(g, s, x, y, { size = 16, weight = 700, stretch = "normal", color = INK, align = "left", spacing = 0, baseline = "middle" } = {}) {
     g.font = `${weight} ${size}px ${FONT}`;
+    g.fontStretch = stretch;
     g.textAlign = align;
     g.textBaseline = baseline;
     g.letterSpacing = spacing + "px";
@@ -757,6 +778,9 @@ class BoardView {
         this.gaugeFlash = 0; // frames left of its flash as an item comes
         this.lastNextItem = null; // the item in the NEXT box at the last frame (a new one flashes the gauge)
         this.medalPops = {}; // frames left of each medal's pop, by id, as it is earned or raised
+        this.lockGlow = 0; // frames left of the glow a lock gives the well's floor (a background's frame() may draw it)
+        this.queue = []; // the next pieces at the last frame, and frames left of their slide up a place (slideNext)
+        this.nextSlide = 0;
     }
 }
 
@@ -1101,7 +1125,9 @@ class Engine {
         // effects work with palette colours: map piece types through the rule set's palette
         const toColor = (cell) => ({ ...cell, type: game.palette[cell.type] });
         const cleared = game.takeClearedCells().map(toColor);
-        this.explodeCells(cleared, game.chain, own);
+        const dissolve = this.dissolveSpan(game, cleared);
+        if (cleared.length) game.dropPause = dissolve || null; // the stack waits for the rows to go
+        this.explodeCells(cleared, game.chain, own, dissolve);
         // no jolt for each row the field loses before the staff roll
         if (own && cleared.length && this.options.shakeScale && !game.inRollStart()) this.clearShake(cleared, game.chain);
         const dropped = game.takeHardDropCells().map(toColor);
@@ -1115,8 +1141,16 @@ class Engine {
             // from the event, not the dropped cells: those a clear removed aren't listed
             if (own && s === "harddrop" && this.options.shakeScale) this.kickShake(game.hardDropDistance);
             if (own && s === "sonic" && game.sonicTrail && this.options.shakeScale) this.kickShake(game.sonicDistance);
-            if (s === "lock" || s === "harddrop") view.enterGlow = 0; // the piece from hold is gone
+            if (s === "lock" || s === "harddrop") {
+                view.enterGlow = 0; // the piece from hold is gone
+                if (this.options.effects) view.lockGlow = LOCK_GLOW_LIFE;
+            }
         }
+        // the next pieces moved up a place: the preview slides them there (backgrounds with slideNext)
+        const queue = Array.from({ length: game.nextCount }, (_, i) => game.rnd_get_queue(i));
+        if (view.queue.length === queue.length && queue.some((t, i) => t !== view.queue[i])
+            && queue.slice(0, -1).every((t, i) => t === view.queue[i + 1]) && this.options.effects) view.nextSlide = NEXT_SLIDE_FRAMES;
+        view.queue = queue;
         if (!game.getCurPiece_type()) view.enterGlow = 0; // or knocked out by an item (a snipe), unlocked
         // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
         if (game.takeHolds() && this.options.effects) view.holdFlash = view.enterGlow = HOLD_FLASH_LIFE;
@@ -1256,6 +1290,11 @@ class Engine {
             r.setTransform(this.pixelScale, this.offX, this.offY);
             this.drawShards();
         }
+        // Clear beams, across everything
+        if (mode === "beam" && this.rings.length) {
+            r.setTransform(this.pixelScale, this.offX, this.offY);
+            this.drawBeams();
+        }
         // Clear flares: light on the lens, over everything
         if (mode === "flare" && this.rings.length) {
             this.backdrop.flares([this.pixelScale, this.offX, this.offY], this.flareShapes().map(f => ({
@@ -1316,6 +1355,7 @@ class Engine {
             water: this.background.water ? this.background.water(this) : null,
             beams: this.background.beams ? this.background.beams(this) : null,
             glacier: this.background.glacier ? this.background.glacier(this) : null,
+            pulse: this.background.pulse ? this.background.pulse(this) : null,
             shafts: mode === "shafts" ? this.shaftShapes() : [],
             contours: mode === "contours" ? this.contourShapes() : [],
             glitter: mode === "glitter" ? this.glitterShapes() : [],
@@ -2227,21 +2267,23 @@ class Engine {
     // Uses Math.random, independent of the piece randomizers
 
     // On the current board; own: the player's, whose clears also send the clear burst and turn the backdrop's hue
-    explodeCells(cells, chain = 0, own = true) {
+    // dissolve: frames the rows take to go out in the well (Streaks, dissolveSpan()), else 0
+    explodeCells(cells, chain = 0, own = true, dissolve = 0) {
         if (!this.options.effects) return;
         const rows = new Set();
         for (const cell of cells) {
             if (cell.row < this.wellTop) continue; // hidden rows
             rows.add(cell.row);
-            this.explodeCell(cell);
+            this.explodeCell(cell, dissolve);
         }
+        if (dissolve) this.board.dissolve = { cells: cells.filter(c => c.row >= this.wellTop), age: 0, span: dissolve };
         if (this.options.flash) for (const row of rows) this.board.flashes.push({ row, life: FLASH_LIFE });
         if (rows.size && own) {
             const mid = [...rows].reduce((a, b) => a + b, 0) / rows.size;
             // the cleared rows' extent on screen, top to bottom (Rev draws the well upside down)
             const ya = this.cellY(Math.min(...rows)), yb = this.cellY(Math.max(...rows));
             const mode = this.options.look("rings");
-            const span = { ripple: RIPPLE_LIFE, flare: FLARE_LIFE, contours: CONTOUR_LIFE, glitter: GLITTER_LIFE, shafts: SHAFTS_LIFE, shards: SHARDS_LIFE }[mode] || RING_LIFE;
+            const span = { ripple: RIPPLE_LIFE, flare: FLARE_LIFE, contours: CONTOUR_LIFE, glitter: GLITTER_LIFE, shafts: SHAFTS_LIFE, shards: SHARDS_LIFE, beam: BEAM_LIFE }[mode] || RING_LIFE;
             this.rings.push({
                 gx: this.board.gx, // the board's group: the burst spreads from its well
                 y: this.cellY(mid) + CELL / 2, top: Math.min(ya, yb), bottom: Math.max(ya, yb) + CELL,
@@ -2253,12 +2295,26 @@ class Engine {
         }
     }
 
-    explodeCell(cell) {
+    explodeCell(cell, dissolve = 0) {
         const cx = this.cellX(cell.col) + CELL / 2;
         const cy = this.cellY(cell.row) + CELL / 2;
         const style = this.options.look("confetti"), spec = CONFETTI_SPECS[style];
         if (!spec) return; // off
         const count = Math.max(1, Math.round(spec.count * this.options.effectScale));
+        if (style === "streaks") {
+            // in a dissolve the cell itself stays lit in the well until its turn (drawDissolve()); else a light over it
+            const wait = this.streakTurn(cell.col, dissolve), color = PIECE_COLORS[cell.type].light;
+            if (!dissolve) this.board.particles.push({ ...this.confettiBit(style, cx, cy, 0, 0, CELL, color, wait + STREAK_CELL_FADE), cell: true });
+            for (let n = 0; n < count; n++) {
+                const v = (STREAK_SPEED[0] + Math.random() * STREAK_SPEED[1]) * spec.speed * (Math.random() < 0.5 ? -1 : 1);
+                this.board.particles.push({
+                    ...this.confettiBit(style, cx, cy + (Math.random() - 0.5) * CELL * 0.5, v, (Math.random() - 0.5) * 2 * STREAK_RISE * Math.abs(v),
+                        spec.size[0] + Math.random() * spec.size[1], color, spec.life * (1 - 0.4 * Math.random())),
+                    wait,
+                });
+            }
+            return;
+        }
         for (let n = 0; n < count; n++) {
             const angle = Math.random() * Math.PI * 2;
             const speed = (1 + Math.random() * 4.5) * spec.speed;
@@ -2270,6 +2326,39 @@ class Engine {
                 cx + (Math.random() - 0.5) * CELL * 0.8, cy + (Math.random() - 0.5) * CELL * 0.8,
                 Math.cos(angle) * speed, Math.sin(angle) * speed - spec.lift, // bias upwards for a burst
                 size, color, spec.life * (1 - 0.4 * Math.random())));
+        }
+    }
+
+    // Frames a clear's rows may take to go out in the well (Streaks): a share of the rule set's line clear delay, when
+    // it leaves room for it, else 0 (they go at once: no delay, or a short one)
+    dissolveSpan(game, cleared) {
+        if (!cleared.length || !this.options.effects || this.options.look("confetti") !== "streaks" || game.phase !== "lineclear") return 0;
+        const span = Math.min(STREAK_DISSOLVE_MAX, Math.round(game.phaseLength * STREAK_DISSOLVE_SHARE));
+        return span >= STREAK_DISSOLVE_MIN ? span : 0;
+    }
+
+    // Frames before a cleared cell in column col goes (Streaks): from the row's middle out to its ends, over a dissolve's
+    // span (less the last cells' fade), or STREAK_STAGGER a column
+    streakTurn(col, dissolve) {
+        const off = Math.abs(col - (WIDTH - 1) / 2);
+        return dissolve ? off / ((WIDTH - 1) / 2) * (dissolve - STREAK_CELL_FADE) : off * STREAK_STAGGER;
+    }
+
+    // The cleared rows going out in the well (Streaks with room in the delay): each cell drawn as it was, lit and
+    // flickering, until its turn, fading over its last STREAK_CELL_FADE frames
+    drawDissolve(d) {
+        const r = this.r, tileset = this.options.look("tileset"), halo = TILESETS[tileset].halo;
+        const lit = STREAK_DISSOLVE_LIT * (0.6 + 0.4 * Math.sin(this.clock * STREAK_FLICKER));
+        for (const c of d.cells) {
+            const left = this.streakTurn(c.col, d.span) + STREAK_CELL_FADE - d.age;
+            if (left <= 0) continue;
+            const x = this.cellX(c.col), y = this.cellY(c.row);
+            r.save();
+            r.globalAlpha = Math.min(1, left / STREAK_CELL_FADE);
+            this.drawBlock(c.type, x, y, CELL, "locked", tileset);
+            if (halo) this.drawHalo(c.type, x, y, CELL, "locked", tileset, lit);
+            else this.drawBlockFlash(c.type, x, y, CELL, lit);
+            r.restore();
         }
     }
 
@@ -2300,6 +2389,8 @@ class Engine {
     // A board's confetti, flashes and glows
     updateBoardEffects(view, dt) {
         for (const p of view.particles) {
+            if (p.wait > 0) { p.wait -= dt; continue; } // not out yet (Streaks)
+            if (p.cell) { p.life -= dt; continue; } // a cleared cell lit until its streaks go
             const spec = CONFETTI_SPECS[p.style];
             const drag = Math.pow(spec.drag, dt); // air drag
             p.vy += spec.gravity * dt;
@@ -2326,6 +2417,9 @@ class Engine {
         }
         view.trailBubbles = age(view.trailBubbles);
         view.holdFlash = Math.max(0, view.holdFlash - dt);
+        view.lockGlow = Math.max(0, view.lockGlow - dt);
+        if (view.dissolve && (view.dissolve.age += dt) >= view.dissolve.span) view.dissolve = null;
+        view.nextSlide = Math.max(0, view.nextSlide - dt);
         for (const id in view.medalPops) view.medalPops[id] = Math.max(0, view.medalPops[id] - dt);
         view.enterGlow = Math.max(0, view.enterGlow - dt);
         view.itemBursts = age(view.itemBursts);
@@ -2360,7 +2454,8 @@ class Engine {
     // Frames a drop trail in the style in effect takes to fade out (Prism's lingers)
     trailFade() {
         const style = this.options.look("trail");
-        return style === "prism" ? PRISM_TRAIL_FADE : style === "rays" ? RAYS_TRAIL_FADE : style === "rime" ? RIME_TRAIL_FADE : DROP_TRAIL_FADE;
+        return style === "prism" ? PRISM_TRAIL_FADE : style === "rays" ? RAYS_TRAIL_FADE : style === "rime" ? RIME_TRAIL_FADE
+            : style === "pour" ? POUR_TRAIL_FADE : DROP_TRAIL_FADE;
     }
 
     // Drop trail streaks, one per column ({ col, y0, y1, index, yEnd, alpha }): each from y0 down
@@ -2454,6 +2549,16 @@ class Engine {
                     r.restore();
                     return;
                 }
+                case "pour": {
+                    // light poured down the column, added, narrowing about its middle as it fades
+                    const nw = w * (POUR_TRAIL_NARROW + (1 - POUR_TRAIL_NARROW) * s.alpha);
+                    r.save();
+                    r.blendMode = "add";
+                    r.globalAlpha = scale * s.alpha * POUR_TRAIL_STRENGTH;
+                    r.shape(x + (w - nw) / 2, ya, nw, yb - ya, { fill: fade(color), fillY });
+                    r.restore();
+                    return;
+                }
                 case "rime": {
                     // a pale icy streak, fading first, with light edges; frost crystals forming along them above the
                     // blocks (where they sit from the column and the height, the same at every drop), twinkling as they
@@ -2486,7 +2591,7 @@ class Engine {
             r.globalAlpha = scale * s.alpha;
             r.shape(x, ya, w, yb - ya, { fill: fade(color), fillY });
         };
-        const joins = style !== "neon" && style !== "chalk" && style !== "rays";
+        const joins = style !== "neon" && style !== "chalk" && style !== "rays" && style !== "pour";
         // whichever way up (Rev): the span drawn, and the part of it above the blocks
         const span = (s, yEnd) => [Math.min(s.y0, yEnd), Math.max(s.y0, yEnd)];
         const above = s => span(s, (s.yEnd - s.y1) * (s.y1 - s.y0) > 0 ? s.y1 : s.yEnd);
@@ -2819,6 +2924,19 @@ class Engine {
                         }
                         break;
                     }
+                    case "streaks": { // a cleared cell's light, then a streak along the row (the sparks' sprite)
+                        if (p.wait > 0) break;
+                        if (p.cell) {
+                            r.globalAlpha = Math.min(1, p.life / STREAK_CELL_FADE) * STREAK_CELL_ALPHA * Math.min(1, scale);
+                            r.shape(p.x - CELL / 2 + 2, p.y - CELL / 2 + 2, CELL - 4, CELL - 4, { radius: 2, fill: p.color });
+                            break;
+                        }
+                        const v = Math.hypot(p.vx, p.vy), len = p.size + v * 3.5;
+                        const ux = v > 0.01 ? p.vx / v : 1, uy = v > 0.01 ? p.vy / v : 0;
+                        this.confettiQuad(atlas.tex, sx, CONFETTI_SPRITE_ROWS.sparks * GLOW_SPRITE, p.x - ux * len * 0.45, p.y - uy * len * 0.45,
+                            len / 2, p.size * 1.3, Math.atan2(uy, ux));
+                        break;
+                    }
                     case "foil": { // a flake turning over: its hue swings with the turn, between two hue sprites
                         const flip = Math.cos(p.phase * 1.7), hw = p.size * 1.1, hh = hw * Math.max(0.12, Math.abs(flip));
                         const hue = p.hue + flip * FOIL_HUE_SWING + (this.sheen ? this.sheen.hue : 0);
@@ -3107,6 +3225,59 @@ class Engine {
         r.restore();
     }
 
+    // Clear beams: a line of light along each cleared row (spread evenly between the cleared rows' top and bottom, which
+    // are contiguous but for a few T-spins and Big's), reaching out from the well across the whole view, swelling and
+    // fading. Drawn over everything, like the Flare (draw())
+    drawBeams() {
+        const r = this.r, x0 = -this.offX / this.pixelScale, x1 = (r.width - this.offX) / this.pixelScale; // the screen's edges
+        r.save();
+        r.blendMode = "add";
+        for (const ring of this.rings) {
+            const k = 1 - ring.life / ring.span; // 0 -> 1
+            const hue = ring.power >= 4 ? BEAM_QUAD_HUE : this.background.beamHue ? this.background.beamHue(ring.hue) : ring.hue + 20;
+            const tex = this.beamTexture(hue), cx = ring.gx + BOARD_X + BOARD_W / 2;
+            const reach = Math.max(cx - x0, x1 - cx) * (0.3 + 0.7 * Math.min(1, k * ring.span / BEAM_REACH_FRAMES));
+            const half = BEAM_HALF[0] + BEAM_HALF[1] * k;
+            r.globalAlpha = Math.pow(1 - k, 2) * (0.7 + 0.1 * ring.power) * (1 + 0.15 * Math.min(ring.chain, RING_CHAIN_MAX)) * ring.k * BEAM_ALPHA;
+            for (let i = 0; i < ring.power; i++) {
+                const y = ring.top + (ring.bottom - ring.top) * (i + 0.5) / ring.power;
+                r.image(tex, cx - reach, y - half, reach * 2, half * 2);
+            }
+        }
+        r.restore();
+    }
+
+    // A beam in a hue, rendered once per 15° of hue: a soft band of light round a white core line, both fading
+    // out towards the ends
+    beamTexture(hue) {
+        const step = Math.round(((hue % 360) + 360) % 360 / 15) % 24;
+        this.beamTex = this.beamTex || [];
+        if (this.beamTex[step]) return this.beamTex[step];
+        const w = 256, h = 32, c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const g = c.getContext("2d");
+        const band = g.createLinearGradient(0, 0, 0, h);
+        const css = (a) => `hsla(${step * 15},100%,62%,${a})`;
+        band.addColorStop(0, css(0));
+        band.addColorStop(0.3, css(0.12));
+        band.addColorStop(0.5, css(0.7));
+        band.addColorStop(0.7, css(0.12));
+        band.addColorStop(1, css(0));
+        g.fillStyle = band;
+        g.fillRect(0, 0, w, h);
+        g.fillStyle = "rgba(255,255,255,0.95)";
+        g.fillRect(0, h / 2 - 1, w, 2);
+        g.globalCompositeOperation = "destination-in"; // fading out towards the ends
+        const ends = g.createLinearGradient(0, 0, w, 0);
+        ends.addColorStop(0, "rgba(0,0,0,0)");
+        ends.addColorStop(0.5, "rgba(0,0,0,1)");
+        ends.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = ends;
+        g.fillRect(0, 0, w, h);
+        return (this.beamTex[step] = this.r.texture(c));
+    }
+
     // A shard of ice pointing right, rendered once: a lit upper facet and a shadowed lower one along a light ridge, with a
     // darker rim, so it shows on light backgrounds and dark ones; GLOW_SPRITE texels square, as confettiQuad() takes
     shardTexture() {
@@ -3201,11 +3372,11 @@ class Engine {
         const ink = this.background.ink; // the background's text colour in place of INK's
         if (ink && cr === INK_RGB[0] && cg === INK_RGB[1] && cb === INK_RGB[2]) [cr, cg, cb] = ink;
         const rgb = `rgb(${Math.round(cr * 255)},${Math.round(cg * 255)},${Math.round(cb * 255)})`;
-        const res = r.s;
-        const key = [s, size, weight, spacing, baseline, rgb, res.toFixed(3)].join("|");
+        const res = r.s, face = this.fontFace(size, weight, s);
+        const key = [s, size, face.weight, face.stretch, spacing, baseline, rgb, res.toFixed(3)].join("|");
         let t = this.textCache.get(key);
         if (t) this.textCache.delete(key); // set again below, as the most recently used
-        else t = this.renderText(s, { size, weight, color: rgb, spacing, baseline }, res);
+        else t = this.renderText(s, { size, ...face, color: rgb, spacing, baseline }, res);
         this.textCache.set(key, t);
         if (this.textCache.size > TEXT_CACHE_MAX) {
             const oldest = this.textCache.keys().next().value;
@@ -3236,7 +3407,7 @@ class Engine {
     // Texture of a string, left-aligned at (pad, half) in logical units, res texels per unit
     renderText(s, opts, res) {
         const pad = Math.ceil(opts.size * 0.4), half = Math.ceil(opts.size * 1.2);
-        const width = this.measureText(s, opts.size, opts.weight, opts.spacing);
+        const width = this.measureFace(s, opts.size, opts, opts.spacing);
         const c = document.createElement("canvas");
         c.width = Math.max(1, Math.ceil((width + pad * 2) * res));
         c.height = Math.ceil(half * 2 * res);
@@ -3247,10 +3418,21 @@ class Engine {
     }
 
     measureText(s, size, weight, spacing = 0) {
+        return this.measureFace(s, size, this.fontFace(size, weight, s), spacing);
+    }
+
+    // The same in a face as fontFace() gives it
+    measureFace(s, size, { weight, stretch }, spacing = 0) {
         const g = this.measureCtx;
         g.font = `${weight} ${size}px ${FONT}`;
+        g.fontStretch = stretch;
         g.letterSpacing = spacing + "px";
         return g.measureText(s).width;
+    }
+
+    // The weight and width a string of a size and weight is drawn in: the background's (its font()), else as asked
+    fontFace(size, weight, s) {
+        return this.background.font ? this.background.font(size, weight, s) : { weight, stretch: "normal" };
     }
 
     // Small caps heading with a hairline rule, used above each side panel
@@ -3282,9 +3464,10 @@ class Engine {
             return { style, pad, px: Math.ceil((size + pad * 2) * s) };
         });
         const lampPx = Math.ceil(size * s), lampSpots = set.lamp === false ? 0 : LAMP_STEPS * LAMP_STEPS;
+        const haloPx = set.halo ? Math.ceil((size + set.halo.blur * 4 * size / CELL) * s) : 0;
         const c = document.createElement("canvas");
-        c.width = (PIECE_COLORS.length - 1) * (Math.max(...rows.map(row => row.px)) + gap);
-        c.height = rows.reduce((h, row) => h + row.px + gap, 0) + lampSpots * (lampPx + gap);
+        c.width = (PIECE_COLORS.length - 1) * (Math.max(haloPx, ...rows.map(row => row.px)) + gap);
+        c.height = rows.reduce((h, row) => h + row.px + gap, 0) + (haloPx && haloPx + gap) + lampSpots * (lampPx + gap);
         const g = c.getContext("2d");
         const sprites = {};
         let y = 0;
@@ -3302,6 +3485,29 @@ class Engine {
                 set.draw(g, PIECE_COLORS[type], size, style, type);
                 g.restore();
                 sprites[style][type] = { sx: x, sy: y, px, pad };
+            }
+            y += px + gap;
+        }
+        // a style's halo: a blurred square of its glow colour, added round each block in the lights pass (drawHalo())
+        const halo = [];
+        if (set.halo) {
+            const pad = set.halo.blur * 2 * size / CELL, px = Math.ceil((size + pad * 2) * s);
+            for (let type = 1; type < PIECE_COLORS.length; type++) {
+                const x = (type - 1) * (px + gap);
+                g.save();
+                g.beginPath();
+                g.rect(x, y, px, px);
+                g.clip();
+                g.translate(x, y);
+                g.filter = `blur(${set.halo.blur * size / CELL * s}px)`;
+                g.scale(s, s);
+                g.beginPath();
+                g.roundRect(pad, pad, size, size, size * 0.2);
+                g.globalAlpha = set.halo.strength;
+                g.fillStyle = set.trail ? set.trail(type) : PIECE_COLORS[type].light;
+                g.fill();
+                g.restore();
+                halo[type] = { sx: x, sy: y, px, pad };
             }
             y += px + gap;
         }
@@ -3324,7 +3530,7 @@ class Engine {
             }
             y += lampPx + gap;
         }
-        atlas = { tex: this.r.texture(c), sprites, lamp };
+        atlas = { tex: this.r.texture(c), sprites, halo, lamp };
         this.blockCache.set(key, atlas);
         return atlas;
     }
@@ -3369,8 +3575,19 @@ class Engine {
 
     drawLights(type, x, y, size, style = "locked", tileset = this.options.look("tileset")) {
         if (!type || style === "ghost") return;
+        if (TILESETS[tileset].halo) this.drawHalo(type, x, y, size, style, tileset);
         if (TILESETS[tileset].sheen) this.drawSheen(x, y, size, TILESETS[tileset].sheen);
         this.drawLamp(type, x, y, size, style, tileset);
+    }
+
+    // A block style's halo round a block, added: faint round the stack, brighter round the piece in play (or at alpha)
+    drawHalo(type, x, y, size, style, tileset, alpha = TILESETS[tileset].halo.alpha[style === "active" ? 1 : 0]) {
+        const r = this.r, sp = this.blockAtlas(size, tileset).halo[type], w = size + sp.pad * 2;
+        r.save();
+        r.blendMode = "add";
+        r.globalAlpha *= alpha;
+        r.image(this.blockAtlas(size, tileset).tex, x - sp.pad, y - sp.pad, w, w, sp.sx, sp.sy, sp.px, sp.px);
+        r.restore();
     }
 
     // The lamp's light on a block: brighter the nearer the block is to where the lamp shines
@@ -3597,7 +3814,10 @@ class Engine {
     drawMenuScreen(step) {
         const cx = VIEW_W / 2;
         const listTop = 290;
-        const heading = (s, color = INK_DIM, y = listTop - 26) => this.text(s, cx, y, { size: 11, weight: 700, color, align: "center", spacing: 4 });
+        // shrunk to the view's width if needed (the long setup headings in the compact layout, wide type)
+        const heading = (s, color = INK_DIM, y = listTop - 26) => this.text(s, cx, y, {
+            size: Math.min(11, Math.floor(11 * (this.layout.view[2] - 24) / this.measureText(s, 11, 700, 4))), weight: 700, color, align: "center", spacing: 4,
+        });
         // The tagline under the wordmark, on the main screen only: it slides with the screen, and
         // its place holds the Visuals heading
         if (step === MENU_MAIN) this.text("WELCOME", cx, 228, { size: 12, weight: 600, color: INK_DIM, align: "center", spacing: 6 });
@@ -3752,8 +3972,9 @@ class Engine {
         heading("OPTIONS  ·  GAMEPAD", INK_DIM, top - 16);
         if (pad === null) {
             this.drawMenuList([{ name: "No gamepad", desc: "Connect a gamepad and press a button on it", accent: tetI, noArrow: true }], 0, top);
-            this.text("BROWSERS SHOW A GAMEPAD ONLY ONCE ONE OF ITS BUTTONS IS PRESSED", VIEW_W / 2, top + 64 + 28,
-                { size: 11, weight: 700, color: INK_FAINT, align: "center", spacing: 2 });
+            const note = "BROWSERS SHOW A GAMEPAD ONLY ONCE ONE OF ITS BUTTONS IS PRESSED";
+            const size = Math.min(11, Math.floor(11 * (this.layout.view[2] - 24) / this.measureText(note, 11, 700, 2)));
+            this.text(note, VIEW_W / 2, top + 64 + 28, { size, weight: 700, color: INK_FAINT, align: "center", spacing: 2 });
             return "ESC  BACK";
         }
         const pads = gp.pads, n = pads.indexOf(pad), many = pads.length > 1;
@@ -4237,6 +4458,7 @@ class Engine {
             r.globalAlpha = 1;
         }
 
+        if (this.board.dissolve) this.drawDissolve(this.board.dissolve);
         if (this.options.border) this.drawStackBorder(firstRow);
 
         // Draw current Piece: the highlight fades from "active" to "locked" as the
@@ -4387,9 +4609,7 @@ class Engine {
         // shrink lines that would be wider than that
         let height = 0;
         for (const { a, s } of lines) {
-            g.font = `900 ${s.size}px ${FONT}`;
-            g.letterSpacing = (s.spacing ?? 2) + "px";
-            const width = g.measureText(a.text).width;
+            const width = this.measureText(a.text, s.size, 900, s.spacing ?? 2);
             if (width > w) s.size = Math.floor(s.size * w / width);
             height += s.size * 1.15;
         }
@@ -4408,7 +4628,7 @@ class Engine {
             for (const [color, blur] of shadows) {
                 g.shadowColor = color;
                 g.shadowBlur = blur * MESSAGE_POP_MAX;
-                fillText2D(g, a.text, anchor, y, { size: s.size, weight: 900, color: s.color, spacing: s.spacing ?? 2, align });
+                fillText2D(g, a.text, anchor, y, { size: s.size, ...this.fontFace(s.size, 900, a.text), color: s.color, spacing: s.spacing ?? 2, align });
             }
             y += s.size * 0.575;
         }
@@ -4424,6 +4644,23 @@ class Engine {
         if (spent) { this.r.save(); this.r.globalAlpha *= MENU_DIMMED_ALPHA; }
         this.drawPieceCentered(game.getHeldPiece(), cx, cy, size, "locked", game, false, this.holdFlashAlpha(), spent);
         if (spent) this.r.restore();
+    }
+
+    // The next pieces centred on x, the nth in slots[n] ({ y, size }; the first carries the next item). With a
+    // background's slideNext, as the queue moves up a place each piece comes up from the slot below, growing into the
+    // first, and the last fades in from under the list
+    drawPreview(game, x, slots) {
+        const r = this.r, k = this.background.slideNext ? clamp(this.board.nextSlide / NEXT_SLIDE_FRAMES, 0, 1) : 0;
+        const ease = k * k; // 1 → 0: fast at first, settling
+        slots.forEach((slot, n) => {
+            const last = n === slots.length - 1;
+            const from = last ? { y: slot.y + (n ? slot.y - slots[n - 1].y : slot.size * 2), size: slot.size } : slots[n + 1];
+            const y = slot.y + (from.y - slot.y) * ease, size = slot.size + (from.size - slot.size) * ease;
+            r.save();
+            if (last) r.globalAlpha *= 1 - ease;
+            this.drawPieceCentered(game.rnd_get_queue(n), x, y, size, "locked", game, n ? null : game.nextItem);
+            r.restore();
+        });
     }
 
     drawSidePanels() {
@@ -4481,24 +4718,20 @@ class Engine {
         const bestTop = this.drawGameBest(RIGHT_X, SIDE_W, this.boardY + this.boardH - 6, false, splits); // level with the wordmark
         if (table) return this.drawSectionTable(RIGHT_X, SIDE_W, this.boardY + 4, bestTop - 24, false);
 
-        // NEXT (none with the Guideline's previews off)
+        // NEXT (none with the Guideline's previews off), then the rest of the rule set's preview, tighter when there are
+        // more than two (none for TAP's single next piece)
+        const rest = game.nextCount - 1;
+        const spacing = rest > 2 ? 50 : 80, listH = rest * spacing + 10;
+        const slots = Array.from({ length: game.nextCount }, (_, n) => n ? { y: this.boardY + 140 + 5 + spacing / 2 + (n - 1) * spacing, size: rest > 2 ? 16 : 18 }
+            : { y: this.boardY + 18 + 55, size: 24 });
         if (game.nextCount > 0) {
             this.label("NEXT", RIGHT_X, this.boardY + 4, SIDE_W);
             this.panel(RIGHT_X, this.boardY + 18, SIDE_W, 110);
-            this.drawPieceCentered(game.rnd_get_queue(0), RIGHT_X + SIDE_W / 2, this.boardY + 18 + 55, 24, "locked", game, game.nextItem);
         }
-        // the rest of the rule set's preview, tighter when there are more than two
-        // (none for TAP's single next piece)
-        const rest = game.nextCount - 1;
+        if (rest > 0) this.panel(RIGHT_X, this.boardY + 140, SIDE_W, listH);
+        this.drawPreview(game, RIGHT_X + SIDE_W / 2, slots);
         let below = this.boardY + 20; // where the clear messages start
         if (rest > 0) {
-            const spacing = rest > 2 ? 50 : 80, size = rest > 2 ? 16 : 18;
-            const listH = rest * spacing + 10;
-            this.panel(RIGHT_X, this.boardY + 140, SIDE_W, listH);
-            for (let n = 1; n <= rest; n++) {
-                const y = this.boardY + 140 + 5 + spacing / 2 + (n - 1) * spacing;
-                this.drawPieceCentered(game.rnd_get_queue(n), RIGHT_X + SIDE_W / 2, y, size, "locked", game);
-            }
             below = this.boardY + 140 + listH + 30;
         } else if (game.nextCount > 0) {
             below = this.boardY + 140 + 20;
@@ -4545,21 +4778,18 @@ class Engine {
         const bestTop = this.drawGameBest(rightX, sideW, this.boardY + this.boardH - 6, true);
         if (table) return this.drawSectionTable(rightX, sideW, top, bestTop - 18, true);
 
+        const rest = game.nextCount - 1;
+        const spacing = rest > 2 ? 42 : 50, listTop = top + 12 + box + 10;
+        const slots = Array.from({ length: game.nextCount }, (_, n) => n ? { y: listTop + 4 + spacing * (n - 0.5), size: rest > 2 ? 11 : 12 }
+            : { y: top + 12 + box / 2, size });
         if (game.nextCount > 0) {
             this.label("NEXT", rightX, top, sideW, 10, 3);
             this.panel(rightX, top + 12, sideW, box);
-            this.drawPieceCentered(game.rnd_get_queue(0), rightX + sideW / 2, top + 12 + box / 2, size, "locked", game, game.nextItem);
         }
-        const rest = game.nextCount - 1;
+        if (rest > 0) this.panel(rightX, listTop, sideW, rest * spacing + 8);
+        this.drawPreview(game, rightX + sideW / 2, slots);
         let below = top + 12 + box; // the preview's foot
-        if (rest > 0) {
-            const spacing = rest > 2 ? 42 : 50, listTop = top + 12 + box + 10;
-            this.panel(rightX, listTop, sideW, rest * spacing + 8);
-            for (let n = 1; n <= rest; n++) {
-                this.drawPieceCentered(game.rnd_get_queue(n), rightX + sideW / 2, listTop + 4 + spacing * (n - 0.5), rest > 2 ? 11 : 12, "locked", game);
-            }
-            below = listTop + rest * spacing + 8;
-        }
+        if (rest > 0) below = listTop + rest * spacing + 8;
         if (splits) this.drawSectionStrip(rightX, sideW, below + 22, true);
         this.drawClearMessage(this.boardY + this.boardH * 0.3);
     }
@@ -4638,12 +4868,13 @@ class Engine {
         return this.boardY + this.boardH * 0.42;
     }
 
-    // Dark band across the well, h high around cy, with a line of the accent colour at each edge
+    // Dark band across the well, h high around cy, with a line of the accent colour at each edge; out to the frame (a
+    // background's bandOut: how far past the well's sides, else the 8 its frame takes)
     drawBand(cy, h, accent) {
-        const r = this.r;
-        r.rect(BOARD_X - 8, cy - h / 2, BOARD_W + 16, h, "rgba(4,5,14,0.82)");
-        r.rect(BOARD_X - 8, cy - h / 2, BOARD_W + 16, 2, accent);
-        r.rect(BOARD_X - 8, cy + h / 2 - 2, BOARD_W + 16, 2, accent);
+        const r = this.r, out = this.background.bandOut ?? 8, x = BOARD_X - out, w = BOARD_W + out * 2;
+        r.rect(x, cy - h / 2, w, h, "rgba(4,5,14,0.82)");
+        r.rect(x, cy - h / 2, w, 2, accent);
+        r.rect(x, cy + h / 2 - 2, w, 2, accent);
     }
 
     // Horizontal banner across the well (GAME OVER and other endings)
