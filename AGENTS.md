@@ -274,7 +274,7 @@ The engine drives it with `advanceFrame(inputBitmap)` and reads:
   Once the game is over a table takes NEXT's place (`drawSectionTable()`): every section's time, its gap to the record it
   had, the total and, once every section has one, the sum of the records. The records: `SectionRecords` (`options.js`),
   each section's best per record key, passed to the game as `sectionBest` (`initGame()`, for the ST medal and the gaps)
-  and updated when it ends (`submitRecord()`; not test games; `sectionNew`).
+  and updated when it ends (`submitRecord()`; not test games).
 - Medals (`game.medals`, the modes that have them, not in a match): a chip each between the stats and the wordmark
   (`drawMedals()`; compact: rows of three under the stats), faint until earned, then in its tier's colour (`MEDAL_COLORS`);
   one earned or raised (`takeMedals()`) pops, scaled about its centre with a glow (`BoardView.medalPops`,

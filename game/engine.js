@@ -828,7 +828,6 @@ class Engine {
         this.options = new Options();
         this.records = new Records();
         this.sections = new SectionRecords(); // the TGM modes' best section times
-        this.sectionNew = []; // the game just ended: by section, whether it set the record
         this.exams = new Exams(); // TGM3 Master's qualified grades
         this.recordNote = null; // the game over banner's record line
         this.recordNew = false;
@@ -1417,7 +1416,6 @@ class Engine {
         const versus = variant === "versus";
         if (versus) gameOptions.seed = Math.floor(Math.random() * 0x100000000);
         else gameOptions.sectionBest = this.sections.get(this.recordSetup); // the ST medal's records
-        this.sectionNew = [];
         this.game = createGame(mode, variant, startLevel, height, this.options.handling, gameOptions);
         const hadMatch = !!this.match;
         // the other board's clear message goes with it (clearEffects() releases the player's)
@@ -2088,7 +2086,7 @@ class Engine {
         if (this.examRule && !game.tested) {
             this.exams.set(this.examRule, tgm3ExamAfter(this.exams.get(this.examRule), game.exam, game.earnedGradeIndex()));
         }
-        if (game.hasSplits && !game.tested) this.sectionNew = this.sections.submit(this.recordSetup, game.splits);
+        if (game.hasSplits && !game.tested) this.sections.submit(this.recordSetup, game.splits);
         const result = game.record();
         if (!result) return;
         if (game.tested) { // a test setup or the debug menu changed it
@@ -2612,7 +2610,6 @@ class Engine {
     // Hard drop feedback: the landed piece lights up with the active highlight
     // plus a soft tint of its own colour, both fading out quickly
     drawDropFlashes() {
-        const r = this.r;
         for (const f of this.board.dropFlashes) {
             const t = Math.max(0, (f.life - (f.fade - DROP_TRAIL_FADE)) / DROP_FLASH_LIFE); // as long a flash with a longer trail
             for (const cell of f.cells) {

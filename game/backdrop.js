@@ -1004,7 +1004,7 @@ class GLBackdrop {
         const gl = this.gl;
         this.r.flush();
         flares = flares.slice(-BACKDROP_MAX_RINGS);
-        const [s, ox, oy] = view;
+        const [s, , oy] = view;
         let y0 = Infinity, y1 = -Infinity;
         const p = this.flare;
         gl.useProgram(p.prog);

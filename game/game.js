@@ -11,7 +11,7 @@ const HEIGHT = 22;
 const VISIBLE_TOP = 2; // first visible row; the ones above are hidden
 
 // Pieces
-const tetEMPTY = 0, tetI = 1, tetT = 2, tetL = 3, tetJ = 4, tetS = 5, tetZ = 6, tetO = 7;
+const tetI = 1, tetT = 2, tetL = 3, tetJ = 4, tetS = 5, tetZ = 6, tetO = 7;
 const tetGARBAGE = 8; // versus garbage blocks (a cell value, never a piece)
 
 // Input Bitmap
