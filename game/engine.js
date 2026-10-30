@@ -720,12 +720,17 @@ const ITEM_GAUGE_FLASH = 40;
 const CUTIN_BAND_H = 150, CUTIN_EMBLEM = 92, CUTIN_EMBLEM_Y = 20;
 // Section times (the TGM modes, Options → Visuals → Section times): a section's time is drawn in the
 // colour of the ST medal tier it earns against its record (none, bronze, silver, gold), its gap to the
-// record ahead or behind; COOL and REGRET sections marked
-const MEDAL_COLORS = [INK_DIM, "#d9965c", "#c6d4e2", MESSAGE_GOLD]; // by tier
-const SPLIT_AHEAD = "#86e3a8", SPLIT_BEHIND = "#ff8f7f";
-const SPLIT_MARKS = { cool: "#7fd8ff", regret: "#ff5f4a" };
-// Medals (TAP Master and Death, TGM3 Master and Shirase): a chip each at the foot of the stats, faint
-// until earned, then in its tier's colour; one earned or raised pops for MEDAL_POP_LIFE frames
+// record ahead or behind; COOL and REGRET sections marked. Medals (TAP Master and Death, TGM3 Master and
+// Shirase): a chip each at the foot of the stats, faint until earned, then in its tier's colour. These colours
+// are for dark backgrounds; a light one gives its own (its splitColors, Engine.splitColors())
+const SPLIT_COLORS = {
+    tiers: [INK_DIM, "#d9965c", "#c6d4e2", MESSAGE_GOLD], // by ST medal tier: none, bronze, silver, gold (a medal's too)
+    ahead: "#86e3a8", behind: "#ff8f7f", // a gap to the record
+    cool: "#7fd8ff", regret: "#ff5f4a", // a section's marks
+    faint: INK_FAINT, // a bar's empty segment; a medal not earned yet, its rim and name
+    chip: [0, 0, 0, 0.25], // and its fill
+};
+// One earned or raised pops for MEDAL_POP_LIFE frames
 const MEDAL_POP_LIFE = 40, MEDAL_POP_SCALE = 0.25;
 
 // Stat values drawn glyph by glyph (they change every frame); other values are words, drawn whole
@@ -2139,8 +2144,9 @@ class Engine {
         const game = this.board.game, ids = Object.keys(game.medals);
         const perRow = compact ? 3 : TAP_MEDALS.length, gap = compact ? 4 : 5;
         const chipW = (w - gap * (perRow - 1)) / perRow, chipH = compact ? 14 : 20, size = compact ? 8 : 10;
+        const colors = this.splitColors();
         ids.forEach((id, i) => {
-            const tier = game.medals[id], color = tier ? MEDAL_COLORS[tier] : INK_FAINT;
+            const tier = game.medals[id], color = tier ? colors.tiers[tier] : colors.faint;
             const cx = x + (i % perRow) * (chipW + gap) + chipW / 2, cy = y + Math.floor(i / perRow) * (chipH + gap);
             const pop = (this.board.medalPops[id] || 0) / MEDAL_POP_LIFE; // 1 as it is earned, easing to 0
             const [r, g, b] = parseColor(color);
@@ -2154,7 +2160,7 @@ class Engine {
                 this.r.shape(-chipW * 0.6, -chipH * 0.75, chipW * 1.2, chipH * 1.5, { radius: chipH * 0.75, fill: [r, g, b, 0.3 * pop * this.options.effectScale] });
                 this.r.restore();
             }
-            this.r.shape(-chipW / 2, -chipH / 2, chipW, chipH, { radius: 4, fill: tier ? [r, g, b, 0.16] : [0, 0, 0, 0.25], stroke: color, lineWidth: 1 });
+            this.r.shape(-chipW / 2, -chipH / 2, chipW, chipH, { radius: 4, fill: tier ? [r, g, b, 0.16] : colors.chip, stroke: color, lineWidth: 1 });
             this.text(id, 0, 0, { size, weight: 900, color, align: "center", spacing: 1 });
             this.r.restore();
         });
@@ -2167,6 +2173,11 @@ class Engine {
     showsSplits() {
         const game = this.board.game;
         return this.options.splits && !!game.hasSplits && !this.match;
+    }
+
+    // The medals' and section times' colours: the background's, else the dark backgrounds' (SPLIT_COLORS)
+    splitColors() {
+        return this.background.splitColors || SPLIT_COLORS;
     }
 
     // The ST medal tier a section's time earns against its record (rules-tgm.js's judgeSectionTime)
@@ -2187,7 +2198,7 @@ class Engine {
     // record, and a bar of the sections, each in the tier it earned (the one played filling as its
     // levels go by)
     drawSectionStrip(x, w, top, compact) {
-        const game = this.board.game, count = game.sectionCount();
+        const game = this.board.game, count = game.sectionCount(), colors = this.splitColors();
         const running = game.splitSection < count && !game.isGameOver();
         const barH = compact ? 4 : 6, gap = compact ? 2 : 3;
         const barY = top + (compact ? 30 : 38), bottom = barY + barH + 5; // COOL and REGRET marks under the bar
@@ -2196,7 +2207,7 @@ class Engine {
         const size = compact ? 13 : 20, y = top + (compact ? 18 : 24);
         if (running) {
             const time = game.frames - game.splitStart;
-            const color = MEDAL_COLORS[this.splitTier(time, game.sectionRecord(section))]; // dim once too slow for any
+            const color = colors.tiers[this.splitTier(time, game.sectionRecord(section))]; // dim once too slow for any
             this.textRun(game.formatTime(time), x, y, { size, weight: 800, color, spacing: 1 });
         } else {
             const total = game.splits.reduce((a, t) => a + (t || 0), 0);
@@ -2207,19 +2218,19 @@ class Engine {
         if (!compact && last >= 0 && game.splits[last] && game.sectionBest[last]) {
             const delta = game.splits[last] - game.sectionBest[last];
             const s = this.splitGap(delta), gapSize = 13;
-            this.textRun(s, x + w - this.measureText(s, gapSize, 800, 0), y + 3, { size: gapSize, weight: 800, color: delta < 0 ? SPLIT_AHEAD : SPLIT_BEHIND });
+            this.textRun(s, x + w - this.measureText(s, gapSize, 800, 0), y + 3, { size: gapSize, weight: 800, color: delta < 0 ? colors.ahead : colors.behind });
         }
         const segW = (w - gap * (count - 1)) / count;
         for (let i = 0; i < count; i++) {
             const sx = x + i * (segW + gap), time = game.splits[i];
-            this.r.shape(sx, barY, segW, barH, { radius: barH / 2, fill: INK_FAINT });
+            this.r.shape(sx, barY, segW, barH, { radius: barH / 2, fill: colors.faint });
             if (time) {
-                this.r.shape(sx, barY, segW, barH, { radius: barH / 2, fill: MEDAL_COLORS[this.splitTier(time, game.sectionRecord(i))] });
+                this.r.shape(sx, barY, segW, barH, { radius: barH / 2, fill: colors.tiers[this.splitTier(time, game.sectionRecord(i))] });
             } else if (running && i === game.splitSection) {
                 const part = Math.min(1, (game.level - i * 100) / Math.min(100, game.maxLevel - i * 100));
-                if (part > 0) this.r.shape(sx, barY, Math.max(barH, segW * part), barH, { radius: barH / 2, fill: INK_DIM });
+                if (part > 0) this.r.shape(sx, barY, Math.max(barH, segW * part), barH, { radius: barH / 2, fill: colors.tiers[0] });
             }
-            const mark = SPLIT_MARKS[game.splitMarks[i]];
+            const mark = colors[game.splitMarks[i]];
             if (mark) this.r.shape(sx + segW / 2 - 1.5, barY + barH + 2, 3, 3, { radius: 1.5, fill: mark });
         }
         return bottom;
@@ -2229,7 +2240,7 @@ class Engine {
     // earned, its gap to the record it had (COOL and REGRET marked), then the total and, once every
     // section has one, the sum of the records
     drawSectionTable(x, w, top, bottom, compact) {
-        const game = this.board.game, count = game.sectionCount();
+        const game = this.board.game, count = game.sectionCount(), colors = this.splitColors();
         this.label("SECTIONS", x, top, w, compact ? 9 : 12, compact ? 2 : 4);
         const footer = compact ? 0 : 56;
         const rowH = Math.min(compact ? 16 : 26, Math.floor((bottom - top - 22 - footer) / count));
@@ -2242,13 +2253,13 @@ class Engine {
                 this.text("—", timeX, y, { size, weight: 800, color: INK_FAINT });
                 continue;
             }
-            this.text(game.formatTime(time), timeX, y, { size, weight: 800, color: MEDAL_COLORS[this.splitTier(time, game.sectionRecord(i))], spacing: 1 });
-            const mark = SPLIT_MARKS[game.splitMarks[i]];
+            this.text(game.formatTime(time), timeX, y, { size, weight: 800, color: colors.tiers[this.splitTier(time, game.sectionRecord(i))], spacing: 1 });
+            const mark = colors[game.splitMarks[i]];
             if (mark) this.r.shape(compact ? x + w - 4 : timeX - 8, y - 2, 4, 4, { radius: 2, fill: mark }); // compact: no room before the time
             const record = game.sectionBest[i];
             if (!compact && record) {
                 const delta = time - record;
-                this.text(this.splitGap(delta), x + w, y, { size: small, weight: 800, color: delta < 0 ? SPLIT_AHEAD : SPLIT_BEHIND, align: "right" });
+                this.text(this.splitGap(delta), x + w, y, { size: small, weight: 800, color: delta < 0 ? colors.ahead : colors.behind, align: "right" });
             }
         }
         if (compact) return;
@@ -2260,7 +2271,7 @@ class Engine {
         if (records.length === count && records.every(t => t)) {
             const sum = records.reduce((a, t) => a + t, 0);
             this.text("BEST SUM", x, y + 22, { size: 11, weight: 700, color: INK_DIM, spacing: 2 });
-            this.text(game.formatTime(sum), x + w, y + 22, { size: 14, weight: 800, color: MESSAGE_GOLD, align: "right", spacing: 1 });
+            this.text(game.formatTime(sum), x + w, y + 22, { size: 14, weight: 800, color: colors.tiers[3], align: "right", spacing: 1 });
         }
     }
 

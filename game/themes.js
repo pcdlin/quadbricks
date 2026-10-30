@@ -5,6 +5,7 @@
 // canvas 2D in logical units (x0..x1, y0..y1 is the visible area, past the view when letterboxed).
 // The rest is optional; without it the engine draws Gallery's look:
 // - ink: [r, g, b] (0..1) that text drawn in INK's colour takes instead (any alpha)
+// - splitColors: the medals' and section times' colours in place of the engine's SPLIT_COLORS (made for dark backgrounds)
 // - ambient(e): { blobs, orbs, nebula, shade } for the backdrop pass in place of Engine.ambientShapes()
 //   (see GLBackdrop.render(): nebula shapes the blobs with noise, shade hides them behind circles), and
 //   update(e, dt) to move them on (runs in the menus too)
@@ -252,6 +253,15 @@ const GLACIER_RULE = "rgba(36,92,136,0.22)";
 const GLACIER_EDGE = "rgba(255,255,255,0.55)"; // a panel's rim
 const GLACIER_CARD_EDGE = "rgba(60,130,180,0.35)";
 const GLACIER_LIT = "rgba(40,140,210,0.85)"; // a selected card's rim and bar
+// The medals' and section times' colours (the engine's SPLIT_COLORS are for dark backgrounds): dark enough to read on the
+// pale scene, silver a neutral graphite so it stands apart from the faint ink of no tier
+const GLACIER_SPLITS = {
+    tiers: ["rgba(20,52,82,0.42)", "#9c5426", "#5c636e", "#9a6c00"],
+    ahead: "#1b8049", behind: "#bd3a2a",
+    cool: "#1d78b8", regret: "#c8382a",
+    faint: "rgba(20,52,82,0.2)",
+    chip: [20 / 255, 52 / 255, 82 / 255, 0.06],
+};
 
 // Pulse: its accent hue swings PULSE_HUE ± PULSE_HUE_SWING (cyan to violet) as the backdrop's hue turns with clears
 const PULSE_HUE = 222, PULSE_HUE_SWING = 40;
@@ -1204,6 +1214,7 @@ const BACKGROUNDS = {
     glacier: {
         name: "Glacier",
         ink: GLACIER_INK,
+        splitColors: GLACIER_SPLITS,
         picture(g, x0, y0, x1, y1) {
             const s = g.getTransform().a; // device pixels per unit, for the soft layers' blur
             const sky = g.createLinearGradient(0, y0, 0, GLACIER_LAKE);
