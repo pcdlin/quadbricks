@@ -57,6 +57,11 @@ const GUIDELINE_MOVE_LIMIT = 15; // move reset limit
 const GUIDELINE_DAS = 10, GUIDELINE_ARR = 2, GUIDELINE_ARE = 6; // recommended handling
 const GUIDELINE_NEXT = 6; // the Guideline allows up to six previews
 const GUIDELINE_SOFT_FACTOR = 20; // soft drop = 20x gravity
+// Scores, x level: by lines cleared, T-spins and minis by lines, a combo step, perfect clears (a back-to-back Tetris's 3200)
+const GUIDELINE_CLEAR_SCORES = [0, 100, 300, 500, 800];
+const GUIDELINE_TSPIN_SCORES = [400, 800, 1200, 1600], GUIDELINE_MINI_SCORES = [100, 200, 400];
+const GUIDELINE_COMBO_SCORE = 50;
+const GUIDELINE_PC_SCORES = [0, 800, 1200, 1800, 2000], GUIDELINE_PC_B2B_TETRIS = 3200;
 // Player handling for the Guideline (Options → Guideline), the recommended values by default.
 // das, arr: frames (arr 0 shifts straight to the wall); sdf: soft drop factor (Infinity: 20G);
 // dcd: frames a charged auto-shift pauses after a rotation or a new piece; ghost: ghost piece shown;
@@ -283,15 +288,15 @@ class GuidelineGame extends RuleGame {
         const L = this.level;
         let base, difficult;
         if (tspin === "full") {
-            base = [400, 800, 1200, 1600][n];
+            base = GUIDELINE_TSPIN_SCORES[n];
             difficult = n > 0;
             this.addAction("T-SPIN" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
         } else if (tspin === "mini") {
-            base = [100, 200, 400][n];
+            base = GUIDELINE_MINI_SCORES[n];
             difficult = n > 0;
             this.addAction("T-SPIN MINI" + (n ? " " + CLEAR_NAMES[n] : ""), "tspin", n);
         } else {
-            base = [0, 100, 300, 500, 800][n];
+            base = GUIDELINE_CLEAR_SCORES[n];
             difficult = n === 4;
             if (n > 0) this.addAction(CLEAR_NAMES[n], "clear", n);
         }
@@ -312,11 +317,11 @@ class GuidelineGame extends RuleGame {
         if (n > 0) {
             this.combo++;
             if (this.combo > 0) {
-                this.score += 50 * this.combo * L;
+                this.score += GUIDELINE_COMBO_SCORE * this.combo * L;
                 this.addAction(this.combo + " COMBO", "combo", this.chain);
             }
             if (pc) {
-                const bonus = n === 4 && b2bBefore ? 3200 : [0, 800, 1200, 1800, 2000][n];
+                const bonus = n === 4 && b2bBefore ? GUIDELINE_PC_B2B_TETRIS : GUIDELINE_PC_SCORES[n];
                 this.score += bonus * L;
                 this.addAction("PERFECT CLEAR", "pc");
             }

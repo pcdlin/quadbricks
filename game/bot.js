@@ -424,13 +424,11 @@ function botShapeScore(rows, w) {
 // What a clear is worth in the Guideline: the lines it sends in versus, else its score at level 1
 // in units of 200 (a Tetris 4, a T-spin double 6). b2b: with the back-to-back bonus; combo: 0 for the
 // first clear; pc: it empties the field
-const BOT_SCORE_BASE = [0, 100, 300, 500, 800], BOT_SPIN_BASE = [400, 800, 1200, 1600], BOT_MINI_BASE = [100, 200, 400];
-const BOT_PC_BASE = [0, 800, 1200, 1800, 2000];
 function botClearValue(game, n, tspin, b2b, combo, pc) {
     if (botCancels(game)) return versusAttack({ n, tspin, b2b, combo, pc });
-    const base = (tspin === "full" ? BOT_SPIN_BASE : tspin === "mini" ? BOT_MINI_BASE : BOT_SCORE_BASE)[n] || 0;
-    const bonus = pc ? (n === 4 && b2b ? 3200 : BOT_PC_BASE[n]) : 0;
-    return (base * (b2b ? 1.5 : 1) + 50 * combo + bonus) / 200;
+    const base = (tspin === "full" ? GUIDELINE_TSPIN_SCORES : tspin === "mini" ? GUIDELINE_MINI_SCORES : GUIDELINE_CLEAR_SCORES)[n] || 0;
+    const bonus = pc ? (n === 4 && b2b ? GUIDELINE_PC_B2B_TETRIS : GUIDELINE_PC_SCORES[n]) : 0;
+    return (base * (b2b ? 1.5 : 1) + GUIDELINE_COMBO_SCORE * combo + bonus) / 200;
 }
 
 // What the move itself earned: landing height, eroded cells, a bonus for the lines it cleared (big
