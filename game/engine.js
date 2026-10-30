@@ -1151,8 +1151,12 @@ class Engine {
             && queue.slice(0, -1).every((t, i) => t === view.queue[i + 1]) && this.options.effects) view.nextSlide = NEXT_SLIDE_FRAMES;
         view.queue = queue;
         if (!game.getCurPiece_type()) view.enterGlow = 0; // or knocked out by an item (a snipe), unlocked
-        // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame
-        if (game.takeHolds() && this.options.effects) view.holdFlash = view.enterGlow = HOLD_FLASH_LIFE;
+        // after the sounds: with no ARE, a piece can lock and the next come from hold (IHS) in one frame. No piece
+        // enters from a hold with none in play (Sakura's Hold during READY), so only the held one flashes then
+        if (game.takeHolds() && this.options.effects) {
+            view.holdFlash = HOLD_FLASH_LIFE;
+            if (game.getCurPiece_type()) view.enterGlow = HOLD_FLASH_LIFE;
+        }
         for (const { id } of game.takeMedals ? game.takeMedals() : []) if (this.options.effects) view.medalPops[id] = MEDAL_POP_LIFE;
         for (const dir of game.takeBumps()) if (own && this.options.shakeScale) this.bumpShake(dir);
         for (const rows of game.takeSoftLandings()) if (own && this.options.shakeScale) this.kickShake(rows, SHAKE_SOFT);
